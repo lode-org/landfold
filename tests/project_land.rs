@@ -5,8 +5,8 @@ use std::process::Command;
 
 use approx::assert_relative_eq;
 use landfold::{
-    coordination_histogram, embed_points, farthest_point, project_many, project_one, Euclid,
-    FreeEnergy, Histogram2d, IterOpts, ProjOpts, Transfer,
+    Euclid, FreeEnergy, Histogram2d, IterOpts, ProjOpts, Transfer, coordination_histogram,
+    embed_points, farthest_point, project_many, project_one,
 };
 use ndarray::array;
 
@@ -119,7 +119,7 @@ fn coordination_histogram_covers_zero_to_max() {
         [0.5, 0.87, 0.0],
         [0.5, 0.29, 0.82]
     ];
-    let h = coordination_histogram(frame.view(), 1.5, 12);
+    let h = coordination_histogram(frame.view(), 1.5, 12).unwrap();
     assert_eq!(h.counts.len(), 13);
     assert!(h.counts.iter().sum::<f64>() > 0.0);
 }
@@ -243,7 +243,7 @@ fn fes_svg_is_a_heatmap() {
 #[test]
 fn coordination_histogram_matches_dimer_golden() {
     let frame = array![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [10.0, 0.0, 0.0]];
-    let h = coordination_histogram(frame.view(), 1.5, 12);
+    let h = coordination_histogram(frame.view(), 1.5, 12).unwrap();
     let want = std::fs::read_to_string(golden("cn_dimer.csv")).unwrap();
     let mut got = Vec::new();
     h.write_cn_csv(&mut got).unwrap();

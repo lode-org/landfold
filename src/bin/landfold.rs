@@ -12,10 +12,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use landfold::{
     AnnealOpts, Dot, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts, MdsMode, Metric,
-    ReplicaOpts,
-    Periodic, ProjOpts, Solver, Sphere, StochOpts, Transfer, coordination_histogram, embed,
-    farthest_point, mds_from_points, pairwise, pairwise_euclid, project_many_report, read_points,
-    write_points,
+    Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Transfer, coordination_histogram,
+    embed, farthest_point, mds_from_points, pairwise, pairwise_euclid, project_many_report,
+    read_points, write_points,
 };
 
 #[derive(Parser, Debug)]
@@ -352,7 +351,13 @@ fn main() -> landfold::Result<()> {
                 Box::new(Euclid)
             };
             let emb = Embedding::from_landmarks(
-                hi.points, lo.points, metric.as_ref(), t_hd, t_ld, imix, hi.weights,
+                hi.points,
+                lo.points,
+                metric.as_ref(),
+                t_hd,
+                t_ld,
+                imix,
+                hi.weights,
             )?;
             let mut po = ProjOpts::from_cli(&grid)?;
             po.cg_steps = refine;
@@ -495,7 +500,7 @@ fn main() -> landfold::Result<()> {
             let ylo = ymin.unwrap_or(aymin - py);
             let yhi = ymax.unwrap_or(aymax + py);
             let mut h = Histogram2d::new(xlo, xhi, nx, ylo, yhi, ny)?;
-            h.add_points(set.points.view(), set.weights.as_ref().map(|w| w.view()));
+            h.add_points(set.points.view(), set.weights.as_ref().map(|w| w.view()))?;
             let mut fes = if blur > 0.0 {
                 FreeEnergy::from_histogram_blurred(&h, kt, blur)
             } else {
@@ -514,7 +519,7 @@ fn main() -> landfold::Result<()> {
             }
             if let Some(p) = frames {
                 let fr = read_points(std::io::BufReader::new(std::fs::File::open(p)?), 3, false)?;
-                let cn = coordination_histogram(fr.points.view(), cn_cutoff, cn_max);
+                let cn = coordination_histogram(fr.points.view(), cn_cutoff, cn_max)?;
                 if let Some(out) = cn_csv {
                     cn.write_cn_csv(&mut std::fs::File::create(out)?)?;
                 } else {

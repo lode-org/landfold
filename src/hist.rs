@@ -60,11 +60,15 @@ impl Histogram1d {
         self.counts[i] += w;
     }
 
-    pub fn add_many(&mut self, xs: ArrayView1<f64>, w: Option<ArrayView1<f64>>) {
+    pub fn add_many(&mut self, xs: ArrayView1<f64>, w: Option<ArrayView1<f64>>) -> Result<()> {
+        if w.is_some_and(|weights| weights.len() != xs.len()) {
+            return Err(LandfoldError::Shape("histogram weight length"));
+        }
         for (i, &x) in xs.iter().enumerate() {
             let ww = w.map(|ww| ww[i]).unwrap_or(1.0);
             self.add(x, ww);
         }
+        Ok(())
     }
 
     /// Integer-bin CSV (`# cn count` then `i count` per row).
@@ -137,11 +141,18 @@ impl Histogram2d {
         self.samples += w;
     }
 
-    pub fn add_points(&mut self, xy: ArrayView2<f64>, w: Option<ArrayView1<f64>>) {
+    pub fn add_points(&mut self, xy: ArrayView2<f64>, w: Option<ArrayView1<f64>>) -> Result<()> {
+        if xy.ncols() < 2 {
+            return Err(LandfoldError::Shape("2d histogram needs n x 2 points"));
+        }
+        if w.is_some_and(|weights| weights.len() != xy.nrows()) {
+            return Err(LandfoldError::Shape("histogram weight length"));
+        }
         for i in 0..xy.nrows() {
             let ww = w.map(|ww| ww[i]).unwrap_or(1.0);
             self.add(xy[(i, 0)], xy[(i, 1)], ww);
         }
+        Ok(())
     }
 
     /// Separable Gaussian blur of the count field (binned KDE).
@@ -396,7 +407,7 @@ pub fn fes_from_points(
     let px = pad * (xmax - xmin).max(1e-6);
     let py = pad * (ymax - ymin).max(1e-6);
     let mut h = Histogram2d::new(xmin - px, xmax + px, nx, ymin - py, ymax + py, ny)?;
-    h.add_points(xy, weights);
+    h.add_points(xy, weights)?;
     Ok(FreeEnergy::from_histogram(&h, kt))
 }
 
@@ -597,11 +608,15 @@ pub fn coordination_numbers(pos: ArrayView2<f64>, cutoff: f64) -> Array1<f64> {
     cn
 }
 
-pub fn coordination_histogram(pos: ArrayView2<f64>, cutoff: f64, max_cn: usize) -> Histogram1d {
+pub fn coordination_histogram(
+    pos: ArrayView2<f64>,
+    cutoff: f64,
+    max_cn: usize,
+) -> Result<Histogram1d> {
     let cn = coordination_numbers(pos, cutoff);
-    let mut h = Histogram1d::new(-0.5, max_cn as f64 + 0.5, max_cn + 1).unwrap();
-    h.add_many(cn.view(), None);
-    h
+    let mut h = Histogram1d::new(-0.5, max_cn as f64 + 0.5, max_cn + 1)?;
+    h.add_many(cn.view(), None)?;
+    Ok(h)
 }
 
 #[cfg(test)]
@@ -646,13 +661,32 @@ mod tests {
     }
 
     #[test]
+    fn rejects_mismatched_histogram_weights() {
+        let mut h1 = Histogram1d::new(0.0, 1.0, 2).unwrap();
+        assert!(
+            h1.add_many(array![0.1, 0.2].view(), Some(array![1.0].view()))
+                .is_err()
+        );
+
+        let mut h2 = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        assert!(
+            h2.add_points(
+                array![[0.1, 0.1], [0.2, 0.2]].view(),
+                Some(array![1.0].view())
+            )
+            .is_err()
+        );
+        assert!(h2.add_points(array![[0.1]].view(), None).is_err());
+    }
+
+    #[test]
     fn cn_of_dimer() {
         let pos = array![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [10.0, 0.0, 0.0]];
         let cn = coordination_numbers(pos.view(), 1.5);
         assert_eq!(cn[0], 1.0);
         assert_eq!(cn[1], 1.0);
         assert_eq!(cn[2], 0.0);
-        let h = coordination_histogram(pos.view(), 1.5, 12);
+        let h = coordination_histogram(pos.view(), 1.5, 12).unwrap();
         let mut buf = Vec::new();
         h.write_cn_csv(&mut buf).unwrap();
         let s = String::from_utf8(buf).unwrap();
