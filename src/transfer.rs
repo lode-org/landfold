@@ -35,6 +35,15 @@ impl Default for Transfer {
 }
 
 impl Transfer {
+    fn from_parts(mode: TransferMode, pars: Vec<f64>) -> Result<Self> {
+        if pars.iter().any(|&value| !value.is_finite()) {
+            return Err(LandfoldError::TransferParams(
+                "transfer coefficients must be finite",
+            ));
+        }
+        Ok(Self { mode, pars })
+    }
+
     pub fn identity() -> Self {
         Self {
             mode: TransferMode::Identity,
@@ -48,10 +57,7 @@ impl Transfer {
             return Err(LandfoldError::TransferParams("sigmoid sigma must be > 0"));
         }
         let inv = 1.0 / sigma;
-        Ok(Self {
-            mode: TransferMode::Sigmoid,
-            pars: vec![inv, 2.0 * inv * inv],
-        })
+        Self::from_parts(TransferMode::Sigmoid, vec![inv, 2.0 * inv * inv])
     }
 
     /// `1 - 1/(1 + x/sigma)`.
@@ -59,10 +65,7 @@ impl Transfer {
         if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("compress sigma must be > 0"));
         }
-        Ok(Self {
-            mode: TransferMode::Compress,
-            pars: vec![1.0 / sigma],
-        })
+        Self::from_parts(TransferMode::Compress, vec![1.0 / sigma])
     }
 
     /// Generalised sigmoid of Ceriotti 2011. Arguments `(sigma, a, b)`.
@@ -75,10 +78,10 @@ impl Transfer {
                 "xsigmoid a and b must be finite and > 0",
             ));
         }
-        Ok(Self {
-            mode: TransferMode::XSigmoid,
-            pars: vec![1.0 / sigma, 2.0_f64.powf(a / b) - 1.0, a, b, -b / a],
-        })
+        Self::from_parts(
+            TransferMode::XSigmoid,
+            vec![1.0 / sigma, 2.0_f64.powf(a / b) - 1.0, a, b, -b / a],
+        )
     }
 
     /// Regularised incomplete-gamma sigmoid. Arguments `(sigma, n)`.
@@ -90,14 +93,14 @@ impl Transfer {
                 "gamma needs sigma > 0 and n > 0",
             ));
         }
-        Ok(Self {
-            mode: TransferMode::Gamma,
-            pars: vec![
+        Self::from_parts(
+            TransferMode::Gamma,
+            vec![
                 1.0 / (sigma * std::f64::consts::SQRT_2),
                 n,
                 2.0 / gamma_half(n * 0.5),
             ],
-        })
+        )
     }
 
     /// `F_LD^{-1}(F_HD(x))` warp. Arguments `(sigma, a_D, b_D, a_d, b_d)`.
@@ -113,9 +116,9 @@ impl Transfer {
                 "warp shape parameters must be finite and > 0",
             ));
         }
-        Ok(Self {
-            mode: TransferMode::Warp,
-            pars: vec![
+        Self::from_parts(
+            TransferMode::Warp,
+            vec![
                 1.0 / sigma,
                 2.0_f64.powf(a_d / b_d) - 1.0,
                 a_d,
@@ -127,7 +130,7 @@ impl Transfer {
                 b_ld,
                 -a_ld / b_ld,
             ],
-        })
+        )
     }
 
     /// Parse `identity`, `sigma`, `sigma,n`, `sigma,a,b`, or `sigma,aD,bD,ad,bd`.
