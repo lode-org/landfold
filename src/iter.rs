@@ -2,15 +2,15 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::anneal::{minimize_anneal, AnnealOpts};
-use crate::cg::{minimize, CgOpts, CgReport};
+use crate::anneal::{AnnealOpts, minimize_anneal};
+use crate::cg::{CgOpts, CgReport, minimize};
 use crate::error::Result;
 use crate::mds::classical_mds;
 use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
-use crate::replica::{minimize_replica, ReplicaOpts};
-use crate::search::{minimize_stochastic, StochOpts};
-use crate::stress::{validate_imix, Stress};
+use crate::replica::{ReplicaOpts, minimize_replica};
+use crate::search::{StochOpts, minimize_stochastic};
+use crate::stress::{Stress, validate_imix, validate_weights};
 use crate::transfer::Transfer;
 
 /// Solver arm. `Standard` is the published full-pair CG path.
@@ -90,6 +90,7 @@ impl Embedding {
             return Err(crate::error::LandfoldError::Empty);
         }
         let n = high.nrows();
+        validate_weights(weights.as_ref().map(|w| w.view()), n)?;
         let hd = if metric.is_euclid() {
             pairwise_euclid(high.view())?
         } else {
@@ -120,6 +121,7 @@ pub fn embed(
     precomputed_dist: Option<ArrayView2<f64>>,
 ) -> Result<(Embedding, CgReport)> {
     let n = points.nrows();
+    validate_weights(weights, n)?;
     let hd = match precomputed_dist {
         Some(d) => {
             if d.nrows() != n || d.ncols() != n {
@@ -239,4 +241,39 @@ pub fn mds_init(
 ) -> Result<Array2<f64>> {
     let dist = pairwise(points, metric)?;
     Ok(classical_mds(dist.view(), lowdim)?.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metric::Euclid;
+    use ndarray::array;
+
+    #[test]
+    fn rejects_invalid_embedding_weights_before_centering() {
+        let points = array![[0.0, 0.0], [1.0, 0.0]];
+        let opts = IterOpts::default();
+        assert!(
+            embed(
+                points.view(),
+                &Euclid,
+                &opts,
+                None,
+                Some(array![1.0].view()),
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            embed(
+                points.view(),
+                &Euclid,
+                &opts,
+                None,
+                Some(array![1.0, -1.0].view()),
+                None,
+            )
+            .is_err()
+        );
+    }
 }

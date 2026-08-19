@@ -15,6 +15,23 @@ use crate::transfer::Transfer;
 
 pub(crate) const OVERLAP: f64 = 1e-100;
 
+pub(crate) fn validate_weights(
+    weights: Option<ArrayView1<'_, f64>>,
+    n: usize,
+) -> crate::error::Result<()> {
+    if let Some(w) = weights {
+        if w.len() != n {
+            return Err(crate::error::LandfoldError::Shape("stress weight length"));
+        }
+        if w.iter().any(|&value| !value.is_finite() || value < 0.0) {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress weights must be finite and nonnegative".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 pub struct Stress {
     pub n: usize,
@@ -73,9 +90,7 @@ impl Stress {
                 "stress distance matrices must be square and matching",
             ));
         }
-        if weights.as_ref().is_some_and(|w| w.len() != n) {
-            return Err(crate::error::LandfoldError::Shape("stress weight length"));
-        }
+        validate_weights(weights.as_ref().map(|w| w.view()), n)?;
         if pair_weights
             .as_ref()
             .is_some_and(|w| w.raw_dim() != hd.raw_dim())
@@ -382,7 +397,7 @@ mod tests {
     use crate::pairwise::pairwise_euclid;
     use crate::transfer::Transfer;
     use approx::assert_relative_eq;
-    use ndarray::{array, Array};
+    use ndarray::{Array, array};
 
     #[test]
     fn identity_stress_zero_on_isometry() {
@@ -401,48 +416,74 @@ mod tests {
     #[test]
     fn try_new_rejects_incompatible_shapes() {
         let square = Array2::zeros((2, 2));
-        assert!(Stress::try_new(
-            square.clone(),
-            Array2::zeros((2, 3)),
-            Transfer::identity(),
-            0.0,
-            None,
-            None,
-        )
-        .is_err());
-        assert!(Stress::try_new(
-            square.clone(),
-            square.clone(),
-            Transfer::identity(),
-            0.0,
-            Some(array![1.0]),
-            None,
-        )
-        .is_err());
-        assert!(Stress::try_new(
-            square.clone(),
-            square,
-            Transfer::identity(),
-            0.0,
-            None,
-            Some(Array2::zeros((3, 3))),
-        )
-        .is_err());
+        assert!(
+            Stress::try_new(
+                square.clone(),
+                Array2::zeros((2, 3)),
+                Transfer::identity(),
+                0.0,
+                None,
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            Stress::try_new(
+                square.clone(),
+                square.clone(),
+                Transfer::identity(),
+                0.0,
+                Some(array![1.0]),
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            Stress::try_new(
+                square.clone(),
+                square,
+                Transfer::identity(),
+                0.0,
+                None,
+                Some(Array2::zeros((3, 3))),
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn try_new_rejects_invalid_imix() {
         let square = Array2::zeros((2, 2));
         for imix in [-0.1, 1.1, f64::NAN] {
-            assert!(Stress::try_new(
-                square.clone(),
-                square.clone(),
-                Transfer::identity(),
-                imix,
-                None,
-                None,
-            )
-            .is_err());
+            assert!(
+                Stress::try_new(
+                    square.clone(),
+                    square.clone(),
+                    Transfer::identity(),
+                    imix,
+                    None,
+                    None,
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn try_new_rejects_invalid_weights() {
+        let square = Array2::zeros((2, 2));
+        for weights in [array![1.0, -1.0], array![1.0, f64::NAN]] {
+            assert!(
+                Stress::try_new(
+                    square.clone(),
+                    square.clone(),
+                    Transfer::identity(),
+                    0.0,
+                    Some(weights),
+                    None,
+                )
+                .is_err()
+            );
         }
     }
 

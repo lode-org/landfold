@@ -9,6 +9,18 @@ use ndarray::{Array1, Array2, ArrayView2};
 use crate::error::Result;
 use crate::metric::Metric;
 
+fn validate_metric_dim(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<()> {
+    match metric.dim() {
+        Some(expected) if points.ncols() != expected => {
+            Err(crate::error::LandfoldError::MetricSize {
+                left: points.ncols(),
+                right: expected,
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Symmetric `n x n` distance matrix. Diagonal is zero.
 pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f64>> {
     let n = points.nrows();
@@ -16,6 +28,7 @@ pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f
     if n == 0 {
         return Err(crate::error::LandfoldError::Empty);
     }
+    validate_metric_dim(points, metric)?;
     let mut out = Array2::<f64>::zeros((n, n));
 
     #[cfg(feature = "parallel")]
@@ -133,7 +146,7 @@ pub fn apply_transfer(dist: &mut Array2<f64>, t: &crate::transfer::Transfer) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metric::Euclid;
+    use crate::metric::{Euclid, Periodic};
     use approx::assert_relative_eq;
     use ndarray::array;
 
@@ -148,5 +161,12 @@ mod tests {
             }
         }
         assert_relative_eq!(a[(0, 1)], 5.0, epsilon = 1e-15);
+    }
+
+    #[test]
+    fn rejects_metric_dimension_mismatch_before_pairwise_indexing() {
+        let points = array![[0.0, 0.0], [1.0, 0.0]];
+        let metric = Periodic::isotropic(1, 1.0).unwrap();
+        assert!(pairwise(points.view(), &metric).is_err());
     }
 }

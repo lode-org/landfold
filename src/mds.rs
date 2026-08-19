@@ -32,6 +32,14 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
     if n == 0 {
         return Err(LandfoldError::Empty);
     }
+    if dist.ncols() != n {
+        return Err(LandfoldError::Shape("MDS distance matrix must be square"));
+    }
+    if dist.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "MDS distance matrix must be finite".into(),
+        ));
+    }
     let mut d2 = vec![0.0; n * n];
     for i in 0..n {
         for j in 0..n {
@@ -370,5 +378,12 @@ mod tests {
                 assert_relative_eq!(d0[(i, j)], d1[(i, j)], epsilon = 1e-5);
             }
         }
+    }
+
+    #[test]
+    fn rejects_malformed_distance_matrices() {
+        assert!(classical_mds(array![[0.0, 1.0], [1.0, 0.0], [2.0, 3.0]].view(), 1).is_err());
+        assert!(classical_mds(array![[0.0, f64::NAN], [f64::NAN, 0.0]].view(), 1).is_err());
+        assert!(randomized_mds(array![[0.0, f64::INFINITY], [1.0, 0.0]].view(), 1, 2, 0).is_err());
     }
 }
