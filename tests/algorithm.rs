@@ -102,3 +102,28 @@ fn two_wells_separate_in_2d() {
         "wells mixed: intra={intra} inter={inter}"
     );
 }
+
+#[test]
+fn stochastic_solver_reaches_low_chi_from_scrambled_start() {
+    let mut pts = Array2::<f64>::zeros((16, 6));
+    for i in 0..8 {
+        pts[(i, 0)] = 0.01 * i as f64;
+        pts[(i + 8, 0)] = 6.0 + 0.01 * i as f64;
+        pts[(i + 8, 2)] = 0.5;
+    }
+    let mut init = Array2::<f64>::zeros((16, 2));
+    let mut state = 1u64;
+    for i in 0..16 {
+        for h in 0..2 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            init[(i, h)] = ((state >> 11) as f64) * (1.0 / ((1u64 << 53) as f64)) * 4.0 - 2.0;
+        }
+    }
+    let mut opts = IterOpts::default();
+    opts.lowdim = 2;
+    opts.tfun_hd = Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap();
+    opts.tfun_ld = Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap();
+    opts.solver = landfold::Solver::Stochastic(landfold::StochOpts::default());
+    let (emb, _) = embed(pts.view(), &Euclid, &opts, Some(init.view()), None, None).unwrap();
+    assert!(emb.stress < 1e-2, "stochastic chi {}", emb.stress);
+}

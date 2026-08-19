@@ -63,6 +63,11 @@ pub fn minimize_stochastic(
     let mut rng = opts.seed | 1;
     let metric = Euclid;
     let omix = 1.0 - stress.imix;
+    let mut first_moment = vec![0.0; n * d];
+    let mut second_moment = vec![0.0; n * d];
+    const BETA1: f64 = 0.9;
+    const BETA2: f64 = 0.999;
+    const EPSILON: f64 = 1e-8;
 
     for t in 0..opts.steps {
         let mut grad = vec![0.0; n * d];
@@ -94,10 +99,17 @@ pub fn minimize_stochastic(
         if tw <= 0.0 {
             tw = 1.0;
         }
-        let eta = opts.step0 / (1.0 + t as f64).sqrt();
-        let scale = -2.0 * eta / tw;
+        let scale = -2.0 / tw;
+        let bias1 = 1.0 - BETA1.powi((t + 1) as i32);
+        let bias2 = 1.0 - BETA2.powi((t + 1) as i32);
         for k in 0..pos.len() {
-            pos[k] += scale * grad[k];
+            let gradient = scale * grad[k];
+            first_moment[k] = BETA1 * first_moment[k] + (1.0 - BETA1) * gradient;
+            second_moment[k] =
+                BETA2 * second_moment[k] + (1.0 - BETA2) * gradient * gradient;
+            let mean = first_moment[k] / bias1;
+            let variance = (second_moment[k] / bias2).sqrt();
+            pos[k] -= opts.step0 * mean / (variance + EPSILON);
         }
     }
     let value = stress.eval(pos.view(), d).value;
