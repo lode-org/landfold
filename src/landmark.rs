@@ -5,6 +5,7 @@
 //! optionally reweighted.
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
+use std::collections::HashSet;
 
 use crate::error::{LandfoldError, Result};
 use crate::metric::Metric;
@@ -199,6 +200,12 @@ pub fn voronoi_weights(
     if landmarks.index.iter().any(|&i| i >= n) {
         return Err(LandfoldError::Shape("landmark index out of bounds"));
     }
+    let unique_indices: HashSet<usize> = landmarks.index.iter().copied().collect();
+    if unique_indices.len() != k {
+        return Err(LandfoldError::Msg(
+            "landmark indices must be distinct".into(),
+        ));
+    }
     if src_weights.is_some_and(|w| w.len() != n) {
         return Err(LandfoldError::Shape("source weight length"));
     }
@@ -213,6 +220,15 @@ pub fn voronoi_weights(
     }
     if landmarks.weights.len() != k {
         return Err(LandfoldError::Shape("landmark weight length"));
+    }
+    if landmarks
+        .weights
+        .iter()
+        .any(|&value| !value.is_finite() || value < 0.0)
+    {
+        return Err(LandfoldError::Msg(
+            "landmark weights must be finite and nonnegative".into(),
+        ));
     }
     if let Some(expected) = metric.dim()
         && d != expected
@@ -242,16 +258,37 @@ pub fn voronoi_weights(
             }
         }
         acc[best_i] += src_weights.map(|w| w[j]).unwrap_or(1.0);
+        if !acc[best_i].is_finite() {
+            return Err(LandfoldError::Msg(
+                "Voronoi weight accumulation overflowed".into(),
+            ));
+        }
     }
     let mut tw = 0.0;
     for w in &mut acc {
         *w = if *w > 0.0 { w.powf(wgamma) } else { 0.0 };
+        if !w.is_finite() {
+            return Err(LandfoldError::Msg(
+                "Voronoi weight exponentiation overflowed".into(),
+            ));
+        }
         tw += *w;
+        if !tw.is_finite() {
+            return Err(LandfoldError::Msg(
+                "Voronoi weight normalization overflowed".into(),
+            ));
+        }
     }
     if tw <= 0.0 {
         tw = 1.0;
     }
-    Ok(Array1::from_iter(acc.into_iter().map(|w| w / tw)))
+    let normalized = Array1::from_iter(acc.into_iter().map(|w| w / tw));
+    if normalized.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "Voronoi weights are non-finite after normalization".into(),
+        ));
+    }
+    Ok(normalized)
 }
 
 impl Landmarks {
@@ -361,6 +398,31 @@ mod tests {
             2,
             Some(array![1.0].view()),
             1,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn voronoi_weights_reject_malformed_landmark_state_and_overflow() {
+        let points = array![[0.0], [1.0]];
+        let duplicate = Landmarks {
+            index: vec![0, 0],
+            points: array![[0.0], [1.0]],
+            weights: array![1.0, 1.0],
+        };
+        assert!(voronoi_weights(points.view(), &duplicate, &Euclid, None, 1.0).is_err());
+
+        let valid = Landmarks {
+            index: vec![0],
+            points: array![[0.0]],
+            weights: array![1.0],
+        };
+        assert!(voronoi_weights(
+            points.view(),
+            &valid,
+            &Euclid,
+            Some(array![f64::MAX, f64::MAX].view()),
+            1.0,
         )
         .is_err());
     }
