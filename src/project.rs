@@ -195,14 +195,33 @@ pub fn project_many(
 ) -> Result<Array2<f64>> {
     let nq = queries.nrows();
     let d = emb.low.ncols();
-    let mut out = Array2::<f64>::zeros((nq, d));
-    for i in 0..nq {
-        let p = project_one(emb, queries.row(i), metric, opts)?;
-        for h in 0..d {
-            out[(i, h)] = p[h];
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        let rows: crate::error::Result<Vec<Array1<f64>>> = (0..nq)
+            .into_par_iter()
+            .map(|i| project_one(emb, queries.row(i), metric, opts))
+            .collect();
+        let rows = rows?;
+        let mut out = Array2::<f64>::zeros((nq, d));
+        for i in 0..nq {
+            for h in 0..d {
+                out[(i, h)] = rows[i][h];
+            }
         }
+        return Ok(out);
     }
-    Ok(out)
+    #[cfg(not(feature = "parallel"))]
+    {
+        let mut out = Array2::<f64>::zeros((nq, d));
+        for i in 0..nq {
+            let p = project_one(emb, queries.row(i), metric, opts)?;
+            for h in 0..d {
+                out[(i, h)] = p[h];
+            }
+        }
+        Ok(out)
+    }
 }
 
 fn array_xy(x: f64, y: f64) -> Array1<f64> {
