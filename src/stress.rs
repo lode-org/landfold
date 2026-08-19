@@ -496,7 +496,7 @@ pub fn query_chi_checked(
             "query stress arrays have incompatible shapes",
         ));
     }
-    if point_w.len() != 0 && point_w.len() != n {
+    if !point_w.is_empty() && point_w.len() != n {
         return Err(crate::error::LandfoldError::Shape(
             "query stress weight length",
         ));
