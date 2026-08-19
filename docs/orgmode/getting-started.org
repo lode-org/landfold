@@ -1,0 +1,35 @@
+#+TITLE: Getting started
+#+FILETAGS: :landfold:howto:
+#+DATE: <2026-08-19 Wed>
+#+DESCRIPTION: Build and run landfold
+#+STATUS: Active
+
+* Build
+
+Compile on a remote builder, not a laptop:
+
+#+begin_src sh
+cargo test --release
+cargo build --release --bins
+#+end_src
+
+* Embed
+
+#+begin_src sh
+landfold embed -D 30 -d 2 --fun-hd 6,8,8 --fun-ld 6,2,8 --steps 50 \
+    --pi 6.283185 -w < landmarks.dat > landmarks.ld
+#+end_src
+
+* Project
+
+#+begin_src sh
+landfold project -D 30 -d 2 --high-file landmarks.dat --low-file landmarks.ld \
+    --pi 6.283185 --fun-hd 6,8,8 --fun-ld 6,2,8 \
+    --grid 60,51,501 --refine 3 < colvar.dat > colvar.ld
+#+end_src
+
+* Free-energy surface
+
+#+begin_src sh
+landfold fes --input colvar.ld --nx 80 --ny 80 --svg fes.svg --csv fes.csv
+#+end_src

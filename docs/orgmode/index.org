@@ -1,0 +1,23 @@
+#+TITLE: landfold
+#+FILETAGS: :landfold:docs:
+#+DATE: <2026-08-19 Wed>
+#+DESCRIPTION: Sigmoid-distance nonlinear embedding
+#+STATUS: Active
+
+* About
+
+~landfold~ is an MIT library for sigmoid-distance embedding of
+high-dimensional molecular data (Ceriotti, Tribello, Parrinello, PNAS
+2011, DOI [[https://doi.org/10.1073/pnas.1108486108][10.1073/pnas.1108486108]]).
+
+* Tools
+
+| Subcommand | Role |
+|------------+------|
+| =embed= | MDS init + standard CG (or =--stoch=) |
+| =project= | out-of-sample |
+| =landmarks= | farthest-point |
+| =dist= | pairwise |
+| =fes= | 2-D FES CSV/SVG + coordination histogram |
+
+See [[file:spec.org][spec.org]] and [[file:getting-started.org][getting-started.org]].

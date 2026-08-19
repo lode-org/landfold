@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: landfold
+message: If you use this software, cite the sigmoid-distance embedding papers.
+type: software
+authors:
+  - family-names: Goswami
+    given-names: Rohit
+    orcid: https://orcid.org/0000-0002-2393-8056
+license: MIT
+repository-code: https://github.com/HaoZeke/landfold
+references:
+  - type: article
+    title: Simplifying the representation of complex free-energy landscapes using sketch-map
+    doi: 10.1073/pnas.1108486108
+    year: 2011
+  - type: article
+    title: Using sketch-map coordinates to analyze and bias molecular dynamics simulations
+    doi: 10.1073/pnas.1201152109
+    year: 2012
+  - type: article
+    title: Demonstrating the Transferability and the Descriptive Power of Sketch-Map
+    doi: 10.1021/ct3010563
+    year: 2013

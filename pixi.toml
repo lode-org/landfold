@@ -1,0 +1,16 @@
+[workspace]
+name = "landfold"
+version = "0.1.0"
+description = "Fast sigmoid-distance nonlinear dimensionality reduction"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tasks]
+test = "echo 'run cargo test on rg.terra, not locally'"
+fmt = "cargo fmt --all -- --check"
+
+[dependencies]
+rust = ">=1.82"
+
+[environments]
+default = { solve-group = "default" }

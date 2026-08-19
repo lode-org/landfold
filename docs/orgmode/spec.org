@@ -1,0 +1,29 @@
+#+TITLE: landfold specification
+#+FILETAGS: :landfold:spec:
+#+DATE: <2026-08-19 Wed>
+#+DESCRIPTION: Transfer, metrics, stress, solvers, FES
+#+STATUS: Active
+
+* Transfer
+
+Generalised sigmoid (Ceriotti 2011, DOI 10.1073/pnas.1108486108):
+
+=F(x) = 1 - (1 + (2^{a/b}-1)(x/σ)^a )^{-b/a}=
+
+equals 1/2 at =x = σ=.
+
+* Stress
+
+χ = (1/Z) Σ_{i<j} w_ij [ (1-imix)(F_HD(D_ij)-F_LD(d_ij))^2 + imix (D_ij-d_ij)^2 ]
+
+* Solvers
+
+| Arm | Method | Citation |
+|-----+--------+----------|
+| Standard (default) | Polak-Ribiere CG + Brent | Polak 1969; Brent 1973 |
+| Stochastic | random pair mini-batches | Robbins and Monro 1951 |
+| MDS init | Torgerson double-centre | Torgerson 1952 |
+
+* FES
+
+=F/kT = -ln(ρ/ρ_max)= on a 2-D histogram of the embedding.

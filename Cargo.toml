@@ -1,0 +1,45 @@
+[package]
+name = "landfold"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Sigmoid-distance nonlinear embedding of high-dimensional molecular data"
+repository = "https://github.com/HaoZeke/landfold"
+readme = "README.md"
+license = "MIT"
+keywords = ["dimensionality-reduction", "mds", "free-energy", "comp-chem"]
+categories = ["science", "mathematics"]
+authors = ["Rohit Goswami <rgoswami@ieee.org>"]
+
+[lib]
+name = "landfold"
+path = "src/lib.rs"
+crate-type = ["lib", "cdylib"]
+
+[[bin]]
+name = "landfold"
+path = "src/bin/landfold.rs"
+
+[features]
+default = ["parallel"]
+parallel = ["dep:rayon"]
+python = ["dep:pyo3", "dep:numpy"]
+plot = ["dep:plotters"]
+
+[dependencies]
+ndarray = { version = "0.17", features = ["rayon"] }
+nalgebra = "0.33"
+thiserror = "2"
+clap = { version = "4.5", features = ["derive"] }
+dlpk = { version = "0.1.5", features = ["ndarray"] }
+rayon = { version = "1.10", optional = true }
+pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
+numpy = { version = "0.23", optional = true }
+plotters = { version = "0.3", optional = true }
+
+[dev-dependencies]
+approx = "0.5"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
