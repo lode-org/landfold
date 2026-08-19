@@ -136,6 +136,11 @@ fn farthest_from_chosen(
             }
             let w = weights.map(|ww| ww[i]).unwrap_or(1.0);
             let score = min_d[i] * w;
+            if !score.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "weighted landmark score overflowed".into(),
+                ));
+            }
             if score > best_s {
                 best_s = score;
                 best = Some(i);
@@ -423,6 +428,19 @@ mod tests {
             &Euclid,
             Some(array![f64::MAX, f64::MAX].view()),
             1.0,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn farthest_point_rejects_overflowing_weighted_scores() {
+        let points = array![[0.0], [f64::MAX]];
+        assert!(farthest_point(
+            points.view(),
+            &crate::metric::L1,
+            2,
+            Some(array![1.0, f64::MAX].view()),
+            0,
         )
         .is_err());
     }
