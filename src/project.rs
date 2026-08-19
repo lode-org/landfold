@@ -362,7 +362,7 @@ mod tests {
             grid_fine: 1,
             cg_steps: 0,
         };
-        emb.low = array![[0.0], [1.0], [0.0]];
+        emb.low = array![[0.0, 0.0], [1.0, 0.0]];
         assert!(project_report(&emb, array![0.0, 0.0].view(), &Euclid, &opts).is_err());
 
         emb.low = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
