@@ -161,8 +161,43 @@ impl Histogram2d {
         Ok(())
     }
 
+    fn validate_state(&self) -> Result<()> {
+        let nx = self.counts.ncols();
+        let ny = self.counts.nrows();
+        if nx == 0 || ny == 0 || self.x_edges.len() != nx + 1 || self.y_edges.len() != ny + 1 {
+            return Err(LandfoldError::Shape("2d histogram state dimensions"));
+        }
+        if !self.samples.is_finite() || self.samples < 0.0 {
+            return Err(LandfoldError::Msg(
+                "2d histogram samples must be finite and nonnegative".into(),
+            ));
+        }
+        if self
+            .x_edges
+            .windows(2)
+            .into_iter()
+            .chain(self.y_edges.windows(2))
+            .any(|edge| !edge[0].is_finite() || !edge[1].is_finite() || edge[1] <= edge[0])
+        {
+            return Err(LandfoldError::Msg(
+                "2d histogram edges must be finite and increasing".into(),
+            ));
+        }
+        if self
+            .counts
+            .iter()
+            .any(|&count| !count.is_finite() || count < 0.0)
+        {
+            return Err(LandfoldError::Msg(
+                "2d histogram counts must be finite and nonnegative".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Separable Gaussian blur of the count field (binned KDE).
     pub fn blur(&self, sigma_bins: f64) -> Result<Array2<f64>> {
+        self.validate_state()?;
         if !sigma_bins.is_finite() || sigma_bins < 0.0 {
             return Err(LandfoldError::Msg(
                 "histogram blur sigma must be finite and nonnegative".into(),
@@ -197,6 +232,16 @@ impl FreeEnergy {
     }
 
     fn from_counts(h: &Histogram2d, counts: &Array2<f64>, kt: f64) -> Result<Self> {
+        h.validate_state()?;
+        if counts.raw_dim() != h.counts.raw_dim()
+            || counts
+                .iter()
+                .any(|&count| !count.is_finite() || count < 0.0)
+        {
+            return Err(LandfoldError::Msg(
+                "FES counts must be finite and nonnegative".into(),
+            ));
+        }
         let nx = counts.ncols();
         let ny = counts.nrows();
         let mut x_centers = Array1::zeros(nx);
@@ -717,6 +762,22 @@ mod tests {
         assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, -1.0).is_err());
         assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, f64::NAN).is_err());
         assert!(h.blur(-1.0).is_err());
+    }
+
+    #[test]
+    fn rejects_mutated_histogram_state() {
+        let mut negative = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        negative.counts[(0, 0)] = -1.0;
+        assert!(negative.blur(1.0).is_err());
+        assert!(FreeEnergy::from_histogram(&negative, 1.0).is_err());
+
+        let mut nonfinite = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        nonfinite.samples = f64::NAN;
+        assert!(nonfinite.blur(1.0).is_err());
+
+        let mut bad_edges = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        bad_edges.x_edges[1] = bad_edges.x_edges[0];
+        assert!(bad_edges.blur(1.0).is_err());
     }
 
     #[test]
