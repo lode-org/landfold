@@ -219,4 +219,17 @@ mod tests {
             .is_err()
         );
     }
+
+    #[test]
+    fn rejects_overflowed_transfer_during_replica_exchange() {
+        let hd = ndarray::array![[0.0, 1.0], [1.0, 0.0]];
+        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None).unwrap();
+        stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        let opts = ReplicaOpts {
+            steps: 1,
+            polish: false,
+            ..ReplicaOpts::default()
+        };
+        assert!(minimize_replica(&stress, ndarray::array![0.0, 1.0e154].view(), 1, &opts, &CgOpts::default()).is_err());
+    }
 }
