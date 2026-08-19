@@ -1,4 +1,4 @@
-//! Compare landfold kernels to goldens dumped from the COSMO C++ (`interpol=false`).
+//! Compare landfold kernels to goldens dumped from sketchmap (`interpol=false`).
 //!
 //! Goldens are produced by `scripts/gen_cpp_goldens.sh` on the remote builder
 //! against HaoZeke/sketchmap addLocks. Missing file is a hard fail: no
