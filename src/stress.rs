@@ -399,8 +399,43 @@ impl Stress {
         skip: usize,
         point_w: ArrayView1<f64>,
     ) -> (f64, Array1<f64>) {
+        match self.chi1_checked(x, landmarks, skip, point_w) {
+            Ok(result) => result,
+            Err(_) => (OPTIMIZER_PENALTY, Array1::zeros(x.len())),
+        }
+    }
+
+    /// Checked pointwise χ for out-of-sample / grid projection of `skip`.
+    pub fn chi1_checked(
+        &self,
+        x: ArrayView1<f64>,
+        landmarks: ArrayView2<f64>,
+        skip: usize,
+        point_w: ArrayView1<f64>,
+    ) -> crate::error::Result<(f64, Array1<f64>)> {
         let d = x.len();
-        let n = landmarks.nrows();
+        let n = self.n;
+        if skip >= n || landmarks.nrows() != n || landmarks.ncols() != d || d == 0 {
+            return Err(crate::error::LandfoldError::Shape(
+                "chi1 arrays have incompatible shapes",
+            ));
+        }
+        if !point_w.is_empty() && point_w.len() != n {
+            return Err(crate::error::LandfoldError::Shape("chi1 weight length"));
+        }
+        self.validate_state()?;
+        if x.iter()
+            .chain(landmarks.iter())
+            .any(|&value| !value.is_finite())
+            || point_w
+                .iter()
+                .any(|&value| !value.is_finite() || value < 0.0)
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "chi1 coordinates and weights must be finite and nonnegative where applicable"
+                    .into(),
+            ));
+        }
         let mut vv = 0.0;
         let mut vg = Array1::<f64>::zeros(d);
         let mut tw = 0.0;
@@ -416,7 +451,7 @@ impl Stress {
                 ld2 += v1[h] * v1[h];
             }
             let ld = ld2.sqrt();
-            let (lfd, ldfd) = self.tfun_ld.fdf(ld);
+            let (lfd, ldfd) = self.tfun_ld.try_fdf(ld)?;
             let w = if point_w.len() == n { point_w[i] } else { 1.0 };
             let diff = self.fhd[(skip, i)] - lfd;
             let dd = self.hd[(skip, i)] - ld;
@@ -435,7 +470,12 @@ impl Stress {
         }
         vv /= tw;
         vg.mapv_inplace(|g| g / tw);
-        (vv, vg)
+        if !vv.is_finite() || vg.iter().any(|&value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "chi1 evaluation is non-finite".into(),
+            ));
+        }
+        Ok((vv, vg))
     }
 
     /// Stress of a new low-D point against all landmarks.
@@ -782,6 +822,28 @@ mod tests {
             &transfer,
             0.0,
             array![1.0].view(),
+        );
+        assert_eq!(value, OPTIMIZER_PENALTY);
+        assert!(grad.iter().all(|component| *component == 0.0));
+    }
+
+    #[test]
+    fn checked_chi1_rejects_invalid_inputs_and_transfer_overflow() {
+        let hd = array![[0.0, 1.0], [1.0, 0.0]];
+        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        let x = array![0.0, 1.0e154];
+        let landmarks = array![[0.0, 0.0], [1.0, 0.0]];
+        assert!(stress.chi1_checked(x.view(), landmarks.view(), 2, array![].view()).is_err());
+
+        stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        assert!(stress
+            .chi1_checked(x.view(), landmarks.view(), 0, array![1.0, 1.0].view())
+            .is_err());
+        let (value, grad) = stress.chi1(
+            x.view(),
+            landmarks.view(),
+            0,
+            array![1.0, 1.0].view(),
         );
         assert_eq!(value, OPTIMIZER_PENALTY);
         assert!(grad.iter().all(|component| *component == 0.0));
