@@ -157,15 +157,11 @@ pub fn minimize_xtsci(
 /// Out-of-sample projection uses this on the one-point χ of Ceriotti,
 /// Tribello and Parrinello, *J. Chem. Theory Comput.* **9**, 1521 (2013),
 /// <https://doi.org/10.1021/ct3010563>.
-pub fn minimize_oracle<F>(oracle: F, init: ArrayView1<f64>, opts: &CgOpts) -> CgReport
+pub fn minimize_oracle<F>(oracle: F, init: ArrayView1<f64>, opts: &CgOpts) -> Result<CgReport>
 where
     F: Fn(ArrayView1<f64>) -> (f64, Array1<f64>) + Send + Sync,
 {
-    try_minimize_oracle(oracle, init, opts).unwrap_or_else(|_| CgReport {
-        value: f64::INFINITY,
-        coords: init.to_owned(),
-        steps: 0,
-    })
+    try_minimize_oracle(oracle, init, opts)
 }
 
 /// Checked Polak-Ribiere + Brent minimization for projection and other
@@ -181,6 +177,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ndarray::array;
 
     #[test]
     fn rejects_invalid_options() {
@@ -200,5 +197,18 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn oracle_reports_failures_instead_of_sentinel_reports() {
+        let report = minimize_oracle(
+            |_x| (0.0, array![0.0]),
+            array![0.0].view(),
+            &CgOpts {
+                tol: f64::NAN,
+                ..CgOpts::default()
+            },
+        );
+        assert!(report.is_err());
     }
 }
