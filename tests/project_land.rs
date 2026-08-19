@@ -5,8 +5,8 @@ use std::process::Command;
 
 use approx::assert_relative_eq;
 use landfold::{
-    coordination_histogram, embed_points, farthest_point, project_many, project_one, Euclid,
-    FreeEnergy, Histogram2d, IterOpts, ProjOpts, Transfer,
+    Euclid, FreeEnergy, Histogram2d, IterOpts, ProjOpts, Transfer, coordination_histogram,
+    embed_points, farthest_point, project_many, project_one,
 };
 use ndarray::array;
 
@@ -135,13 +135,7 @@ fn proj_opts_from_cli_parses_grid() {
 
 #[test]
 fn farthest_point_matches_square_golden() {
-    let pts = array![
-        [0.0, 0.0],
-        [1.0, 0.0],
-        [0.0, 1.0],
-        [1.0, 1.0],
-        [0.5, 0.5]
-    ];
+    let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]];
     let lm = farthest_point(pts.view(), &Euclid, 3, None, 0).unwrap();
     let text = std::fs::read_to_string(golden("landmarks_square.txt")).unwrap();
     let want: Vec<usize> = text
@@ -258,14 +252,31 @@ fn cli_landmarks_writes_indices_and_k_rows() {
     let input = dir.join("pts.dat");
     std::fs::write(&input, "0 0\n1 0\n0 1\n1 1\n0.5 0.5\n").unwrap();
     let out = Command::new(landfold_bin())
-        .args(["landmarks", "-D", "2", "-n", "3", "--seed", "0", "--indices"])
+        .args([
+            "landmarks",
+            "-D",
+            "2",
+            "-n",
+            "3",
+            "--seed",
+            "0",
+            "--indices",
+        ])
         .stdin(std::fs::File::open(&input).unwrap())
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
-        stdout.lines().next().unwrap().starts_with("# indices 0 3 1"),
+        stdout
+            .lines()
+            .next()
+            .unwrap()
+            .starts_with("# indices 0 3 1"),
         "{stdout}"
     );
     let rows: Vec<_> = stdout
@@ -317,7 +328,11 @@ fn cli_fes_csv_svg_and_cn() {
         ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert_eq!(
         std::fs::read_to_string(&csv).unwrap(),
         std::fs::read_to_string(golden("fes_half_density.csv")).unwrap()
@@ -358,7 +373,11 @@ fn cli_project_lands_on_a_known_landmark() {
         .stdin(std::fs::File::open(&q).unwrap())
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let nums: Vec<f64> = String::from_utf8(out.stdout)
         .unwrap()
         .split_whitespace()
@@ -389,15 +408,126 @@ fn cli_landmarks_voronoi_weights_sum_to_one() {
         .stdin(std::fs::File::open(&input).unwrap())
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(stdout.contains("# indices 0 3"), "{stdout}");
     let mut wsum = 0.0;
     for line in stdout.lines().filter(|l| !l.starts_with('#')) {
-        let last = line.split_whitespace().last().unwrap().parse::<f64>().unwrap();
+        let last = line
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .parse::<f64>()
+            .unwrap();
         wsum += last;
     }
     assert!((wsum - 1.0).abs() < 1e-12, "voronoi weights {wsum}");
+}
+
+#[test]
+fn cli_project_print_error_appends_chi_and_nearest() {
+    let dir = scratch("proj-err");
+    let hi = dir.join("hi.dat");
+    let lo = dir.join("lo.dat");
+    let q = dir.join("q.dat");
+    std::fs::write(&hi, "0 0\n1 0\n0 1\n").unwrap();
+    std::fs::write(&lo, "0 0\n1 0\n0 1\n").unwrap();
+    std::fs::write(&q, "0 0\n").unwrap();
+    let out = Command::new(landfold_bin())
+        .args([
+            "project",
+            "-D",
+            "2",
+            "-d",
+            "2",
+            "--high-file",
+            hi.to_str().unwrap(),
+            "--low-file",
+            lo.to_str().unwrap(),
+            "--grid",
+            "2.0,11,21",
+            "--refine",
+            "4",
+            "--print-error",
+        ])
+        .stdin(std::fs::File::open(&q).unwrap())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let nums: Vec<f64> = String::from_utf8(out.stdout)
+        .unwrap()
+        .split_whitespace()
+        .map(|s| s.parse().unwrap())
+        .collect();
+    assert_eq!(nums.len(), 4, "x y chi nearest");
+    assert!(nums[2].is_finite());
+    assert!(
+        nums[3].abs() < 1e-12,
+        "query is a landmark, nearest HD {}",
+        nums[3]
+    );
+}
+
+#[test]
+fn fes_blur_and_floor_via_cli() {
+    let dir = scratch("fes-blur");
+    let ld = dir.join("ld.dat");
+    let csv = dir.join("fes.csv");
+    std::fs::write(&ld, "0.4 0.4\n0.5 0.4\n0.4 0.5\n").unwrap();
+    let out = Command::new(landfold_bin())
+        .args([
+            "fes",
+            "--input",
+            ld.to_str().unwrap(),
+            "--nx",
+            "6",
+            "--ny",
+            "6",
+            "--xmin",
+            "0",
+            "--xmax",
+            "6",
+            "--ymin",
+            "0",
+            "--ymax",
+            "6",
+            "--blur",
+            "0.8",
+            "--floor",
+            "0.2",
+            "--fmax",
+            "2",
+            "--csv",
+            csv.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = std::fs::read_to_string(&csv).unwrap();
+    assert!(text.starts_with("# x y F rho"));
+    let finite = text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .filter(|l| l.split_whitespace().nth(2) != Some("nan"))
+        .count();
+    let empty = text
+        .lines()
+        .filter(|l| l.split_whitespace().nth(2) == Some("nan"))
+        .count();
+    assert!(finite >= 1, "blur left a body: {text}");
+    assert!(empty >= 1, "floor dropped a low-density cell: {text}");
 }
 
 #[test]

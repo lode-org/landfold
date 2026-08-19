@@ -622,6 +622,31 @@ mod tests {
     }
 
     #[test]
+    fn blur_spreads_mass_into_empty_bins() {
+        let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
+        h.add(0.5, 0.5, 1.0);
+        let sharp = FreeEnergy::from_histogram(&h, 1.0);
+        let soft = FreeEnergy::from_histogram_blurred(&h, 1.0, 1.0);
+        assert_eq!(sharp.f[(0, 1)], None);
+        assert!(soft.rho[(0, 1)] > 0.0);
+        assert!(soft.f[(0, 1)].is_some());
+    }
+
+    #[test]
+    fn connected_body_drops_a_detached_island() {
+        let mut h = Histogram2d::new(0.0, 3.0, 3, 0.0, 3.0, 3).unwrap();
+        h.add(0.5, 0.5, 10.0);
+        h.add(0.5, 1.5, 10.0);
+        h.add(2.5, 2.5, 1.0);
+        let mut fes = FreeEnergy::from_histogram(&h, 1.0);
+        assert!(fes.f[(2, 2)].is_some());
+        fes.connected_body(0.05);
+        assert!(fes.f[(0, 0)].is_some());
+        assert!(fes.f[(1, 0)].is_some());
+        assert_eq!(fes.f[(2, 2)], None);
+    }
+
+    #[test]
     fn half_density_invert() {
         let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
         h.add(0.5, 0.5, 1.0);
