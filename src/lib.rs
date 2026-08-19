@@ -8,6 +8,7 @@
 //! Hot path: Rayon pairwise distances, GEMM Euclidean Gram matrix, analytic
 //! χ gradient, Polak-Ribiere CG. Embeddings export as DLPack via `dlpk`.
 
+pub mod anneal;
 pub mod array;
 pub mod cg;
 pub mod error;
@@ -28,6 +29,7 @@ pub use error::{LandfoldError, Result};
 pub use hist::{coordination_histogram, coordination_numbers, FreeEnergy, Histogram1d, Histogram2d};
 pub use io::{read_points, read_points_path, write_points, PointSet};
 pub use iter::{embed, embed_points, Embedding, IterOpts, Solver};
+pub use anneal::AnnealOpts;
 pub use search::StochOpts;
 pub use landmark::{farthest_point, Landmarks};
 pub use mds::{classical_mds, mds_from_points, randomized_mds, MdsMode, MdsReport};

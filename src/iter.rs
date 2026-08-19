@@ -1,7 +1,8 @@
-//! Embed: MDS init, then either standard CG or randomised pair search.
+//! Embed: MDS init, then CG, pair search, or annealing.
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
+use crate::anneal::{minimize_anneal, AnnealOpts};
 use crate::cg::{minimize, CgOpts, CgReport};
 use crate::error::Result;
 use crate::mds::classical_mds;
@@ -16,6 +17,7 @@ use crate::transfer::Transfer;
 pub enum Solver {
     Standard,
     Stochastic(StochOpts),
+    Anneal(AnnealOpts),
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +108,7 @@ pub fn embed(
     let report = match &opts.solver {
         Solver::Standard => minimize(&stress, packed.view(), opts.lowdim, &opts.cg)?,
         Solver::Stochastic(so) => minimize_stochastic(&stress, packed.view(), opts.lowdim, so),
+        Solver::Anneal(ao) => minimize_anneal(&stress, packed.view(), opts.lowdim, ao, &opts.cg)?,
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
     for i in 0..n {

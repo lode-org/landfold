@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use landfold::{
     apply_transfer, coordination_histogram, embed, farthest_point, mds_from_points, pairwise,
-    pairwise_euclid, project_many, read_points, write_points, Embedding, Euclid, FreeEnergy,
-    Histogram2d, IterOpts, MdsMode, Metric, Periodic, ProjOpts, Solver, Sphere, StochOpts,
-    Transfer,
+    pairwise_euclid, project_many, read_points, write_points, AnnealOpts, Embedding, Euclid,
+    FreeEnergy, Histogram2d, IterOpts, MdsMode, Metric, Periodic, ProjOpts, Solver, Sphere,
+    StochOpts, Transfer,
 };
 use ndarray::Array1;
 
@@ -54,6 +54,9 @@ enum Cmd {
         stoch: bool,
         #[arg(long = "batch", default_value_t = 64)]
         batch: usize,
+        /// Simulated annealing then CG polish (extra arm)
+        #[arg(long)]
+        anneal: bool,
     },
     /// Project new high-D rows into a fitted embedding
     Project {
@@ -156,6 +159,7 @@ fn main() -> landfold::Result<()> {
             init,
             stoch,
             batch,
+            anneal,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let mut opts = IterOpts {
@@ -164,7 +168,12 @@ fn main() -> landfold::Result<()> {
                 tfun_hd: Transfer::from_cli(&fun_hd)?,
                 tfun_ld: Transfer::from_cli(&fun_ld)?,
                 center,
-                solver: if stoch {
+                solver: if anneal {
+                    Solver::Anneal(AnnealOpts {
+                        steps,
+                        ..AnnealOpts::default()
+                    })
+                } else if stoch {
                     Solver::Stochastic(StochOpts {
                         steps,
                         batch,
