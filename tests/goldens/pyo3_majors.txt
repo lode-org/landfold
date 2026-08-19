@@ -1,0 +1,8 @@
+# Single pyo3 major allowed with --features python.
+# dlpk 0.4.1 pins optional pyo3 0.29; landfold matches that major
+# and leaves dlpk's pyo3 feature off so pyo3-ffi links=python
+# appears once. Do not invent a second pyo3.
+pyo3 0.29
+numpy 0.29
+dlpk 0.4.1
+dlpk.pyo3 off
