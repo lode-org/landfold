@@ -49,7 +49,10 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
             "MDS distance matrix must be finite and nonnegative".into(),
         ));
     }
-    let mut d2 = vec![0.0; n * n];
+    let matrix_len = n
+        .checked_mul(n)
+        .ok_or(LandfoldError::Msg("MDS matrix dimension overflowed".into()))?;
+    let mut d2 = vec![0.0; matrix_len];
     for i in 0..n {
         for j in 0..n {
             let d = dist[(i, j)];
@@ -119,19 +122,37 @@ fn coords_from_eigen(
     lowdim: usize,
     evals: &[f64],
     evecs: &DMatrix<f64>,
-) -> (Array2<f64>, Array1<f64>, f64) {
+) -> Result<(Array2<f64>, Array1<f64>, f64)> {
+    if evals.len() != n || evecs.nrows() != n || evecs.ncols() != n {
+        return Err(LandfoldError::Shape("MDS eigensystem dimensions"));
+    }
+    if evals.iter().any(|value| !value.is_finite()) {
+        return Err(LandfoldError::Msg("MDS eigenvalues must be finite".into()));
+    }
     let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (evals[k], k)).collect();
     pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let mut coords = Array2::<f64>::zeros((n, lowdim));
     let mut kept = Array1::<f64>::zeros(lowdim);
-    let trace: f64 = pairs.iter().map(|p| p.0).sum();
+    let trace = pairs.iter().try_fold(0.0, |trace, pair| {
+        let value = trace + pair.0;
+        value
+            .is_finite()
+            .then_some(value)
+            .ok_or_else(|| LandfoldError::Msg("MDS spectral trace overflowed".into()))
+    })?;
     for h in 0..lowdim {
         let (lam, src) = pairs[h];
         let lam = lam.max(0.0);
         kept[h] = lam;
         let scale = lam.sqrt();
         for i in 0..n {
-            coords[(i, h)] = evecs[(i, src)] * scale;
+            let value = evecs[(i, src)] * scale;
+            if !value.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "MDS coordinate reconstruction overflowed".into(),
+                ));
+            }
+            coords[(i, h)] = value;
         }
     }
     let ld_error = if trace.abs() > 0.0 {
@@ -139,7 +160,12 @@ fn coords_from_eigen(
     } else {
         0.0
     };
-    (coords, kept, ld_error)
+    if !ld_error.is_finite() {
+        return Err(LandfoldError::Msg(
+            "MDS explained variance is not finite".into(),
+        ));
+    }
+    Ok((coords, kept, ld_error))
 }
 
 /// Classical Torgerson MDS from a symmetric distance matrix.
@@ -158,7 +184,7 @@ pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64
     let dm = DMatrix::<f64>::from_row_slice(n, n, &b);
     let eigen = SymmetricEigen::new(dm);
     let evals: Vec<f64> = (0..n).map(|k| eigen.eigenvalues[k]).collect();
-    let (coords, kept, ld_error) = coords_from_eigen(n, lowdim, &evals, &eigen.eigenvectors);
+    let (coords, kept, ld_error) = coords_from_eigen(n, lowdim, &evals, &eigen.eigenvectors)?;
     Ok((
         coords,
         MdsReport {
@@ -185,7 +211,12 @@ pub fn randomized_mds(
             high: n,
         });
     }
-    let ell = (lowdim + oversample.max(2)).min(n);
+    let requested = lowdim
+        .checked_add(oversample.max(2))
+        .ok_or(LandfoldError::Msg(
+            "MDS randomized dimension overflowed".into(),
+        ))?;
+    let ell = requested.min(n);
     let bm = DMatrix::<f64>::from_row_slice(n, n, &b);
     let mut omega = DMatrix::<f64>::zeros(n, ell);
     let mut state = seed | 1;
@@ -210,6 +241,13 @@ pub fn randomized_mds(
     let q = qr.q();
     let small = q.transpose() * &bm * &q;
     let eigen = SymmetricEigen::new(small);
+    if eigen.eigenvalues.iter().any(|value| !value.is_finite())
+        || eigen.eigenvectors.iter().any(|value| !value.is_finite())
+    {
+        return Err(LandfoldError::Msg(
+            "MDS randomized eigensystem is not finite".into(),
+        ));
+    }
     let mut pairs: Vec<(f64, usize)> = (0..ell).map(|k| (eigen.eigenvalues[k], k)).collect();
     pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let d = lowdim.min(ell);
@@ -223,9 +261,21 @@ pub fn randomized_mds(
         for i in 0..n {
             let mut acc = 0.0;
             for r in 0..ell {
-                acc += q[(i, r)] * eigen.eigenvectors[(r, src)];
+                let term = q[(i, r)] * eigen.eigenvectors[(r, src)];
+                acc += term;
+                if !acc.is_finite() {
+                    return Err(LandfoldError::Msg(
+                        "MDS eigenvector accumulation overflowed".into(),
+                    ));
+                }
             }
-            coords[(i, h)] = acc * scale;
+            let value = acc * scale;
+            if !value.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "MDS randomized coordinate reconstruction overflowed".into(),
+                ));
+            }
+            coords[(i, h)] = value;
         }
     }
     Ok((
@@ -465,6 +515,15 @@ mod tests {
         ];
         assert!(classical_mds(dist.view(), 1).is_err());
         assert!(randomized_mds(dist.view(), 1, 2, 0).is_err());
+    }
+
+    #[test]
+    fn rejects_mds_spectral_overflow_and_dimensions() {
+        let eigenvectors = DMatrix::<f64>::identity(2, 2);
+        assert!(coords_from_eigen(2, 1, &[f64::NAN, 1.0], &eigenvectors).is_err());
+        assert!(coords_from_eigen(2, 1, &[1.0, 1.0], &DMatrix::identity(1, 1)).is_err());
+        let dist = array![[0.0, 1.0], [1.0, 0.0]];
+        assert!(randomized_mds(dist.view(), 1, usize::MAX, 0).is_err());
     }
 
     #[test]
