@@ -49,6 +49,8 @@ pub struct StressEval {
     pub grad: Array1<f64>,
 }
 
+const OPTIMIZER_PENALTY: f64 = f64::MAX / 4.0;
+
 struct PairData<'a> {
     n: usize,
     d: usize,
@@ -237,7 +239,26 @@ impl Stress {
                 self.tfun_ld.try_fdf(ld)?;
             }
         }
-        Ok(self.eval(coords, d))
+        let evaluation = self.eval(coords, d);
+        if !evaluation.value.is_finite()
+            || evaluation.grad.iter().any(|&component| !component.is_finite())
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress evaluation is non-finite".into(),
+            ));
+        }
+        Ok(evaluation)
+    }
+
+    /// Infallible objective boundary for optimizer traits that cannot return errors.
+    pub(crate) fn eval_for_optimizer(&self, coords: ArrayView1<f64>, d: usize) -> StressEval {
+        match self.try_eval(coords, d) {
+            Ok(evaluation) => evaluation,
+            Err(_) => StressEval {
+                value: OPTIMIZER_PENALTY,
+                grad: Array1::zeros(coords.len()),
+            },
+        }
     }
 
     fn pair_kernel(&self, i: usize, data: &PairData<'_>, acc: &mut PairAccum<'_>) {

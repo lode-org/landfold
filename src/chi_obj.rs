@@ -55,7 +55,7 @@ impl<'a> ChiObjective<'a> {
 
     /// Fused χ and ∇χ. Prefer this over separate `eval` + `grad`.
     pub fn eval_full(&self, x: ArrayView1<f64>) -> StressEval {
-        self.stress.eval(x, self.d)
+        self.stress.eval_for_optimizer(x, self.d)
     }
 }
 
