@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="lfIconTitle">
+  <title id="lfIconTitle">landfold</title>
+  <desc>A high-D sheet folded onto a two-basin map along a sigmoid crease</desc>
+  <rect width="64" height="64" rx="14" fill="#1E1B4B"/>
+  <!-- High-D sheet (back) -->
+  <path d="M15 20 L47 14 L55 34 L23 40 Z" fill="#312E81" stroke="#A5B4FC" stroke-width="1.35" stroke-linejoin="round"/>
+  <path d="M25 18 L31 36" stroke="#6366F1" stroke-width="1.1"/>
+  <path d="M37 16 L43 34" stroke="#6366F1" stroke-width="1.1"/>
+  <path d="M18 28 L50 22" stroke="#6366F1" stroke-width="1.1"/>
+  <!-- Low-D sheet (front fold) -->
+  <path d="M17 36 L51 32 L47 52 L15 54 Z" fill="#1E1B4B" stroke="#C7D2FE" stroke-width="1.45" stroke-linejoin="round"/>
+  <!-- Two basins -->
+  <ellipse cx="26" cy="42" rx="6.2" ry="4.4" fill="none" stroke="#818CF8" stroke-width="1.2"/>
+  <ellipse cx="40" cy="46" rx="6.2" ry="4.4" fill="none" stroke="#818CF8" stroke-width="1.2"/>
+  <!-- Sigmoid crease: the transfer -->
+  <path d="M20 34 C28 30 34 50 48 40" fill="none" stroke="#FBBF24" stroke-width="1.7" stroke-linecap="round"/>
+  <!-- Landmarks + query -->
+  <circle cx="26" cy="42" r="2.05" fill="#FBBF24"/>
+  <circle cx="40" cy="46" r="2.05" fill="#FBBF24"/>
+  <circle cx="34" cy="38" r="2.05" fill="#FBBF24"/>
+  <circle cx="32" cy="28" r="2.55" fill="#EEF2FF"/>
+</svg>

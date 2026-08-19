@@ -21,3 +21,4 @@ rustc-ice-*.txt
 *.svg
 !docs/**/*.svg
 !examples/**/*.svg
+!branding/**/*.svg
