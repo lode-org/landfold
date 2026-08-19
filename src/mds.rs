@@ -274,10 +274,22 @@ fn spherical_from_dist(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f
         sr = 1.0;
     }
     sr /= std::f64::consts::PI;
+    let sr2 = sr * sr;
+    if !sr2.is_finite() {
+        return Err(LandfoldError::Msg(
+            "spherical MDS scale overflowed".into(),
+        ));
+    }
     let mut m = vec![0.0; n * n];
     for i in 0..n {
         for j in 0..n {
-            m[i * n + j] = (dist[(i, j)] / sr).cos() * sr * sr;
+            let value = (dist[(i, j)] / sr).cos() * sr2;
+            if !value.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "spherical MDS matrix overflowed".into(),
+                ));
+            }
+            m[i * n + j] = value;
         }
     }
     let dm = DMatrix::<f64>::from_row_slice(n, n, &m);
@@ -357,6 +369,11 @@ fn toroidal_mds(
             sr = 1.0;
         }
         sr /= std::f64::consts::PI;
+        if !sr.is_finite() {
+            return Err(LandfoldError::Msg(
+                "toroidal MDS scale overflowed".into(),
+            ));
+        }
         for i in 0..n {
             for j in 0..i {
                 let mut tdij = (p1[(i, 0)] - p1[(j, 0)]).abs();
@@ -364,7 +381,19 @@ fn toroidal_mds(
                     tdij -= 2.0;
                 }
                 tdij = tdij.abs() * std::f64::consts::PI * sr;
-                let mut corr = dist[(i, j)] * dist[(i, j)] - tdij * tdij;
+                let base_sq = dist[(i, j)] * dist[(i, j)];
+                let torus_sq = tdij * tdij;
+                if !base_sq.is_finite() || !torus_sq.is_finite() {
+                    return Err(LandfoldError::Msg(
+                        "toroidal MDS residual squaring overflowed".into(),
+                    ));
+                }
+                let mut corr = base_sq - torus_sq;
+                if !corr.is_finite() {
+                    return Err(LandfoldError::Msg(
+                        "toroidal MDS residual overflowed".into(),
+                    ));
+                }
                 if corr < 0.0 {
                     corr = 0.0;
                 }
