@@ -13,6 +13,29 @@ cargo test --release
 cargo build --release --bins
 #+end_src
 
+* C++ oracle goldens
+
+Regenerate =tests/goldens/cpp_oracle.txt= on the remote builder from
+HaoZeke/sketchmap =addLocks= (needs the valarray ostream fix in
+=libs/tbdefs.hpp=):
+
+#+begin_src sh
+SKMAP_SRC=$HOME/Git/Github/HaoZeke/sketchmap \
+  bash scripts/gen_cpp_goldens.sh
+cargo test --release --test cpp_parity
+#+end_src
+
+The oracle links =libdimred.o= + =libtoolbox= and dumps f/df, pairwise
+Euclid/PBC, Torgerson MDS pairwise distances of the private embedding
+=p=, and =NLDRITERChi= χ/∇χ. =landfold mds --distances= prints the
+same invariant (full matrix) from the Rust Torgerson path.
+
+* Torgerson MDS
+
+#+begin_src sh
+landfold mds -D 30 -d 2 --distances < landmarks.dat > landmarks.mds.dist
+#+end_src
+
 * Embed
 
 #+begin_src sh
