@@ -27,6 +27,26 @@ pub fn farthest_point(
     if k == 0 || k > n {
         return Err(LandfoldError::LowDim { low: k, high: n });
     }
+    if let Some(w) = weights {
+        if w.len() != n {
+            return Err(LandfoldError::Shape("landmark weight length"));
+        }
+        if w.iter().any(|wi| !wi.is_finite() || *wi < 0.0) {
+            return Err(LandfoldError::Parse(
+                "landmark weights must be finite and non-negative".into(),
+            ));
+        }
+    }
+    if let Some(w) = weights {
+        if w.len() != n {
+            return Err(LandfoldError::Shape("landmark weight length"));
+        }
+        if w.iter().any(|&value| !value.is_finite() || value < 0.0) {
+            return Err(LandfoldError::Msg(
+                "landmark weights must be finite and nonnegative".into(),
+            ));
+        }
+    }
     let d = points.ncols();
     let mut min_d = vec![f64::INFINITY; n];
     let mut selected = vec![false; n];
@@ -36,8 +56,8 @@ pub fn farthest_point(
     selected[start] = true;
     update_min_d(points, metric, start, &mut min_d);
     while chosen.len() < k {
-        let mut best = 0usize;
-        let mut best_s = -1.0;
+        let mut best = None;
+        let mut best_s = f64::NEG_INFINITY;
         for i in 0..n {
             if selected[i] {
                 continue;
@@ -46,9 +66,12 @@ pub fn farthest_point(
             let score = min_d[i] * w;
             if score > best_s {
                 best_s = score;
-                best = i;
+                best = Some(i);
             }
         }
+        let best = best.ok_or_else(|| LandfoldError::Msg(
+            "landmark scores contain no selectable finite value".into(),
+        ))?;
         chosen.push(best);
         selected[best] = true;
         update_min_d(points, metric, best, &mut min_d);
@@ -179,6 +202,30 @@ mod tests {
         indices.sort();
         indices.dedup();
         assert_eq!(indices, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn rejects_invalid_landmark_weights() {
+        let pts = array![[0.0], [1.0], [2.0]];
+        assert!(
+            farthest_point(pts.view(), &Euclid, 2, Some(array![1.0, 1.0].view()), 0).is_err()
+        );
+        assert!(farthest_point(
+            pts.view(),
+            &Euclid,
+            2,
+            Some(array![1.0, -1.0, 1.0].view()),
+            0
+        )
+        .is_err());
+        assert!(farthest_point(
+            pts.view(),
+            &Euclid,
+            2,
+            Some(array![1.0, f64::NAN, 1.0].view()),
+            0
+        )
+        .is_err());
     }
 
     #[test]
