@@ -34,6 +34,7 @@ pub mod stress;
 pub mod transfer;
 
 pub use anneal::AnnealOpts;
+pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use array::to_dlpack;
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use error::{LandfoldError, Result};

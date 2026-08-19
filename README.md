@@ -55,6 +55,11 @@ for plotting adapters. pyo3/numpy stay on 0.29 so the graph
 shares one major with dlpk 0.4.1. dlpk's `pyo3` feature stays off
 (`pyo3-ffi` is `links = "python"`). Check on the remote builder:
 
+The structured dictionaries use `coordinates` plus `stress` for embeddings,
+`coordinates` plus `chi`, `nearest_distance`, and `nearest_index` for
+projections, and `x`, `y`, `free_energy`, and `density` for FES results.
+Each includes a `schema` key and a `metadata` dictionary.
+
 ```
 bash scripts/check_pyo3_pin.sh
 cargo tree -e features --features python
