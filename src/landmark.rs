@@ -31,16 +31,6 @@ pub fn farthest_point(
         if w.len() != n {
             return Err(LandfoldError::Shape("landmark weight length"));
         }
-        if w.iter().any(|wi| !wi.is_finite() || *wi < 0.0) {
-            return Err(LandfoldError::Parse(
-                "landmark weights must be finite and non-negative".into(),
-            ));
-        }
-    }
-    if let Some(w) = weights {
-        if w.len() != n {
-            return Err(LandfoldError::Shape("landmark weight length"));
-        }
         if w.iter().any(|&value| !value.is_finite() || value < 0.0) {
             return Err(LandfoldError::Msg(
                 "landmark weights must be finite and nonnegative".into(),

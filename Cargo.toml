@@ -32,6 +32,7 @@ highs = ["dep:highs"]
 ndarray = "0.17"
 nalgebra = "0.33"
 thiserror = "2"
+eindir-core = { path = "../eindir", version = "0.6.0" }
 # clap is used only by the landfold binary in this single package (landfold-w1p0).
 clap = { version = "4.5", features = ["derive"] }
 # dlpk 0.4.1 optional pyo3 is 0.29. python feature matches that major.

@@ -13,6 +13,7 @@
 pub mod anneal;
 pub mod array;
 pub mod cg;
+pub mod chi_obj;
 pub mod error;
 #[cfg(feature = "highs")]
 pub mod highs_slp;
@@ -32,6 +33,7 @@ pub mod transfer;
 #[cfg(feature = "highs")]
 pub use highs_slp::HighsOpts;
 pub use anneal::AnnealOpts;
+pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use replica::ReplicaOpts;
 pub use array::to_dlpack;
 pub use error::{LandfoldError, Result};

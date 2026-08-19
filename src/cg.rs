@@ -7,6 +7,9 @@
 
 use ndarray::{Array1, ArrayView1};
 
+use eindir_core::DifferentiableObjective;
+
+use crate::chi_obj::ChiObjective;
 use crate::error::Result;
 use crate::stress::Stress;
 
@@ -39,20 +42,26 @@ pub struct CgReport {
 }
 
 /// Full-pair χ on packed coordinates. `Solver::Standard` uses this path.
+///
+/// χ is an eindir [`DifferentiableObjective`]; the loop is still the
+/// sketchmap-parity Polak-Ribiere + Brent driver until the xtsci-optimize
+/// port owns conjugacy and line search.
 pub fn minimize(
     stress: &Stress,
     init: ArrayView1<f64>,
     d: usize,
     opts: &CgOpts,
 ) -> Result<CgReport> {
-    Ok(minimize_oracle(
-        |x| {
-            let ev = stress.eval(x, d);
-            (ev.value, ev.grad)
-        },
-        init,
-        opts,
-    ))
+    let obj = ChiObjective::new(stress, d);
+    Ok(minimize_diff(&obj, init, opts))
+}
+
+/// Polak-Ribiere + Brent on any eindir differentiable objective.
+pub fn minimize_diff<O>(obj: &O, init: ArrayView1<f64>, opts: &CgOpts) -> CgReport
+where
+    O: DifferentiableObjective<f64> + ?Sized,
+{
+    minimize_oracle(|x| obj.value_and_gradient(x), init, opts)
 }
 
 /// Polak-Ribiere + Brent on any scalar `f` with analytic gradient.
