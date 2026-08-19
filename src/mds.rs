@@ -212,7 +212,7 @@ fn toroidal_mds(
     metric: &dyn Metric,
     lowdim: usize,
 ) -> Result<(Array2<f64>, MdsReport)> {
-    // Sequential 1-D SMDS with residual distances (C++ TMDS).
+    // Sequential 1-D spherical MDS with residual distances.
     let mut dist = pairwise(points, metric)?;
     let n = dist.nrows();
     let mut coords = Array2::<f64>::zeros((n, lowdim));

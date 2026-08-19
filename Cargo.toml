@@ -27,9 +27,10 @@ python = ["dep:pyo3", "dep:numpy"]
 plot = ["dep:plotters"]
 
 [dependencies]
-ndarray = { version = "0.17", features = ["rayon"] }
+ndarray = "0.17"
 nalgebra = "0.33"
 thiserror = "2"
+# clap is used only by the landfold binary in this single package (landfold-w1p0).
 clap = { version = "4.5", features = ["derive"] }
 dlpk = { version = "0.1.5", features = ["ndarray"] }
 rayon = { version = "1.10", optional = true }

@@ -24,6 +24,12 @@ equals 1/2 at =x = σ=.
 | Stochastic | random pair mini-batches | Robbins and Monro 1951 |
 | MDS init | Torgerson double-centre | Torgerson 1952 |
 
+* Package shape
+
+Single package, one =landfold= binary. =clap= is a package dependency
+because Cargo cannot mark a dep bin-only without a workspace split
+(=landfold-w1p0=). The library API does not use clap.
+
 * FES
 
 =F/kT = -ln(ρ/ρ_max)= on a 2-D histogram of the embedding.

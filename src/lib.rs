@@ -23,6 +23,7 @@ pub mod search;
 pub mod stress;
 pub mod transfer;
 
+pub use array::to_dlpack;
 pub use error::{LandfoldError, Result};
 pub use hist::{coordination_histogram, coordination_numbers, FreeEnergy, Histogram1d, Histogram2d};
 pub use io::{read_points, read_points_path, write_points, PointSet};
