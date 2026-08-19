@@ -78,6 +78,42 @@ for v in votes {
         }
     }
 }
+if seen < 12 {
+    let need = 12 - seen;
+    let extras = [];
+    let k = 1;
+    while k <= need {
+        let p2 = "";
+        p2 += "You are replacement goalkeeper ";
+        p2 += k.to_string();
+        p2 += " of ";
+        p2 += need.to_string();
+        p2 += " for landfold issue ";
+        p2 += issue;
+        p2 += ".\nRead-only. Crate ";
+        p2 += root;
+        p2 += ". Use grep and read_file. No local cargo build.\n";
+        p2 += "accept=true only if the issue verify line is satisfied in the tree with file:line evidence.\n";
+        extras.push(#{
+            prompt: p2,
+            label: "gk-retry-" + k.to_string(),
+            capability_mode: "read-only",
+            output_schema: vote_schema,
+        });
+        k += 1;
+    }
+    let more = parallel(extras);
+    for v in more {
+        if v != () && v.success && v.output.accept != () {
+            seen += 1;
+            if v.output.accept == true { yes += 1; }
+            if v.output.gaps != () && v.output.gaps != "" {
+                gaps += v.output.gaps;
+                gaps += "\n";
+            }
+        }
+    }
+}
 let ok = yes >= 7 && seen >= 12;
 let rpt = "# landfold-barma-land\n\n";
 rpt += "issue=" + issue + " keepers=" + yes.to_string() + "/" + seen.to_string() + " ok=" + ok.to_string() + "\n";
