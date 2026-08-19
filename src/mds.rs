@@ -437,4 +437,20 @@ mod tests {
         assert!(classical_mds(dist.view(), 1).is_err());
         assert!(randomized_mds(dist.view(), 1, 2, 0).is_err());
     }
+
+    #[test]
+    fn rejects_spherical_and_toroidal_overflow() {
+        struct HugeMetric;
+
+        impl Metric for HugeMetric {
+            fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
+                if a == b { 0.0 } else { 1.0e200 }
+            }
+        }
+
+        let points = array![[0.0], [1.0], [2.0]];
+        let metric = HugeMetric;
+        assert!(mds_from_points(points.view(), &metric, 1, MdsMode::Spherical).is_err());
+        assert!(mds_from_points(points.view(), &metric, 1, MdsMode::Toroidal).is_err());
+    }
 }
