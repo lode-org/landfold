@@ -640,7 +640,13 @@ pub fn coordination_numbers(pos: ArrayView2<f64>, cutoff: f64) -> Result<Array1<
             let mut acc = 0.0;
             for h in 0..pos.ncols() {
                 let d = pos[(i, h)] - pos[(j, h)];
-                acc += d * d;
+                let term = d * d;
+                if !term.is_finite() || !(acc + term).is_finite() {
+                    return Err(LandfoldError::Msg(
+                        "coordination distance calculation overflowed".into(),
+                    ));
+                }
+                acc += term;
             }
             if acc.sqrt() < cutoff {
                 cn[i] += 1.0;
@@ -772,6 +778,7 @@ mod tests {
         assert!(coordination_numbers(pos.view(), 1.0).is_err());
         assert!(coordination_numbers(array![[0.0], [1.0]].view(), -1.0).is_err());
         assert!(coordination_numbers(array![[0.0], [1.0]].view(), f64::NAN).is_err());
+        assert!(coordination_numbers(array![[1.0e200], [0.0]].view(), 1.0).is_err());
     }
 
     #[test]
