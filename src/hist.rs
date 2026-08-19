@@ -217,6 +217,48 @@ pub struct FreeEnergy {
 }
 
 impl FreeEnergy {
+    fn validate_state(&self) -> Result<()> {
+        let ny = self.rho.nrows();
+        let nx = self.rho.ncols();
+        if nx == 0
+            || ny == 0
+            || self.f.raw_dim() != self.rho.raw_dim()
+            || self.x_centers.len() != nx
+            || self.y_centers.len() != ny
+        {
+            return Err(LandfoldError::Shape("invalid free-energy array dimensions"));
+        }
+        if self
+            .x_centers
+            .iter()
+            .chain(self.y_centers.iter())
+            .any(|&value| !value.is_finite())
+            || self
+                .rho
+                .iter()
+                .any(|&value| !value.is_finite() || value < 0.0)
+            || self
+                .f
+                .iter()
+                .flatten()
+                .any(|&value| !value.is_finite() || value < 0.0)
+        {
+            return Err(LandfoldError::Msg(
+                "free-energy state must contain finite nonnegative values".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_state_for_io(&self) -> std::io::Result<()> {
+        self.validate_state().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid free-energy state",
+            )
+        })
+    }
+
     /// Build FES from a 2-D histogram. `kT` scales the output (`F/eps` when
     /// the user passes `kT = 1` and thinks in units of epsilon).
     pub fn from_histogram(h: &Histogram2d, kt: f64) -> Result<Self> {
@@ -285,6 +327,7 @@ impl FreeEnergy {
 
     /// Clip finite F to `[0, fmax]` (JCTC 2013 panel is `fmax = 2`).
     pub fn clip(&mut self, fmax: f64) -> Result<()> {
+        self.validate_state()?;
         if !fmax.is_finite() || fmax < 0.0 {
             return Err(LandfoldError::Msg(
                 "FES clip maximum must be finite and nonnegative".into(),
@@ -298,6 +341,7 @@ impl FreeEnergy {
 
     /// Drop detached islands and fill interior holes so the map is one body.
     pub fn connected_body(&mut self, floor: f64) -> Result<()> {
+        self.validate_state()?;
         if !floor.is_finite() || floor < 0.0 {
             return Err(LandfoldError::Msg(
                 "FES connected-body floor must be finite and nonnegative".into(),
@@ -333,6 +377,7 @@ impl FreeEnergy {
     }
 
     pub fn write_csv(&self, w: &mut impl std::io::Write) -> std::io::Result<()> {
+        self.validate_state_for_io()?;
         writeln!(w, "# x y F rho")?;
         let ny = self.f.nrows();
         let nx = self.f.ncols();
@@ -378,13 +423,19 @@ impl FreeEnergy {
         height: u32,
         fmax: f64,
     ) -> std::io::Result<()> {
+        self.validate_state_for_io()?;
+        if !fmax.is_finite() || fmax <= 0.0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "SVG FES scale must be finite and positive",
+            ));
+        }
         let ny = self.f.nrows();
         let nx = self.f.ncols();
         let bar_h = (height as f64 * 0.08).max(16.0);
         let plot_h = (height as f64 - bar_h).max(1.0);
         let cw = width as f64 / nx as f64;
         let ch = plot_h / ny as f64;
-        let fmax = if fmax > 0.0 { fmax } else { 2.0 };
         writeln!(
             w,
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">"#
@@ -909,5 +960,10 @@ mod tests {
         assert!(nonfinite.write_csv(&mut csv).is_err());
         let mut svg = Vec::new();
         assert!(nonfinite.write_svg_scaled(&mut svg, 100, 100, 2.0).is_err());
+
+        let valid = FreeEnergy::from_histogram(&h, 1.0).unwrap();
+        assert!(valid
+            .write_svg_scaled(&mut svg, 100, 100, 0.0)
+            .is_err());
     }
 }
