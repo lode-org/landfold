@@ -90,6 +90,11 @@ coordinate arrays to landfold's existing Python functions, and retain source
 frame IDs and units in the surrounding result object. Landfold does not make
 HDF5 a required Rust dependency or replace CON as the canonical frame format.
 
+For ChemGP NEB HDF5 files, the runnable
+[`examples/chemparseplot_hdf5.py`](examples/chemparseplot_hdf5.py) bridge uses
+`chemparseplot.parse.trajectory.hdf5.load_neb_result`, reshapes its image path,
+and forwards source metadata to `embed_euclid_result`.
+
 ## License
 
 MIT. See `CITATION.cff` for the papers to cite with the method.
