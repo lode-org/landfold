@@ -110,6 +110,7 @@ pub fn project_report(
     metric: &dyn Metric,
     opts: &ProjOpts,
 ) -> Result<ProjReport> {
+    emb.validate_state()?;
     opts.validate()?;
     let n = emb.high.nrows();
     let d_hi = emb.high.ncols();

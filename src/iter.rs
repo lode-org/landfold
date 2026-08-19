@@ -66,6 +66,42 @@ pub struct Embedding {
 }
 
 impl Embedding {
+    pub(crate) fn validate_state(&self) -> Result<()> {
+        let n = self.high.nrows();
+        if n == 0
+            || self.low.nrows() != n
+            || self.low.ncols() == 0
+            || self.hd.nrows() != n
+            || self.hd.ncols() != n
+            || self.fhd.nrows() != n
+            || self.fhd.ncols() != n
+            || self.weights.len() != n
+        {
+            return Err(crate::error::LandfoldError::Shape(
+                "invalid embedding array dimensions",
+            ));
+        }
+        if self
+            .high
+            .iter()
+            .chain(self.low.iter())
+            .any(|&value| !value.is_finite())
+            || self
+                .hd
+                .iter()
+                .chain(self.fhd.iter())
+                .any(|&value| !value.is_finite() || value < 0.0)
+            || !self.stress.is_finite()
+            || self.stress < 0.0
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "embedding coordinates and distances must be finite; distances must be nonnegative".into(),
+            ));
+        }
+        validate_weights(Some(self.weights.view()), n)?;
+        validate_imix(self.imix)
+    }
+
     pub fn packed_low(&self) -> Array1<f64> {
         Array1::from_iter(self.low.iter().copied())
     }
