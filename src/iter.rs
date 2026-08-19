@@ -3,6 +3,7 @@
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
 use crate::anneal::{AnnealOpts, minimize_anneal};
+use crate::replica::{ReplicaOpts, minimize_replica};
 use crate::cg::{CgOpts, CgReport, minimize};
 use crate::error::Result;
 use crate::mds::classical_mds;
@@ -18,6 +19,7 @@ pub enum Solver {
     Standard,
     Stochastic(StochOpts),
     Anneal(AnnealOpts),
+    Replica(ReplicaOpts),
 }
 
 #[derive(Clone, Debug)]
@@ -148,6 +150,7 @@ pub fn embed(
         Solver::Standard => minimize(&stress, packed.view(), opts.lowdim, &opts.cg)?,
         Solver::Stochastic(so) => minimize_stochastic(&stress, packed.view(), opts.lowdim, so),
         Solver::Anneal(ao) => minimize_anneal(&stress, packed.view(), opts.lowdim, ao, &opts.cg)?,
+        Solver::Replica(ro) => minimize_replica(&stress, packed.view(), opts.lowdim, ro, &opts.cg)?,
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
     for i in 0..n {

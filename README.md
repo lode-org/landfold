@@ -25,9 +25,9 @@ landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
     --frames frames.xyz --cn-csv cn.csv
 ```
 
-`--stoch` switches the embedder from the standard full-pair
-Polak-Ribiere CG to randomised pair mini-batches. `Solver::Standard`
-stays the default. `landfold mds` is the Torgerson (1952)
+`--stoch`, `--anneal`, and `--replica` are extra solver arms.
+`Solver::Standard` (full-pair Polak-Ribiere CG) stays the default.
+`landfold mds` is the Torgerson (1952)
 initialiser; `--distances` prints pairwise distances of the embedding
 (the C++ Torgerson pairwise invariant).
 

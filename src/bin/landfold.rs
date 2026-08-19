@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use landfold::{
     AnnealOpts, Dot, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts, MdsMode, Metric,
+    ReplicaOpts,
     Periodic, ProjOpts, Solver, Sphere, StochOpts, Transfer, coordination_histogram, embed,
     farthest_point, mds_from_points, pairwise, pairwise_euclid, project_many_report, read_points,
     write_points,
@@ -67,6 +68,9 @@ enum Cmd {
         /// Simulated annealing then CG polish (extra arm)
         #[arg(long)]
         anneal: bool,
+        /// Replica-exchange (parallel tempering) then CG polish
+        #[arg(long)]
+        replica: bool,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -207,6 +211,7 @@ fn main() -> landfold::Result<()> {
             stoch,
             batch,
             anneal,
+            replica,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let mut opts = IterOpts {
@@ -215,7 +220,12 @@ fn main() -> landfold::Result<()> {
                 tfun_hd: Transfer::from_cli(&fun_hd)?,
                 tfun_ld: Transfer::from_cli(&fun_ld)?,
                 center,
-                solver: if anneal {
+                solver: if replica {
+                    Solver::Replica(ReplicaOpts {
+                        steps,
+                        ..ReplicaOpts::default()
+                    })
+                } else if anneal {
                     Solver::Anneal(AnnealOpts {
                         steps,
                         ..AnnealOpts::default()

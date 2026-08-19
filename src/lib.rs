@@ -22,11 +22,13 @@ pub mod mds;
 pub mod metric;
 pub mod pairwise;
 pub mod project;
+pub mod replica;
 pub mod search;
 pub mod stress;
 pub mod transfer;
 
 pub use anneal::AnnealOpts;
+pub use replica::ReplicaOpts;
 pub use array::to_dlpack;
 pub use error::{LandfoldError, Result};
 pub use hist::{

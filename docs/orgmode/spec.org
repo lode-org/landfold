@@ -22,6 +22,8 @@ equals 1/2 at =x = σ=.
 |-----+--------+----------|
 | Standard (default) | Polak-Ribiere CG + Brent | Polak 1969; Brent 1973 |
 | Stochastic | random pair mini-batches | Robbins and Monro 1951 |
+| Anneal | Metropolis SA + CG polish | Kirkpatrick 1983 |
+| Replica | parallel tempering + CG polish | Hukushima and Nemoto 1996 |
 | MDS init | Torgerson double-centre | Torgerson 1952 |
 
 =Solver::Standard= is the published full-pair CG path. Halko rangefinder

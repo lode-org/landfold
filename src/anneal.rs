@@ -38,7 +38,7 @@ impl Default for AnnealOpts {
     }
 }
 
-fn urand(state: &mut u64) -> f64 {
+pub(crate) fn urand(state: &mut u64) -> f64 {
     (splitmix(state) as f64) * (1.0 / ((u64::MAX as f64) + 1.0))
 }
 
