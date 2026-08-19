@@ -10,7 +10,7 @@ use nalgebra::{DMatrix, QR, SymmetricEigen};
 use ndarray::{Array1, Array2, ArrayView2};
 
 use crate::error::{Result, LandfoldError};
-use crate::metric::{Euclid, Metric};
+use crate::metric::Metric;
 use crate::pairwise::pairwise;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -198,18 +198,25 @@ pub fn mds_from_points(
     }
 }
 
-fn spherical_mds(
-    points: ArrayView2<f64>,
-    metric: &dyn Metric,
-    lowdim: usize,
-) -> Result<(Array2<f64>, MdsReport)> {
-    let dist = pairwise(points, metric)?;
+fn spherical_from_dist(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64>, MdsReport)> {
     let n = dist.nrows();
+    if n < 2 {
+        return Err(LandfoldError::Empty);
+    }
+    if lowdim == 0 || lowdim >= n {
+        return Err(LandfoldError::LowDim {
+            low: lowdim,
+            high: n.saturating_sub(1),
+        });
+    }
     let mut sr: f64 = 0.0;
     for i in 0..n {
         for j in 0..i {
             sr = sr.max(dist[(i, j)]);
         }
+    }
+    if sr <= 0.0 {
+        sr = 1.0;
     }
     sr /= std::f64::consts::PI;
     let mut m = vec![0.0; n * n];
@@ -220,25 +227,34 @@ fn spherical_mds(
     }
     let dm = DMatrix::<f64>::from_row_slice(n, n, &m);
     let eigen = SymmetricEigen::new(dm);
-    let evals = eigen.eigenvalues;
-    let evecs = eigen.eigenvectors;
-    // Spherical MDS: leading components as hyperspherical angles.
-    let neva = lowdim + 1;
-    let mut coords = Array2::<f64>::zeros((n, lowdim));
+    let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (eigen.eigenvalues[k], k)).collect();
+    pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    // Hyperspherical angles from the leading (lowdim+1) components.
+    let mut q = vec![0.0; n * (lowdim + 1)];
     let mut kept = Array1::<f64>::zeros(lowdim);
-    for h in 0..lowdim {
-        kept[h] = evals[n - neva + (lowdim - 1 - h)].max(0.0);
+    for h in 0..=lowdim {
+        let (lam, src) = pairs[h];
+        let lam = lam.max(0.0);
+        if h < lowdim {
+            kept[h] = lam;
+        }
+        let scale = lam.sqrt();
+        for i in 0..n {
+            q[i * (lowdim + 1) + h] = eigen.eigenvectors[(i, src)] * scale;
+        }
     }
+    let mut coords = Array2::<f64>::zeros((n, lowdim));
+    let dim = lowdim + 1;
     for i in 0..n {
         let mut tx = 0.0;
-        let q_last = evecs[(i, n - 1)] * evals[n - 1].max(0.0).sqrt();
-        let q_prev = evecs[(i, n - 2)] * evals[n - 2].max(0.0).sqrt();
-        coords[(i, 0)] = q_last.atan2(q_prev) / std::f64::consts::PI;
-        tx += q_last * q_last;
+        let q0 = q[i * dim];
+        let q1 = q[i * dim + 1];
+        coords[(i, 0)] = q1.atan2(q0) / std::f64::consts::PI;
+        tx += q1 * q1;
         for h in 1..lowdim {
-            let qh = evecs[(i, n - 1 - h)] * evals[n - 1 - h].max(0.0).sqrt();
+            let qh = q[i * dim + h];
             tx += qh * qh;
-            let qn = evecs[(i, n - 2 - h)] * evals[n - 2 - h].max(0.0).sqrt();
+            let qn = q[i * dim + h + 1];
             coords[(i, h)] = tx.sqrt().atan2(qn) / std::f64::consts::PI;
         }
     }
@@ -251,19 +267,27 @@ fn spherical_mds(
     ))
 }
 
+fn spherical_mds(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    lowdim: usize,
+) -> Result<(Array2<f64>, MdsReport)> {
+    let dist = pairwise(points, metric)?;
+    spherical_from_dist(dist.view(), lowdim)
+}
+
 fn toroidal_mds(
     points: ArrayView2<f64>,
     metric: &dyn Metric,
     lowdim: usize,
 ) -> Result<(Array2<f64>, MdsReport)> {
-    // Sequential 1-D spherical MDS with residual distances.
+    // Sequential 1-D spherical MDS of the *current residual* distances.
     let mut dist = pairwise(points, metric)?;
     let n = dist.nrows();
     let mut coords = Array2::<f64>::zeros((n, lowdim));
     let mut evals = Array1::<f64>::zeros(lowdim);
-    let euclid = Euclid;
     for th in 0..lowdim {
-        let (p1, rep) = mds_from_points(points, &euclid, 1, MdsMode::Spherical)?;
+        let (p1, rep) = spherical_from_dist(dist.view(), 1)?;
         evals[th] = rep.eigenvalues[0];
         for i in 0..n {
             coords[(i, th)] = p1[(i, 0)];
@@ -273,6 +297,9 @@ fn toroidal_mds(
             for j in 0..i {
                 sr = sr.max(dist[(i, j)]);
             }
+        }
+        if sr <= 0.0 {
+            sr = 1.0;
         }
         sr /= std::f64::consts::PI;
         for i in 0..n {
