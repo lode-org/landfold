@@ -37,7 +37,11 @@ if [[ "${majors[0]}" != "$want_major" ]]; then
 fi
 
 dlpk_ver="$(awk '$1=="dlpk"{print $2; exit}' "$GOLDEN")"
-if printf '%s\n' "$tree" | grep -E "dlpk v${dlpk_ver}[^[:space:]]* \\([^)]*pyo3" >/dev/null; then
+if ! printf '%s\n' "$tree" | grep -F "dlpk v${dlpk_ver}" >/dev/null; then
+  echo "cargo tree is missing dlpk ${dlpk_ver}" >&2
+  exit 1
+fi
+if printf '%s\n' "$tree" | grep -F 'dlpk feature "pyo3"' >/dev/null; then
   echo "dlpk ${dlpk_ver} must not enable its pyo3 feature" >&2
   exit 1
 fi
