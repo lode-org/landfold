@@ -90,7 +90,7 @@ fn fes_minimum_sits_on_the_dense_bin() {
     ];
     let mut h = Histogram2d::new(-1.0, 4.0, 20, -1.0, 4.0, 20).unwrap();
     for i in 0..pts.nrows() {
-        h.add(pts[(i, 0)], pts[(i, 1)], 1.0);
+        h.add(pts[(i, 0)], pts[(i, 1)], 1.0).unwrap();
     }
     let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
     let mut best = f64::INFINITY;
@@ -216,9 +216,9 @@ fn project_without_grid_uses_nearest_landmark() {
 #[test]
 fn fes_csv_matches_half_density_golden() {
     let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
-    h.add(0.5, 0.5, 1.0);
-    h.add(0.5, 0.5, 1.0);
-    h.add(1.5, 1.5, 1.0);
+    h.add(0.5, 0.5, 1.0).unwrap();
+    h.add(0.5, 0.5, 1.0).unwrap();
+    h.add(1.5, 1.5, 1.0).unwrap();
     let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
     let mut got = Vec::new();
     fes.write_csv(&mut got).unwrap();
@@ -230,7 +230,7 @@ fn fes_csv_matches_half_density_golden() {
 #[test]
 fn fes_svg_is_a_heatmap() {
     let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
-    h.add(0.5, 0.5, 1.0);
+    h.add(0.5, 0.5, 1.0).unwrap();
     let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
     let mut svg = Vec::new();
     fes.write_svg(&mut svg, 80, 60).unwrap();

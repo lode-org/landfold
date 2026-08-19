@@ -38,19 +38,21 @@ impl Histogram1d {
         })
     }
 
-    pub fn add(&mut self, x: f64, w: f64) {
-        if !x.is_finite() || !w.is_finite() {
-            return;
+    pub fn add(&mut self, x: f64, w: f64) -> Result<()> {
+        if !x.is_finite() || !w.is_finite() || w < 0.0 {
+            return Err(LandfoldError::Msg(
+                "histogram samples and weights must be finite; weights must be nonnegative".into(),
+            ));
         }
         self.samples += w;
         if x < self.edges[0] {
             self.below += w;
-            return;
+            return Ok(());
         }
         let last = self.edges.len() - 1;
         if x >= self.edges[last] {
             self.above += w;
-            return;
+            return Ok(());
         }
         let n = self.counts.len();
         let lo = self.edges[0];
@@ -58,6 +60,7 @@ impl Histogram1d {
         let t = (x - lo) / (hi - lo) * n as f64;
         let i = (t as usize).min(n - 1);
         self.counts[i] += w;
+        Ok(())
     }
 
     pub fn add_many(&mut self, xs: ArrayView1<f64>, w: Option<ArrayView1<f64>>) -> Result<()> {
@@ -66,7 +69,7 @@ impl Histogram1d {
         }
         for (i, &x) in xs.iter().enumerate() {
             let ww = w.map(|ww| ww[i]).unwrap_or(1.0);
-            self.add(x, ww);
+            self.add(x, ww)?;
         }
         Ok(())
     }
@@ -122,9 +125,11 @@ impl Histogram2d {
         })
     }
 
-    pub fn add(&mut self, x: f64, y: f64, w: f64) {
-        if !x.is_finite() || !y.is_finite() || !w.is_finite() {
-            return;
+    pub fn add(&mut self, x: f64, y: f64, w: f64) -> Result<()> {
+        if !x.is_finite() || !y.is_finite() || !w.is_finite() || w < 0.0 {
+            return Err(LandfoldError::Msg(
+                "histogram samples and weights must be finite; weights must be nonnegative".into(),
+            ));
         }
         let nx = self.counts.ncols();
         let ny = self.counts.nrows();
@@ -133,12 +138,13 @@ impl Histogram2d {
         let ylo = self.y_edges[0];
         let yhi = self.y_edges[ny];
         if x < xlo || x >= xhi || y < ylo || y >= yhi {
-            return;
+            return Ok(());
         }
         let ix = (((x - xlo) / (xhi - xlo) * nx as f64) as usize).min(nx - 1);
         let iy = (((y - ylo) / (yhi - ylo) * ny as f64) as usize).min(ny - 1);
         self.counts[(iy, ix)] += w;
         self.samples += w;
+        Ok(())
     }
 
     pub fn add_points(&mut self, xy: ArrayView2<f64>, w: Option<ArrayView1<f64>>) -> Result<()> {
@@ -150,7 +156,7 @@ impl Histogram2d {
         }
         for i in 0..xy.nrows() {
             let ww = w.map(|ww| ww[i]).unwrap_or(1.0);
-            self.add(xy[(i, 0)], xy[(i, 1)], ww);
+            self.add(xy[(i, 0)], xy[(i, 1)], ww)?;
         }
         Ok(())
     }
@@ -652,9 +658,9 @@ mod tests {
     fn fes_min_at_dense_bin() {
         let mut h = Histogram2d::new(-1.0, 1.0, 4, -1.0, 1.0, 4).unwrap();
         for _ in 0..50 {
-            h.add(0.1, 0.1, 1.0);
+            h.add(0.1, 0.1, 1.0).unwrap();
         }
-        h.add(-0.8, -0.8, 1.0);
+        h.add(-0.8, -0.8, 1.0).unwrap();
         let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         let mut min_f = f64::INFINITY;
         let mut at = (0, 0);
@@ -714,6 +720,24 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_histogram_samples_and_weights() {
+        let mut h1 = Histogram1d::new(0.0, 1.0, 2).unwrap();
+        assert!(h1.add(f64::NAN, 1.0).is_err());
+        assert!(h1.add(0.5, -1.0).is_err());
+        assert!(
+            h1.add_many(array![0.5].view(), Some(array![f64::NAN].view()))
+                .is_err()
+        );
+
+        let mut h2 = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        assert!(h2.add(0.5, f64::INFINITY, 1.0).is_err());
+        assert!(
+            h2.add_points(array![[0.5, 0.5]].view(), Some(array![-1.0].view()))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn cn_of_dimer() {
         let pos = array![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [10.0, 0.0, 0.0]];
         let cn = coordination_numbers(pos.view(), 1.5).unwrap();
@@ -740,7 +764,7 @@ mod tests {
     #[test]
     fn blur_spreads_mass_into_empty_bins() {
         let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
-        h.add(0.5, 0.5, 1.0);
+        h.add(0.5, 0.5, 1.0).unwrap();
         let sharp = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         let soft = FreeEnergy::from_histogram_blurred(&h, 1.0, 1.0).unwrap();
         assert_eq!(sharp.f[(0, 1)], None);
@@ -751,9 +775,9 @@ mod tests {
     #[test]
     fn connected_body_drops_a_detached_island() {
         let mut h = Histogram2d::new(0.0, 3.0, 3, 0.0, 3.0, 3).unwrap();
-        h.add(0.5, 0.5, 10.0);
-        h.add(0.5, 1.5, 10.0);
-        h.add(2.5, 2.5, 1.0);
+        h.add(0.5, 0.5, 10.0).unwrap();
+        h.add(0.5, 1.5, 10.0).unwrap();
+        h.add(2.5, 2.5, 1.0).unwrap();
         let mut fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         assert!(fes.f[(2, 2)].is_some());
         fes.connected_body(0.05);
@@ -765,9 +789,9 @@ mod tests {
     #[test]
     fn half_density_invert() {
         let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
-        h.add(0.5, 0.5, 1.0);
-        h.add(0.5, 0.5, 1.0);
-        h.add(1.5, 1.5, 1.0);
+        h.add(0.5, 0.5, 1.0).unwrap();
+        h.add(0.5, 0.5, 1.0).unwrap();
+        h.add(1.5, 1.5, 1.0).unwrap();
         let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         assert_eq!(fes.f[(0, 0)], Some(0.0));
         assert_eq!(fes.f[(0, 1)], None);
