@@ -1,15 +1,16 @@
-//! landfold CLI: embed, project, landmarks, dist, fes.
+//! landfold CLI: embed, project, landmarks, dist, mds, fes.
 
 use std::io::{self, Write};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use ndarray::Array1;
 use landfold::{
-    apply_transfer, coordination_histogram, embed, farthest_point, pairwise, pairwise_euclid,
-    project_many, read_points, write_points, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts,
-    Metric, Periodic, ProjOpts, Solver, Sphere, StochOpts, Transfer,
+    apply_transfer, coordination_histogram, embed, farthest_point, mds_from_points, pairwise,
+    pairwise_euclid, project_many, read_points, write_points, Embedding, Euclid, FreeEnergy,
+    Histogram2d, IterOpts, MdsMode, Metric, Periodic, ProjOpts, Solver, Sphere, StochOpts,
+    Transfer,
 };
+use ndarray::Array1;
 
 #[derive(Parser, Debug)]
 #[command(name = "landfold", about = "Sigmoid-distance nonlinear embedding")]
@@ -98,6 +99,21 @@ enum Cmd {
         high: usize,
         #[arg(long = "pi", default_value_t = 0.0)]
         period: f64,
+    },
+    /// Classical Torgerson MDS (Torgerson 1952). Default solver init.
+    ///
+    /// `--distances` dumps i<j-equivalent full pairwise of the embedding:
+    /// those distances are the C++ `NLDRMDS` invariant (`p` is private).
+    Mds {
+        #[arg(short = 'D', default_value_t = 3)]
+        high: usize,
+        #[arg(short = 'd', default_value_t = 2)]
+        low: usize,
+        #[arg(long = "pi", default_value_t = 0.0)]
+        period: f64,
+        /// Dump pairwise distances of the embedding (sign-invariant)
+        #[arg(long)]
+        distances: bool,
     },
     /// 2-D free-energy surface from embedded coords
     Fes {
@@ -279,6 +295,39 @@ fn main() -> landfold::Result<()> {
                 pairwise(set.points.view(), &Periodic::isotropic(high, period))?
             };
             write_points(&mut io::stdout().lock(), &d, None)?;
+        }
+        Cmd::Mds {
+            high,
+            low,
+            period,
+            distances,
+        } => {
+            let set = read_points(io::stdin().lock(), high, false)?;
+            let euclid = Euclid;
+            let peri = Periodic::isotropic(high, period);
+            let metric: &dyn Metric = if period != 0.0 { &peri } else { &euclid };
+            let (emb, report) =
+                mds_from_points(set.points.view(), metric, low, MdsMode::Classical)?;
+            if distances {
+                write_points(
+                    &mut io::stdout().lock(),
+                    &pairwise_euclid(emb.view())?,
+                    None,
+                )?;
+            } else {
+                write_points(&mut io::stdout().lock(), &emb, None)?;
+            }
+            writeln!(
+                io::stderr(),
+                "# mds ld_error {} evals {}",
+                report.ld_error,
+                report
+                    .eigenvalues
+                    .iter()
+                    .map(|v| format!("{v}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )?;
         }
         Cmd::Fes {
             input,
