@@ -8,7 +8,7 @@
 
 use ndarray::ArrayView1;
 
-use crate::cg::{CgOpts, CgReport, minimize};
+use crate::cg::{minimize, CgOpts, CgReport};
 use crate::search::splitmix;
 use crate::stress::Stress;
 
@@ -109,7 +109,7 @@ mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{Array, array};
+    use ndarray::{array, Array};
 
     #[test]
     fn anneal_lowers_or_matches_init() {
@@ -128,9 +128,11 @@ mod tests {
         let s = Stress::new(hd, fhd, t, 0.0, None, None);
         let init = Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2, 1.0, 1.1, 1.2, 0.8]);
         let ev0 = s.eval(init.view(), 2);
-        let mut ao = AnnealOpts::default();
-        ao.steps = 40;
-        ao.polish = true;
+        let ao = AnnealOpts {
+            steps: 40,
+            polish: true,
+            ..AnnealOpts::default()
+        };
         let rep = minimize_anneal(&s, init.view(), 2, &ao, &CgOpts::default()).unwrap();
         assert!(rep.value <= ev0.value + 1e-12);
     }

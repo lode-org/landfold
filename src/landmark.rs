@@ -95,7 +95,7 @@ pub fn voronoi_weights(
     if k == 0 {
         return Err(LandfoldError::Empty);
     }
-    if src_weights.map_or(false, |w| w.len() != n) {
+    if src_weights.is_some_and(|w| w.len() != n) {
         return Err(LandfoldError::Shape("source weight length"));
     }
     let d = points.ncols();

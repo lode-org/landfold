@@ -159,7 +159,7 @@ mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{Array, array};
+    use ndarray::{array, Array};
 
     #[test]
     fn highs_lowers_or_matches_init() {
@@ -171,10 +171,12 @@ mod tests {
         let s = Stress::new(hd, fhd, t, 0.0, None, None);
         let init = Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2]);
         let ev0 = s.eval(init.view(), 2);
-        let mut ho = HighsOpts::default();
-        ho.maxiter = 20;
-        ho.lo = Some(-2.0);
-        ho.hi = Some(2.0);
+        let ho = HighsOpts {
+            maxiter: 20,
+            lo: Some(-2.0),
+            hi: Some(2.0),
+            ..HighsOpts::default()
+        };
         let rep = minimize_highs(&s, init.view(), 2, &ho).unwrap();
         assert!(rep.value <= ev0.value + 1e-12);
         for v in rep.coords.iter() {
@@ -191,10 +193,12 @@ mod tests {
         apply_transfer(&mut fhd, &t);
         let s = Stress::new(hd, fhd, t, 0.0, None, None);
         let init = Array::from_iter([5.0, -5.0, 4.0, 4.0, -3.0, 3.0, 2.0, -2.0]);
-        let mut ho = HighsOpts::default();
-        ho.maxiter = 15;
-        ho.lo = Some(-0.3);
-        ho.hi = Some(0.3);
+        let ho = HighsOpts {
+            maxiter: 15,
+            lo: Some(-0.3),
+            hi: Some(0.3),
+            ..HighsOpts::default()
+        };
         let rep = minimize_highs(&s, init.view(), 2, &ho).unwrap();
         for v in rep.coords.iter() {
             assert!(

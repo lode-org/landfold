@@ -595,11 +595,12 @@ mod tests {
         let mut at = (0, 0);
         for iy in 0..4 {
             for ix in 0..4 {
-                if let Some(f) = fes.f[(iy, ix)] {
-                    if f < min_f {
+                match fes.f[(iy, ix)] {
+                    Some(f) if f < min_f => {
                         min_f = f;
                         at = (ix, iy);
                     }
+                    _ => {}
                 }
             }
         }

@@ -88,10 +88,7 @@ pub fn minimize_replica(
         }
     }
     let mut pos: Vec<ndarray::Array1<f64>> = (0..nr).map(|_| init.to_owned()).collect();
-    let mut nrg: Vec<f64> = pos
-        .iter()
-        .map(|p| stress.eval(p.view(), d).value)
-        .collect();
+    let mut nrg: Vec<f64> = pos.iter().map(|p| stress.eval(p.view(), d).value).collect();
     let mut rng = opts.seed | 1;
     let mut best = nrg[0];
     let mut best_pos = pos[0].clone();
@@ -146,7 +143,7 @@ mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{Array, array};
+    use ndarray::{array, Array};
 
     #[test]
     fn replica_lowers_or_matches_init() {
@@ -163,14 +160,15 @@ mod tests {
         let mut fhd = hd.clone();
         apply_transfer(&mut fhd, &t);
         let s = Stress::new(hd, fhd, t, 0.0, None, None);
-        let init =
-            Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2, 1.0, 1.1, 1.2, 0.8]);
+        let init = Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2, 1.0, 1.1, 1.2, 0.8]);
         let ev0 = s.eval(init.view(), 2);
-        let mut ro = ReplicaOpts::default();
-        ro.steps = 12;
-        ro.sweep = 2;
-        ro.replicas = 3;
-        ro.polish = true;
+        let ro = ReplicaOpts {
+            steps: 12,
+            sweep: 2,
+            replicas: 3,
+            polish: true,
+            ..ReplicaOpts::default()
+        };
         let rep = minimize_replica(&s, init.view(), 2, &ro, &CgOpts::default()).unwrap();
         assert!(rep.value <= ev0.value + 1e-12);
     }

@@ -73,12 +73,12 @@ impl Stress {
                 "stress distance matrices must be square and matching",
             ));
         }
-        if weights.as_ref().map_or(false, |w| w.len() != n) {
+        if weights.as_ref().is_some_and(|w| w.len() != n) {
             return Err(crate::error::LandfoldError::Shape("stress weight length"));
         }
         if pair_weights
             .as_ref()
-            .map_or(false, |w| w.raw_dim() != hd.raw_dim())
+            .is_some_and(|w| w.raw_dim() != hd.raw_dim())
         {
             return Err(crate::error::LandfoldError::Shape(
                 "stress pair weight shape",

@@ -9,8 +9,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::{
-    Euclid, IterOpts, ProjOpts, Transfer, embed_points, farthest_point, fes_from_points,
-    project_one,
+    embed_points, farthest_point, fes_from_points, project_one, Euclid, IterOpts, ProjOpts,
+    Transfer,
 };
 use ndarray::Array2;
 
@@ -21,6 +21,8 @@ fn copy_f64_2d(points: PyReadonlyArray2<'_, f64>) -> Array2<f64> {
 fn to_pyarray2<'py>(py: Python<'py>, mat: Array2<f64>) -> Bound<'py, PyArray2<f64>> {
     PyArray2::from_owned_array(py, mat)
 }
+
+type PyFesResult<'py> = PyResult<(Vec<f64>, Vec<f64>, Bound<'py, PyArray2<f64>>)>;
 
 #[pyfunction]
 #[pyo3(signature = (points, lowdim=2, fun_hd="identity", fun_ld="identity", imix=0.0, steps=100))]
@@ -34,9 +36,11 @@ fn embed_euclid<'py>(
     steps: usize,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let pts = copy_f64_2d(points);
-    let mut opts = IterOpts::default();
-    opts.lowdim = lowdim;
-    opts.imix = imix;
+    let mut opts = IterOpts {
+        lowdim,
+        imix,
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = steps;
     opts.tfun_hd = Transfer::from_cli(fun_hd).map_err(|e| PyValueError::new_err(e.to_string()))?;
     opts.tfun_ld = Transfer::from_cli(fun_ld).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -47,6 +51,7 @@ fn embed_euclid<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (high, low, query, fun_hd="identity", fun_ld="identity", imix=0.0, gridw=1.0, grid_coarse=21, grid_fine=201, refine=0))]
+#[allow(clippy::too_many_arguments)]
 fn project_euclid<'py>(
     py: Python<'py>,
     high: PyReadonlyArray2<'py, f64>,
@@ -115,7 +120,7 @@ fn fes_xy<'py>(
     ny: usize,
     kt: f64,
     pad: f64,
-) -> PyResult<(Vec<f64>, Vec<f64>, Bound<'py, PyArray2<f64>>)> {
+) -> PyFesResult<'py> {
     let pts = copy_f64_2d(xy);
     let fes = fes_from_points(pts.view(), nx, ny, kt, pad, None)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;

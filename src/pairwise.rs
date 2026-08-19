@@ -102,7 +102,7 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
                 out[(j, i)] = v;
             }
         }
-        return Ok(out);
+        Ok(out)
     }
     #[cfg(not(feature = "parallel"))]
     {
