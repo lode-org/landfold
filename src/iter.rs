@@ -10,7 +10,7 @@ use crate::mds::classical_mds;
 use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
 use crate::search::{StochOpts, minimize_stochastic};
-use crate::stress::Stress;
+use crate::stress::{Stress, validate_imix};
 use crate::transfer::Transfer;
 
 /// Solver arm. `Standard` is the published full-pair CG path.
@@ -80,6 +80,7 @@ impl Embedding {
         imix: f64,
         weights: Option<Array1<f64>>,
     ) -> Result<Self> {
+        validate_imix(imix)?;
         if high.nrows() != low.nrows() {
             return Err(crate::error::LandfoldError::Shape(
                 "landmark HD/LD count mismatch",

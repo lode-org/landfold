@@ -311,4 +311,20 @@ mod tests {
         assert!((r.nearest).abs() < 1e-14);
         assert!((r.coords[0] - 1.0).abs() < 1e-14);
     }
+
+    #[test]
+    fn rejects_invalid_imix_in_landmark_embeddings() {
+        let high = array![[0.0, 0.0], [1.0, 0.0]];
+        let low = high.clone();
+        assert!(Embedding::from_landmarks(
+            high,
+            low,
+            &Euclid,
+            Transfer::identity(),
+            Transfer::identity(),
+            f64::NAN,
+            None,
+        )
+        .is_err());
+    }
 }

@@ -32,6 +32,15 @@ pub struct StressEval {
     pub grad: Array1<f64>,
 }
 
+pub(crate) fn validate_imix(imix: f64) -> crate::error::Result<()> {
+    if !imix.is_finite() || !(0.0..=1.0).contains(&imix) {
+        return Err(crate::error::LandfoldError::Msg(
+            "imix must be finite and in 0..=1".into(),
+        ));
+    }
+    Ok(())
+}
+
 impl Stress {
     pub fn try_new(
         hd: Array2<f64>,
@@ -41,6 +50,7 @@ impl Stress {
         weights: Option<Array1<f64>>,
         pair_weights: Option<Array2<f64>>,
     ) -> crate::error::Result<Self> {
+        validate_imix(imix)?;
         let n = hd.nrows();
         if hd.ncols() != n || fhd.raw_dim() != hd.raw_dim() {
             return Err(crate::error::LandfoldError::Shape(
@@ -392,6 +402,22 @@ mod tests {
             Some(Array2::zeros((3, 3))),
         )
         .is_err());
+    }
+
+    #[test]
+    fn try_new_rejects_invalid_imix() {
+        let square = Array2::zeros((2, 2));
+        for imix in [-0.1, 1.1, f64::NAN] {
+            assert!(Stress::try_new(
+                square.clone(),
+                square.clone(),
+                Transfer::identity(),
+                imix,
+                None,
+                None,
+            )
+            .is_err());
+        }
     }
 
     #[cfg(feature = "parallel")]
