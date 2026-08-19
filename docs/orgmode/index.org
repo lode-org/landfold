@@ -6,7 +6,8 @@
 
 * About
 
-~landfold~ is an MIT library for sigmoid-distance embedding of
+~landfold~ (Landscape And Nonlinear Distance Folding Onto Low
+Dimensions) is an MIT library for sigmoid-distance embedding of
 high-dimensional molecular data (Ceriotti, Tribello, Parrinello, PNAS
 2011, DOI [[https://doi.org/10.1073/pnas.1108486108][10.1073/pnas.1108486108]]).
 
