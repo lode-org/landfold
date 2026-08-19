@@ -16,7 +16,7 @@ use crate::cg::{CgOpts, try_minimize_oracle};
 use crate::error::{LandfoldError, Result};
 use crate::iter::Embedding;
 use crate::metric::Metric;
-use crate::stress::query_chi;
+use crate::stress::{query_chi, query_chi_checked};
 
 #[derive(Clone, Debug)]
 pub struct ProjOpts {
@@ -213,7 +213,15 @@ pub fn project_report(
         best = report.coords;
     }
 
-    let (chi, _) = eval(best.view());
+    let (chi, _) = query_chi_checked(
+        best.view(),
+        emb.low.view(),
+        hd_row.view(),
+        fhd_row.view(),
+        &emb.tfun_ld,
+        emb.imix,
+        emb.weights.view(),
+    )?;
     Ok(ProjReport {
         coords: best,
         chi,

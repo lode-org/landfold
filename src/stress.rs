@@ -473,8 +473,50 @@ pub fn query_chi(
     imix: f64,
     point_w: ArrayView1<f64>,
 ) -> (f64, Array1<f64>) {
+    match query_chi_checked(x, landmarks, hd_row, fhd_row, tfun_ld, imix, point_w) {
+        Ok(result) => result,
+        Err(_) => (OPTIMIZER_PENALTY, Array1::zeros(x.len())),
+    }
+}
+
+/// Checked one-point χ of a low-D query against landmarks.
+pub fn query_chi_checked(
+    x: ArrayView1<f64>,
+    landmarks: ArrayView2<f64>,
+    hd_row: ArrayView1<f64>,
+    fhd_row: ArrayView1<f64>,
+    tfun_ld: &Transfer,
+    imix: f64,
+    point_w: ArrayView1<f64>,
+) -> crate::error::Result<(f64, Array1<f64>)> {
     let d = x.len();
     let n = landmarks.nrows();
+    if d == 0 || landmarks.ncols() != d || hd_row.len() != n || fhd_row.len() != n {
+        return Err(crate::error::LandfoldError::Shape(
+            "query stress arrays have incompatible shapes",
+        ));
+    }
+    if point_w.len() != 0 && point_w.len() != n {
+        return Err(crate::error::LandfoldError::Shape(
+            "query stress weight length",
+        ));
+    }
+    validate_imix(imix)?;
+    if x.iter()
+        .chain(landmarks.iter())
+        .any(|&value| !value.is_finite())
+        || hd_row
+            .iter()
+            .chain(fhd_row.iter())
+            .any(|&value| !value.is_finite() || value < 0.0)
+        || point_w
+            .iter()
+            .any(|&value| !value.is_finite() || value < 0.0)
+    {
+        return Err(crate::error::LandfoldError::Msg(
+            "query stress inputs must be finite and nonnegative where applicable".into(),
+        ));
+    }
     let mut vv = 0.0;
     let mut vg = Array1::<f64>::zeros(d);
     let mut tw = 0.0;
@@ -486,7 +528,7 @@ pub fn query_chi(
             ld2 += delta * delta;
         }
         let ld = ld2.sqrt();
-        let (lfd, ldfd) = tfun_ld.fdf(ld);
+        let (lfd, ldfd) = tfun_ld.try_fdf(ld)?;
         let w = if point_w.len() == n { point_w[i] } else { 1.0 };
         let diff = fhd_row[i] - lfd;
         let dd = hd_row[i] - ld;
@@ -505,7 +547,12 @@ pub fn query_chi(
     }
     vv /= tw;
     vg.mapv_inplace(|g| g / tw);
-    (vv, vg)
+    if !vv.is_finite() || vg.iter().any(|&value| !value.is_finite()) {
+        return Err(crate::error::LandfoldError::Msg(
+            "query stress evaluation is non-finite".into(),
+        ));
+    }
+    Ok((vv, vg))
 }
 
 #[cfg(test)]
@@ -706,8 +753,37 @@ mod tests {
     #[test]
     fn checked_eval_rejects_transfer_overflow() {
         let hd = array![[0.0, 1.0], [1.0, 0.0]];
-        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        let mut stress =
+            Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
         assert!(stress.try_eval(array![0.0, 1.0e154].view(), 1).is_err());
+    }
+
+    #[test]
+    fn checked_query_rejects_transfer_overflow() {
+        let transfer = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        let x = array![0.0, 1.0e154];
+        let landmarks = array![[0.0, 0.0]];
+        let result = query_chi_checked(
+            x.view(),
+            landmarks.view(),
+            array![1.0].view(),
+            array![1.0].view(),
+            &transfer,
+            0.0,
+            array![1.0].view(),
+        );
+        assert!(result.is_err());
+        let (value, grad) = query_chi(
+            x.view(),
+            landmarks.view(),
+            array![1.0].view(),
+            array![1.0].view(),
+            &transfer,
+            0.0,
+            array![1.0].view(),
+        );
+        assert_eq!(value, OPTIMIZER_PENALTY);
+        assert!(grad.iter().all(|component| *component == 0.0));
     }
 }
