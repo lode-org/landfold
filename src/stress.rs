@@ -625,4 +625,17 @@ mod tests {
         assert!(stress.try_eval(array![0.0, 0.0].view(), 0).is_err());
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_ok());
     }
+
+    #[test]
+    fn checked_eval_rejects_mutated_stress_state() {
+        let hd = array![[0.0, 1.0], [1.0, 0.0]];
+        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        stress.fhd = Array2::zeros((1, 1));
+        assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_err());
+
+        let hd = array![[0.0, 1.0], [1.0, 0.0]];
+        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        stress.n = 3;
+        assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_err());
+    }
 }
