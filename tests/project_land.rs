@@ -531,6 +531,46 @@ fn fes_blur_and_floor_via_cli() {
 }
 
 #[test]
+fn cli_version_and_help_name_the_pyo3_pin() {
+    let ver = Command::new(landfold_bin())
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(
+        ver.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&ver.stderr)
+    );
+    let v = String::from_utf8(ver.stdout).unwrap();
+    assert!(v.contains("landfold"), "{v}");
+    assert!(v.contains(env!("CARGO_PKG_VERSION")), "{v}");
+
+    let help = Command::new(landfold_bin()).arg("--help").output().unwrap();
+    assert!(
+        help.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&help.stderr)
+    );
+    let h = String::from_utf8(help.stdout).unwrap();
+    assert!(h.contains("pyo3/numpy 0.29"), "{h}");
+    assert!(h.contains("dlpk pyo3 off"), "{h}");
+    assert!(h.contains("embed"), "{h}");
+    assert!(!h.contains("COSMO"), "{h}");
+
+    let embed = Command::new(landfold_bin())
+        .args(["embed", "--help"])
+        .output()
+        .unwrap();
+    assert!(embed.status.success());
+    let e = String::from_utf8(embed.stdout).unwrap();
+    assert!(e.contains("--stoch"), "{e}");
+    assert!(
+        !e.to_ascii_lowercase().contains("pyo3"),
+        "embed CLI does not link python: {e}"
+    );
+}
+
+#[test]
 fn cli_cn_csv_without_frames_fails() {
     let dir = scratch("cn-err");
     let ld = dir.join("ld.dat");
