@@ -1,8 +1,8 @@
 [package]
 name = "landfold"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.82"
+edition = "2024"
+rust-version = "1.88"
 description = "Sigmoid-distance nonlinear embedding of high-dimensional molecular data"
 repository = "https://github.com/HaoZeke/landfold"
 readme = "README.md"
@@ -40,6 +40,11 @@ plotters = { version = "0.3", optional = true }
 
 [dev-dependencies]
 approx = "0.5"
+criterion = "0.5"
+
+[[bench]]
+name = "chi"
+harness = false
 
 [profile.release]
 lto = "thin"
