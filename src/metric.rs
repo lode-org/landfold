@@ -117,10 +117,9 @@ impl Sphere {
 
 fn validate_periods(periods: &[f64]) -> Result<()> {
     if periods.is_empty() || periods.iter().any(|&p| !p.is_finite() || p <= 0.0) {
-        return Err(LandfoldError::PeriodSize {
-            got: periods.len(),
-            expected: 1,
-        });
+        return Err(LandfoldError::Msg(
+            "metric periods must be finite and > 0".into(),
+        ));
     }
     Ok(())
 }
