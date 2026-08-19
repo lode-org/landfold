@@ -12,10 +12,10 @@ use approx::assert_relative_eq;
 use landfold::pairwise::apply_transfer;
 use landfold::stress::Stress;
 use landfold::{
-    classical_mds, pairwise, pairwise_euclid, Dot, Euclid, IterOpts, Metric, Periodic, Solver,
-    Transfer,
+    Dot, Euclid, IterOpts, Metric, Periodic, Solver, Transfer, classical_mds, farthest_point,
+    pairwise, pairwise_euclid, query_chi,
 };
-use ndarray::{array, ArrayView2};
+use ndarray::{ArrayView2, array};
 
 const XFER_ABS: f64 = 1e-14;
 const XFER_REL: f64 = 1e-13;
@@ -101,6 +101,8 @@ fn cpp_oracle_goldens_exist_and_match() {
         "mds torgerson_triangle",
         "mds torgerson_tetra",
         "chi xsig_1_4_3_imix01",
+        "chi1 identity_square",
+        "landmarks fps_square_k3",
     ] {
         assert!(
             blocks.contains_key(key),
@@ -226,6 +228,47 @@ fn cpp_oracle_goldens_exist_and_match() {
                 );
             }
         }
+    }
+
+    let chi1 = scalar_col(&blocks["chi1 identity_square"]);
+    assert_eq!(chi1.len(), 3, "chi1 value + 2 grad");
+    let lm_ld = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+    let lm_hd = array![
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0]
+    ];
+    let qhd = array![0.2, 0.1, 0.1];
+    let xld = array![0.3, 0.2];
+    let mut hd_row = ndarray::Array1::<f64>::zeros(4);
+    let mut fhd_row = ndarray::Array1::<f64>::zeros(4);
+    for i in 0..4 {
+        hd_row[i] = Euclid
+            .dist(qhd.as_slice().unwrap(), lm_hd.row(i).as_slice().unwrap())
+            .unwrap();
+        fhd_row[i] = Transfer::identity().f(hd_row[i]);
+    }
+    let w = ndarray::Array1::ones(4);
+    let (vv, vg) = query_chi(
+        xld.view(),
+        lm_ld.view(),
+        hd_row.view(),
+        fhd_row.view(),
+        &Transfer::identity(),
+        0.0,
+        w.view(),
+    );
+    assert_relative_eq!(vv, chi1[0], epsilon = CHI_ABS, max_relative = CHI_REL);
+    assert_relative_eq!(vg[0], chi1[1], epsilon = 1e-12, max_relative = 1e-11);
+    assert_relative_eq!(vg[1], chi1[2], epsilon = 1e-12, max_relative = 1e-11);
+
+    let fps = scalar_col(&blocks["landmarks fps_square_k3"]);
+    let square = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]];
+    let lm = farthest_point(square.view(), &Euclid, 3, None, 0).unwrap();
+    assert_eq!(lm.index.len(), 3);
+    for i in 0..3 {
+        assert_eq!(lm.index[i] as f64, fps[i]);
     }
 }
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build HaoZeke/sketchmap addLocks (valarray ostream) and dump NLDR* goldens.
-# Blocks: xfer f/df, pair Euclid/PBC, mds Torgerson pairwise, chi/grad.
+# Blocks: xfer f/df, pair Euclid/PBC, mds Torgerson pairwise, chi/grad,
+# chi1 query, Gonzalez farthest-point indices.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="${SKMAP_SRC:-$HOME/Git/Github/HaoZeke/sketchmap}"

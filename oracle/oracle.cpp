@@ -1,5 +1,6 @@
 /* Dump goldens from NLDRFunction / NLDRMetric / NLDRMDS / NLDRITERChi
- * (interpol off). MDS block values are i<j Euclidean distances of the
+ * (interpol off), plus one-point query χ and Gonzalez farthest-point
+ * indices. MDS block values are i<j Euclidean distances of the
  * private embedding p (invariant to eigenvector sign). */
 #include "dimreduce.hpp"
 #include <cmath>
@@ -184,5 +185,75 @@ int main() {
     std::valarray<double> none2;
     idchi.set_mode(NLDRIdentity, none2, false);
     dump_chi("identity_imix00", 0.0, idchi);
+
+    /* One-point χ of a query vs 4 landmarks (compute_chi1, no skip). */
+    {
+        const unsigned long n = 4, d = 2;
+        const double lm_ld[8] = {0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0};
+        const double lm_hd[12] = {
+            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+        const double qhd[3] = {0.2, 0.1, 0.1};
+        const double xld[2] = {0.3, 0.2};
+        double hd_row[4], fhd_row[4];
+        for (unsigned long i = 0; i < n; ++i) {
+            hd_row[i] = eu.dist(qhd, lm_hd + i * 3, 3);
+            double fv = 0.0, df = 0.0;
+            idchi.fdf(hd_row[i], fv, df);
+            fhd_row[i] = fv;
+        }
+        double vv = 0.0, tw = 0.0;
+        double vg[2] = {0.0, 0.0};
+        for (unsigned long i = 0; i < n; ++i) {
+            double v1[2], ld2 = 0.0;
+            for (unsigned long h = 0; h < d; ++h) {
+                v1[h] = lm_ld[i * 2 + h] - xld[h];
+                ld2 += v1[h] * v1[h];
+            }
+            double ld = std::sqrt(ld2);
+            if (ld <= 0.0) continue;
+            double lfd = 0.0, ldfd = 0.0;
+            idchi.fdf(ld, lfd, ldfd);
+            double diff = fhd_row[i] - lfd;
+            vv += diff * diff;
+            double scale = 2.0 * diff * ldfd / ld;
+            vg[0] += v1[0] * scale;
+            vg[1] += v1[1] * scale;
+            tw += 1.0;
+        }
+        vv /= tw;
+        vg[0] /= tw;
+        vg[1] /= tw;
+        std::printf("BEGIN chi1 identity_square\n");
+        std::printf("%.17e\n%.17e\n%.17e\n", vv, vg[0], vg[1]);
+        std::printf("END\n");
+    }
+
+    /* Gonzalez farthest-point, first point fixed at index 0. */
+    {
+        const double pts[] = {0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.5, 0.5};
+        const unsigned long N = 5, D = 2, k = 3;
+        unsigned long isel[3];
+        double md[5];
+        isel[0] = 0;
+        for (unsigned long j = 0; j < N; ++j)
+            md[j] = eu.dist(pts, pts + j * D, D);
+        for (unsigned long i = 1; i < k; ++i) {
+            unsigned long maxj = 0;
+            double maxd = -1.0;
+            for (unsigned long j = 0; j < N; ++j)
+                if (md[j] > maxd) {
+                    maxd = md[j];
+                    maxj = j;
+                }
+            isel[i] = maxj;
+            for (unsigned long j = 0; j < N; ++j) {
+                double dij = eu.dist(pts + maxj * D, pts + j * D, D);
+                if (md[j] > dij) md[j] = dij;
+            }
+        }
+        std::printf("BEGIN landmarks fps_square_k3\n");
+        for (unsigned long i = 0; i < k; ++i) std::printf("%lu\n", isel[i]);
+        std::printf("END\n");
+    }
     return 0;
 }
