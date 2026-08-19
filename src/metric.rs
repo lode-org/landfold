@@ -20,13 +20,14 @@ pub trait Metric: Send + Sync {
                 right: b.len(),
             });
         }
-        if let Some(expected) = self.dim() {
-            if a.len() != expected {
+        match self.dim() {
+            Some(expected) if a.len() != expected => {
                 return Err(LandfoldError::MetricSize {
                     left: a.len(),
                     right: expected,
                 });
             }
+            _ => {}
         }
         Ok(self.dist_unchecked(a, b))
     }
@@ -186,7 +187,11 @@ impl Metric for Dot {
         for i in 0..a.len() {
             acc += b[i] * a[i];
         }
-        if acc <= 0.0 { f64::INFINITY } else { -acc.ln() }
+        if acc <= 0.0 {
+            f64::INFINITY
+        } else {
+            -acc.ln()
+        }
     }
 }
 

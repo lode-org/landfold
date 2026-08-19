@@ -2,15 +2,15 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::anneal::{AnnealOpts, minimize_anneal};
-use crate::replica::{ReplicaOpts, minimize_replica};
-use crate::cg::{CgOpts, CgReport, minimize};
+use crate::anneal::{minimize_anneal, AnnealOpts};
+use crate::cg::{minimize, CgOpts, CgReport};
 use crate::error::Result;
 use crate::mds::classical_mds;
 use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
-use crate::search::{StochOpts, minimize_stochastic};
-use crate::stress::{Stress, validate_imix};
+use crate::replica::{minimize_replica, ReplicaOpts};
+use crate::search::{minimize_stochastic, StochOpts};
+use crate::stress::{validate_imix, Stress};
 use crate::transfer::Transfer;
 
 /// Solver arm. `Standard` is the published full-pair CG path.
@@ -165,14 +165,12 @@ pub fn embed(
         Solver::Anneal(ao) => minimize_anneal(&stress, packed.view(), opts.lowdim, ao, &opts.cg)?,
         Solver::Replica(ro) => minimize_replica(&stress, packed.view(), opts.lowdim, ro, &opts.cg)?,
         #[cfg(feature = "highs")]
-        Solver::Highs(ho) => crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?,
-        Solver::Quench(method) => crate::cg::minimize_quench(
-            &stress,
-            packed.view(),
-            opts.lowdim,
-            &opts.cg,
-            *method,
-        )?,
+        Solver::Highs(ho) => {
+            crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?
+        }
+        Solver::Quench(method) => {
+            crate::cg::minimize_quench(&stress, packed.view(), opts.lowdim, &opts.cg, *method)?
+        }
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
     for i in 0..n {
@@ -223,8 +221,8 @@ fn center_in_place(low: &mut Array2<f64>, weights: Option<ArrayView1<f64>>) {
     if mass == 0.0 {
         return;
     }
-    for h in 0..d {
-        com[h] /= mass;
+    for value in com.iter_mut().take(d) {
+        *value /= mass;
     }
     for i in 0..n {
         for h in 0..d {

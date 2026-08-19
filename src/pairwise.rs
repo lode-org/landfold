@@ -41,7 +41,7 @@ pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f
                 out[(j, i)] = v;
             }
         }
-        return Ok(out);
+        Ok(out)
     }
 
     #[cfg(not(feature = "parallel"))]

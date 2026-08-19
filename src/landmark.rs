@@ -59,9 +59,9 @@ pub fn farthest_point(
                 best = Some(i);
             }
         }
-        let best = best.ok_or_else(|| LandfoldError::Msg(
-            "landmark scores contain no selectable finite value".into(),
-        ))?;
+        let best = best.ok_or_else(|| {
+            LandfoldError::Msg("landmark scores contain no selectable finite value".into())
+        })?;
         chosen.push(best);
         selected[best] = true;
         update_min_d(points, metric, best, &mut min_d);
@@ -95,10 +95,8 @@ pub fn voronoi_weights(
     if k == 0 {
         return Err(LandfoldError::Empty);
     }
-    if let Some(w) = src_weights {
-        if w.len() != n {
-            return Err(LandfoldError::Shape("source weight length"));
-        }
+    if src_weights.map_or(false, |w| w.len() != n) {
+        return Err(LandfoldError::Shape("source weight length"));
     }
     let d = points.ncols();
     if landmarks.points.ncols() != d {
@@ -114,8 +112,8 @@ pub fn voronoi_weights(
         let mut best_i = 0usize;
         let mut best_d = f64::INFINITY;
         for i in 0..k {
-            for h in 0..d {
-                a[h] = landmarks.points[(i, h)];
+            for (h, value) in a.iter_mut().enumerate().take(d) {
+                *value = landmarks.points[(i, h)];
             }
             let dist = metric.dist_unchecked(&a, &b);
             if dist < best_d {
@@ -197,9 +195,7 @@ mod tests {
     #[test]
     fn rejects_invalid_landmark_weights() {
         let pts = array![[0.0], [1.0], [2.0]];
-        assert!(
-            farthest_point(pts.view(), &Euclid, 2, Some(array![1.0, 1.0].view()), 0).is_err()
-        );
+        assert!(farthest_point(pts.view(), &Euclid, 2, Some(array![1.0, 1.0].view()), 0).is_err());
         assert!(farthest_point(
             pts.view(),
             &Euclid,

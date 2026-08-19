@@ -12,7 +12,7 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::cg::{CgOpts, try_minimize_oracle};
+use crate::cg::{try_minimize_oracle, CgOpts};
 use crate::error::{LandfoldError, Result};
 use crate::iter::Embedding;
 use crate::metric::Metric;
@@ -113,8 +113,8 @@ pub fn project_report(
     let mut nearest = f64::INFINITY;
     let mut nearest_idx = 0usize;
     for i in 0..n {
-        for h in 0..d_hi {
-            landmark[h] = emb.high[(i, h)];
+        for (h, value) in landmark.iter_mut().enumerate().take(d_hi) {
+            *value = emb.high[(i, h)];
         }
         let d = metric.dist_unchecked(&qslice, &landmark);
         hd_row[i] = d;
@@ -233,7 +233,7 @@ pub fn project_many_report(
     #[cfg(feature = "parallel")]
     {
         use rayon::prelude::*;
-        return (0..nq)
+        (0..nq)
             .into_par_iter()
             .map(|i| project_report(emb, queries.row(i), metric, opts))
             .collect();

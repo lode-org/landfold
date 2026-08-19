@@ -202,10 +202,8 @@ impl FreeEnergy {
 
     /// Clip finite F to `[0, fmax]` (JCTC 2013 panel is `fmax = 2`).
     pub fn clip(&mut self, fmax: f64) {
-        for v in self.f.iter_mut() {
-            if let Some(f) = v {
-                *f = f.clamp(0.0, fmax);
-            }
+        for f in self.f.iter_mut().flatten() {
+            *f = f.clamp(0.0, fmax);
         }
     }
 
@@ -373,7 +371,11 @@ pub fn fes_from_points(
 }
 
 fn plus_zero(x: f64) -> f64 {
-    if x == 0.0 { 0.0 } else { x }
+    if x == 0.0 {
+        0.0
+    } else {
+        x
+    }
 }
 
 /// Orange (low F) to ice-blue (high F), matching the reference figure palette.
@@ -390,9 +392,9 @@ fn fes_color(t: f64) -> (u8, u8, u8) {
     for w in stops.windows(2) {
         if t <= w[1].0 {
             let u = (t - w[0].0) / (w[1].0 - w[0].0);
-            let r = w[0].1.0 + u * (w[1].1.0 - w[0].1.0);
-            let g = w[0].1.1 + u * (w[1].1.1 - w[0].1.1);
-            let b = w[0].1.2 + u * (w[1].1.2 - w[0].1.2);
+            let r = w[0].1 .0 + u * (w[1].1 .0 - w[0].1 .0);
+            let g = w[0].1 .1 + u * (w[1].1 .1 - w[0].1 .1);
+            let b = w[0].1 .2 + u * (w[1].1 .2 - w[0].1 .2);
             return (r as u8, g as u8, b as u8);
         }
     }
@@ -419,7 +421,7 @@ fn gauss1d(sigma: f64) -> Vec<f64> {
 }
 
 fn blur_separable(z: &Array2<f64>, sigma: f64) -> Array2<f64> {
-    if !(sigma > 0.0) {
+    if !sigma.is_finite() || sigma <= 0.0 {
         return z.clone();
     }
     let k = gauss1d(sigma);

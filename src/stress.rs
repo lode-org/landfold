@@ -32,6 +32,22 @@ pub struct StressEval {
     pub grad: Array1<f64>,
 }
 
+struct PairData<'a> {
+    n: usize,
+    d: usize,
+    coords: &'a [f64],
+    hd: &'a [f64],
+    fhd: &'a [f64],
+    weights: Option<&'a [f64]>,
+    omix: f64,
+}
+
+struct PairAccum<'a> {
+    value: &'a mut f64,
+    weight: &'a mut f64,
+    grad: &'a mut [f64],
+}
+
 pub(crate) fn validate_imix(imix: f64) -> crate::error::Result<()> {
     if !imix.is_finite() || !(0.0..=1.0).contains(&imix) {
         return Err(crate::error::LandfoldError::Msg(
@@ -57,17 +73,16 @@ impl Stress {
                 "stress distance matrices must be square and matching",
             ));
         }
-        if let Some(ref w) = weights {
-            if w.len() != n {
-                return Err(crate::error::LandfoldError::Shape("stress weight length"));
-            }
+        if weights.as_ref().map_or(false, |w| w.len() != n) {
+            return Err(crate::error::LandfoldError::Shape("stress weight length"));
         }
-        if let Some(ref w) = pair_weights {
-            if w.raw_dim() != hd.raw_dim() {
-                return Err(crate::error::LandfoldError::Shape(
-                    "stress pair weight shape",
-                ));
-            }
+        if pair_weights
+            .as_ref()
+            .map_or(false, |w| w.raw_dim() != hd.raw_dim())
+        {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress pair weight shape",
+            ));
         }
         Ok(Self::new(hd, fhd, tfun_ld, imix, weights, pair_weights))
     }
@@ -114,44 +129,31 @@ impl Stress {
         }
     }
 
-    fn pair_kernel(
-        &self,
-        i: usize,
-        n: usize,
-        d: usize,
-        coords: &[f64],
-        hd: &[f64],
-        fhd: &[f64],
-        weights: Option<&[f64]>,
-        omix: f64,
-        pval: &mut f64,
-        tw: &mut f64,
-        pgrad: &mut [f64],
-    ) {
-        let xi = &coords[i * d..(i + 1) * d];
+    fn pair_kernel(&self, i: usize, data: &PairData<'_>, acc: &mut PairAccum<'_>) {
+        let xi = &data.coords[i * data.d..(i + 1) * data.d];
         for j in 0..i {
-            let xj = &coords[j * d..(j + 1) * d];
+            let xj = &data.coords[j * data.d..(j + 1) * data.d];
             let ld = Euclid.dist_unchecked(xi, xj);
             let (fld, dfld) = self.tfun_ld.fdf(ld);
-            let wij = weights.map(|w| w[i * n + j]).unwrap_or(1.0);
-            *tw += wij;
-            let df = fhd[i * n + j] - fld;
-            let dd = hd[i * n + j] - ld;
-            *pval += (df * df * omix + self.imix * dd * dd) * wij;
+            let wij = data.weights.map(|w| w[i * data.n + j]).unwrap_or(1.0);
+            *acc.weight += wij;
+            let df = data.fhd[i * data.n + j] - fld;
+            let dd = data.hd[i * data.n + j] - ld;
+            *acc.value += (df * df * data.omix + self.imix * dd * dd) * wij;
             let dld = if ld < OVERLAP { OVERLAP } else { ld };
-            let gij = (df * dfld * omix + self.imix * dd) / dld * wij;
-            if d == 2 {
+            let gij = (df * dfld * data.omix + self.imix * dd) / dld * wij;
+            if data.d == 2 {
                 let dx = xi[0] - xj[0];
                 let dy = xi[1] - xj[1];
-                pgrad[i * 2] += gij * dx;
-                pgrad[i * 2 + 1] += gij * dy;
-                pgrad[j * 2] -= gij * dx;
-                pgrad[j * 2 + 1] -= gij * dy;
+                acc.grad[i * 2] += gij * dx;
+                acc.grad[i * 2 + 1] += gij * dy;
+                acc.grad[j * 2] -= gij * dx;
+                acc.grad[j * 2 + 1] -= gij * dy;
             } else {
-                for h in 0..d {
+                for h in 0..data.d {
                     let delta = xi[h] - xj[h];
-                    pgrad[i * d + h] += gij * delta;
-                    pgrad[j * d + h] -= gij * delta;
+                    acc.grad[i * data.d + h] += gij * delta;
+                    acc.grad[j * data.d + h] -= gij * delta;
                 }
             }
         }
@@ -187,10 +189,22 @@ impl Stress {
         let mut pval = 0.0;
         let mut tw = 0.0;
         let mut pgrad = vec![0.0; n * d];
+        let data = PairData {
+            n,
+            d,
+            coords,
+            hd,
+            fhd,
+            weights,
+            omix,
+        };
+        let mut acc = PairAccum {
+            value: &mut pval,
+            weight: &mut tw,
+            grad: &mut pgrad,
+        };
         for i in 0..n {
-            self.pair_kernel(
-                i, n, d, coords, hd, fhd, weights, omix, &mut pval, &mut tw, &mut pgrad,
-            );
+            self.pair_kernel(i, &data, &mut acc);
         }
         Self::finish(pval, tw, pgrad)
     }
@@ -213,9 +227,21 @@ impl Stress {
             .fold(
                 || (0.0, 0.0, vec![0.0; n * d]),
                 |mut acc, i| {
-                    self.pair_kernel(
-                        i, n, d, coords, hd, fhd, weights, omix, &mut acc.0, &mut acc.1, &mut acc.2,
-                    );
+                    let data = PairData {
+                        n,
+                        d,
+                        coords,
+                        hd,
+                        fhd,
+                        weights,
+                        omix,
+                    };
+                    let mut pair_acc = PairAccum {
+                        value: &mut acc.0,
+                        weight: &mut acc.1,
+                        grad: &mut acc.2,
+                    };
+                    self.pair_kernel(i, &data, &mut pair_acc);
                     acc
                 },
             )
@@ -356,7 +382,7 @@ mod tests {
     use crate::pairwise::pairwise_euclid;
     use crate::transfer::Transfer;
     use approx::assert_relative_eq;
-    use ndarray::{Array, array};
+    use ndarray::{array, Array};
 
     #[test]
     fn identity_stress_zero_on_isometry() {
