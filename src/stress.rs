@@ -133,6 +133,7 @@ impl Stress {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn eval_serial(&self, coords: ArrayView1<f64>, d: usize) -> StressEval {
         let n = self.n;
         debug_assert_eq!(coords.len(), n * d);
