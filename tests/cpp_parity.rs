@@ -7,7 +7,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use approx::assert_relative_eq;
+use landfold::pairwise::apply_transfer;
+use landfold::stress::Stress;
 use landfold::{Dot, Euclid, Metric, Periodic, Transfer};
+use ndarray::array;
 
 fn golden_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens/cpp_oracle.txt")
@@ -84,4 +87,40 @@ fn cpp_oracle_goldens_exist_and_match() {
     let d = blocks["metric dot_self"][0][0];
     let u = [1.0 / 2.0_f64.sqrt(), 1.0 / 2.0_f64.sqrt()];
     assert_relative_eq!(Dot.dist(&u, &u).unwrap(), d, epsilon = 1e-14);
+
+    // Same 3-point χ that oracle.cpp dumps from NLDRITERChi.
+    let hd = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.5], [2.0, 1.5, 0.0]];
+    let coords = array![0.0, 0.0, 0.8, 0.1, -0.2, 0.7];
+    let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
+    let mut fhd = hd.clone();
+    apply_transfer(&mut fhd, &t);
+
+    for (key, imix, check_grad) in [
+        ("chi xsig_1_4_3_imix01", 0.1, true),
+        ("chi xsig_1_4_3_imix00", 0.0, false),
+        ("chi identity_imix00", 0.0, false),
+    ] {
+        let rows = blocks.get(key).unwrap_or_else(|| panic!("missing block {key}"));
+        assert_eq!(rows.len(), 7, "{key} value + 6 grad");
+        let tfun = if key.contains("identity") {
+            Transfer::identity()
+        } else {
+            t.clone()
+        };
+        let mut f = hd.clone();
+        apply_transfer(&mut f, &tfun);
+        let ev = Stress::new(hd.clone(), f, tfun, imix, None, None).eval(coords.view(), 2);
+        assert_relative_eq!(ev.value, rows[0][0], epsilon = 1e-14, max_relative = 1e-13);
+        // C++ NLDRITERChi imix==0 skips the /d_ij factor on gij; literature χ does not.
+        if check_grad {
+            for k in 0..6 {
+                assert_relative_eq!(
+                    ev.grad[k],
+                    rows[1 + k][0],
+                    epsilon = 1e-12,
+                    max_relative = 1e-11
+                );
+            }
+        }
+    }
 }
