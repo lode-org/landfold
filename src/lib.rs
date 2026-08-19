@@ -25,18 +25,19 @@ pub mod mds;
 pub mod metric;
 pub mod pairwise;
 pub mod project;
+#[cfg(feature = "readcon")]
+pub mod readcon;
 pub mod replica;
 pub mod search;
 pub mod stress;
 pub mod transfer;
 
+pub use anneal::AnnealOpts;
+pub use array::to_dlpack;
+pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
+pub use error::{LandfoldError, Result};
 #[cfg(feature = "highs")]
 pub use highs_slp::HighsOpts;
-pub use anneal::AnnealOpts;
-pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
-pub use replica::ReplicaOpts;
-pub use array::to_dlpack;
-pub use error::{LandfoldError, Result};
 pub use hist::{
     FreeEnergy, Histogram1d, Histogram2d, coordination_histogram, coordination_numbers,
     fes_from_points,
@@ -50,6 +51,7 @@ pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
 };
+pub use replica::ReplicaOpts;
 pub use search::StochOpts;
 pub use stress::{Stress, StressEval, query_chi};
 pub use transfer::{Transfer, TransferMode};
