@@ -56,12 +56,12 @@ impl HighsOpts {
                 "HiGHS bounds must be finite".into(),
             ));
         }
-        if let (Some(lo), Some(hi)) = (self.lo, self.hi) {
-            if lo > hi {
-                return Err(LandfoldError::Msg(
-                    "HiGHS lower bound must not exceed upper bound".into(),
-                ));
-            }
+        if let (Some(lo), Some(hi)) = (self.lo, self.hi)
+            && lo > hi
+        {
+            return Err(LandfoldError::Msg(
+                "HiGHS lower bound must not exceed upper bound".into(),
+            ));
         }
         Ok(())
     }
