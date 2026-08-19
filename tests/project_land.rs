@@ -52,28 +52,29 @@ fn farthest_point_returns_k_distinct() {
 
 #[test]
 fn project_recovers_held_out_corner() {
-    let pts = array![
-        [0.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0]
-    ];
+    // Square in the plane. Embed three corners; project the fourth.
+    let all = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+    let train = all.slice(ndarray::s![0..3, ..]);
     let mut opts = IterOpts::default();
     opts.lowdim = 2;
     opts.tfun_hd = Transfer::identity();
     opts.tfun_ld = Transfer::identity();
     opts.cg.maxiter = 40;
-    let emb = embed_points(pts.view(), &Euclid, &opts).unwrap();
+    let emb = embed_points(train, &Euclid, &opts).unwrap();
     let po = ProjOpts {
-        gridw: 2.0,
+        gridw: 2.5,
         grid_coarse: 21,
         grid_fine: 41,
-        cg_steps: 8,
+        cg_steps: 12,
     };
-    let q = project_one(&emb, pts.row(0), &Euclid, &po).unwrap();
-    let target = emb.low.row(0);
-    let d = ((q[0] - target[0]).powi(2) + (q[1] - target[1]).powi(2)).sqrt();
-    assert!(d < 0.15, "held-out corner landed {d} from its embedding");
+    let q = project_one(&emb, all.row(3), &Euclid, &po).unwrap();
+    let d = |i: usize| {
+        let p = emb.low.row(i);
+        ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt()
+    };
+    assert_relative_eq!(d(1), 1.0, epsilon = 0.2);
+    assert_relative_eq!(d(2), 1.0, epsilon = 0.2);
+    assert_relative_eq!(d(0), 2.0_f64.sqrt(), epsilon = 0.25);
 }
 
 #[test]
