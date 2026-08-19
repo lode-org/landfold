@@ -188,6 +188,30 @@ impl Metric for Sphere {
     }
 }
 
+/// L1 (Manhattan) distance. Packing-family DECAF histograms compare
+/// this way: same family iff the L1 is at most the packing merge.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct L1;
+
+impl Metric for L1 {
+    fn dist(&self, a: &[f64], b: &[f64]) -> Result<f64> {
+        let distance = self.dist_unchecked(a, b);
+        validate_distance(distance)?;
+        Ok(distance)
+    }
+
+    fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
+        let n = a.len().max(b.len());
+        let mut acc = 0.0;
+        for i in 0..n {
+            let left = if i < a.len() { a[i] } else { 0.0 };
+            let right = if i < b.len() { b[i] } else { 0.0 };
+            acc += (left - right).abs();
+        }
+        acc
+    }
+}
+
 /// `d(a,b) = -log(a·b)`. Used for SOAP-like unit-sphere descriptors.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Dot;
@@ -206,6 +230,16 @@ impl Metric for Dot {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+
+    #[test]
+    fn l1_pads_the_shorter_histogram() {
+        let m = L1;
+        assert_relative_eq!(
+            m.dist(&[0.5, 0.5], &[1.0]).unwrap(),
+            1.0,
+            epsilon = 1e-15
+        );
+    }
 
     #[test]
     fn euclid_3_4_5() {

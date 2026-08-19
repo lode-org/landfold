@@ -228,6 +228,15 @@ impl Stress {
                 "stress coordinates must be finite".into(),
             ));
         }
+        let packed = coords.as_slice().expect("contiguous coordinates");
+        for i in 0..self.n {
+            let xi = &packed[i * d..(i + 1) * d];
+            for j in 0..i {
+                let xj = &packed[j * d..(j + 1) * d];
+                let ld = Euclid.dist(xi, xj)?;
+                self.tfun_ld.try_fdf(ld)?;
+            }
+        }
         Ok(self.eval(coords, d))
     }
 
