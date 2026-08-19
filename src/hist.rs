@@ -832,6 +832,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_mutated_histogram1d_state_and_overflow() {
+        let mut h = Histogram1d::new(0.0, 1.0, 2).unwrap();
+        h.add(0.5, f64::MAX).unwrap();
+        let before = h.clone();
+        assert!(h.add(0.5, f64::MAX).is_err());
+        assert_eq!(h.samples, before.samples);
+        assert_eq!(h.counts, before.counts);
+
+        let mut malformed = Histogram1d::new(0.0, 1.0, 2).unwrap();
+        malformed.edges[1] = malformed.edges[0];
+        assert!(malformed.add(0.5, 1.0).is_err());
+        let mut csv = Vec::new();
+        assert!(malformed.write_csv(&mut csv, "# cn count").is_err());
+    }
+
+    #[test]
     fn rejects_mismatched_histogram_weights() {
         let mut h1 = Histogram1d::new(0.0, 1.0, 2).unwrap();
         assert!(
