@@ -371,6 +371,37 @@ mod tests {
     }
 
     #[test]
+    fn rejects_overflowed_high_dimensional_transfer() {
+        struct HugeMetric;
+
+        impl Metric for HugeMetric {
+            fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
+                if a == b { 0.0 } else { 1.0e200 }
+            }
+        }
+
+        let mut emb = Embedding::from_landmarks(
+            array![[0.0], [1.0]],
+            array![[0.0], [1.0]],
+            &HugeMetric,
+            Transfer::identity(),
+            Transfer::identity(),
+            0.0,
+            None,
+        )
+        .unwrap();
+        emb.high[(1, 0)] = 1.0e200;
+        emb.tfun_hd = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        let opts = ProjOpts {
+            gridw: 1.0,
+            grid_coarse: 1,
+            grid_fine: 1,
+            cg_steps: 0,
+        };
+        assert!(project_report(&emb, array![0.0].view(), &HugeMetric, &opts).is_err());
+    }
+
+    #[test]
     fn rejects_invalid_imix_in_landmark_embeddings() {
         let high = array![[0.0, 0.0], [1.0, 0.0]];
         let low = high.clone();
