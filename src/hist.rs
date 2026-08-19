@@ -916,6 +916,26 @@ mod tests {
     }
 
     #[test]
+    fn rejects_histogram2d_accumulation_overflow_transactionally() {
+        let mut h = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        h.add(0.5, 0.5, f64::MAX).unwrap();
+        let before = h.clone();
+        assert!(h.add(0.5, 0.5, f64::MAX).is_err());
+        assert_eq!(h.samples, before.samples);
+        assert_eq!(h.counts, before.counts);
+
+        let mut batch = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        assert!(batch
+            .add_points(
+                array![[0.5, 0.5], [0.5, 0.5]].view(),
+                Some(array![f64::MAX, f64::MAX].view())
+            )
+            .is_err());
+        assert_eq!(batch.samples, 0.0);
+        assert_eq!(batch.counts.sum(), 0.0);
+    }
+
+    #[test]
     fn rejects_mismatched_histogram_weights() {
         let mut h1 = Histogram1d::new(0.0, 1.0, 2).unwrap();
         assert!(
