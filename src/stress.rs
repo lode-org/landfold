@@ -304,19 +304,19 @@ impl Stress {
                 ld2 += v1[h] * v1[h];
             }
             let ld = ld2.sqrt();
-            if ld <= 0.0 {
-                continue;
-            }
             let (lfd, ldfd) = self.tfun_ld.fdf(ld);
             let w = if point_w.len() == n { point_w[i] } else { 1.0 };
             let diff = self.fhd[(skip, i)] - lfd;
             let dd = self.hd[(skip, i)] - ld;
             vv += (diff * diff * omix + self.imix * dd * dd) * w;
+            tw += w;
+            if ld <= 0.0 {
+                continue;
+            }
             let scale = 2.0 * (diff * ldfd * omix + self.imix * dd) / ld * w;
             for h in 0..d {
                 vg[h] += v1[h] * scale;
             }
-            tw += w;
         }
         if tw <= 0.0 {
             tw = 1.0;
@@ -374,19 +374,19 @@ pub fn query_chi(
             ld2 += delta * delta;
         }
         let ld = ld2.sqrt();
-        if ld <= 0.0 {
-            continue;
-        }
         let (lfd, ldfd) = tfun_ld.fdf(ld);
         let w = if point_w.len() == n { point_w[i] } else { 1.0 };
         let diff = fhd_row[i] - lfd;
         let dd = hd_row[i] - ld;
         vv += (diff * diff * omix + imix * dd * dd) * w;
+        tw += w;
+        if ld <= 0.0 {
+            continue;
+        }
         let scale = 2.0 * (diff * ldfd * omix + imix * dd) / ld * w;
         for h in 0..d {
             vg[h] += (landmarks[(i, h)] - x[h]) * scale;
         }
-        tw += w;
     }
     if tw <= 0.0 {
         tw = 1.0;
@@ -496,6 +496,32 @@ mod tests {
     fn try_new_rejects_nonfinite_distances() {
         let hd = array![[0.0, f64::NAN], [f64::NAN, 0.0]];
         assert!(Stress::try_new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).is_err());
+    }
+
+    #[test]
+    fn coincident_query_keeps_its_objective_value() {
+        let stress = Stress::new(
+            array![[0.0, 1.0], [1.0, 0.0]],
+            array![[0.0, 1.0], [1.0, 0.0]],
+            Transfer::identity(),
+            0.0,
+            None,
+            None,
+        );
+        let x = array![0.0, 0.0];
+        let landmarks = array![[0.0, 0.0]];
+        let (value, grad) = query_chi(
+            x.view(),
+            landmarks.view(),
+            array![1.0].view(),
+            array![1.0].view(),
+            &stress.tfun_ld,
+            stress.imix,
+            array![1.0].view(),
+        );
+        assert_relative_eq!(value, 1.0, epsilon = 1e-14);
+        assert_relative_eq!(grad[0], 0.0, epsilon = 1e-14);
+        assert_relative_eq!(grad[1], 0.0, epsilon = 1e-14);
     }
 
     #[cfg(feature = "parallel")]
