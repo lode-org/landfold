@@ -502,9 +502,9 @@ fn main() -> landfold::Result<()> {
             let mut h = Histogram2d::new(xlo, xhi, nx, ylo, yhi, ny)?;
             h.add_points(set.points.view(), set.weights.as_ref().map(|w| w.view()))?;
             let mut fes = if blur > 0.0 {
-                FreeEnergy::from_histogram_blurred(&h, kt, blur)
+                FreeEnergy::from_histogram_blurred(&h, kt, blur)?
             } else {
-                FreeEnergy::from_histogram(&h, kt)
+                FreeEnergy::from_histogram(&h, kt)?
             };
             if floor > 0.0 {
                 fes.connected_body(floor);

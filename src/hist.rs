@@ -173,17 +173,24 @@ pub struct FreeEnergy {
 impl FreeEnergy {
     /// Build FES from a 2-D histogram. `kT` scales the output (`F/eps` when
     /// the user passes `kT = 1` and thinks in units of epsilon).
-    pub fn from_histogram(h: &Histogram2d, kt: f64) -> Self {
+    pub fn from_histogram(h: &Histogram2d, kt: f64) -> Result<Self> {
+        validate_fes_kt(kt)?;
         Self::from_counts(h, &h.counts, kt)
     }
 
     /// Same invert after a separable Gaussian blur of the counts.
-    pub fn from_histogram_blurred(h: &Histogram2d, kt: f64, sigma_bins: f64) -> Self {
+    pub fn from_histogram_blurred(h: &Histogram2d, kt: f64, sigma_bins: f64) -> Result<Self> {
+        validate_fes_kt(kt)?;
+        if !sigma_bins.is_finite() || sigma_bins < 0.0 {
+            return Err(LandfoldError::Msg(
+                "fes blur sigma must be finite and nonnegative".into(),
+            ));
+        }
         let counts = h.blur(sigma_bins);
         Self::from_counts(h, &counts, kt)
     }
 
-    fn from_counts(h: &Histogram2d, counts: &Array2<f64>, kt: f64) -> Self {
+    fn from_counts(h: &Histogram2d, counts: &Array2<f64>, kt: f64) -> Result<Self> {
         let nx = counts.ncols();
         let ny = counts.nrows();
         let mut x_centers = Array1::zeros(nx);
@@ -217,12 +224,12 @@ impl FreeEnergy {
                 }
             }
         }
-        Self {
+        Ok(Self {
             x_centers,
             y_centers,
             f,
             rho,
-        }
+        })
     }
 
     /// Clip finite F to `[0, fmax]` (JCTC 2013 panel is `fmax = 2`).
@@ -408,7 +415,14 @@ pub fn fes_from_points(
     let py = pad * (ymax - ymin).max(1e-6);
     let mut h = Histogram2d::new(xmin - px, xmax + px, nx, ymin - py, ymax + py, ny)?;
     h.add_points(xy, weights)?;
-    Ok(FreeEnergy::from_histogram(&h, kt))
+    FreeEnergy::from_histogram(&h, kt)
+}
+
+fn validate_fes_kt(kt: f64) -> Result<()> {
+    if !kt.is_finite() || kt <= 0.0 {
+        return Err(LandfoldError::Msg("fes kT must be finite and > 0".into()));
+    }
+    Ok(())
 }
 
 fn plus_zero(x: f64) -> f64 {
@@ -587,7 +601,17 @@ fn keep_largest(mask: &mut [bool], ny: usize, nx: usize) {
 }
 
 /// Coordination number: neighbours with Euclidean distance `< cutoff`.
-pub fn coordination_numbers(pos: ArrayView2<f64>, cutoff: f64) -> Array1<f64> {
+pub fn coordination_numbers(pos: ArrayView2<f64>, cutoff: f64) -> Result<Array1<f64>> {
+    if !cutoff.is_finite() || cutoff < 0.0 {
+        return Err(LandfoldError::Msg(
+            "coordination cutoff must be finite and nonnegative".into(),
+        ));
+    }
+    if pos.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "coordination coordinates must be finite".into(),
+        ));
+    }
     let n = pos.nrows();
     let mut cn = Array1::<f64>::zeros(n);
     for i in 0..n {
@@ -605,7 +629,7 @@ pub fn coordination_numbers(pos: ArrayView2<f64>, cutoff: f64) -> Array1<f64> {
             }
         }
     }
-    cn
+    Ok(cn)
 }
 
 pub fn coordination_histogram(
@@ -613,7 +637,7 @@ pub fn coordination_histogram(
     cutoff: f64,
     max_cn: usize,
 ) -> Result<Histogram1d> {
-    let cn = coordination_numbers(pos, cutoff);
+    let cn = coordination_numbers(pos, cutoff)?;
     let mut h = Histogram1d::new(-0.5, max_cn as f64 + 0.5, max_cn + 1)?;
     h.add_many(cn.view(), None)?;
     Ok(h)
@@ -631,7 +655,7 @@ mod tests {
             h.add(0.1, 0.1, 1.0);
         }
         h.add(-0.8, -0.8, 1.0);
-        let fes = FreeEnergy::from_histogram(&h, 1.0);
+        let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         let mut min_f = f64::INFINITY;
         let mut at = (0, 0);
         for iy in 0..4 {
@@ -661,6 +685,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_fes_constructor_parameters() {
+        let h = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        for kt in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(FreeEnergy::from_histogram(&h, kt).is_err());
+        }
+        assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, -1.0).is_err());
+        assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, f64::NAN).is_err());
+    }
+
+    #[test]
     fn rejects_mismatched_histogram_weights() {
         let mut h1 = Histogram1d::new(0.0, 1.0, 2).unwrap();
         assert!(
@@ -682,7 +716,7 @@ mod tests {
     #[test]
     fn cn_of_dimer() {
         let pos = array![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [10.0, 0.0, 0.0]];
-        let cn = coordination_numbers(pos.view(), 1.5);
+        let cn = coordination_numbers(pos.view(), 1.5).unwrap();
         assert_eq!(cn[0], 1.0);
         assert_eq!(cn[1], 1.0);
         assert_eq!(cn[2], 0.0);
@@ -696,11 +730,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_coordination_inputs() {
+        let pos = array![[0.0, 0.0], [f64::NAN, 1.0]];
+        assert!(coordination_numbers(pos.view(), 1.0).is_err());
+        assert!(coordination_numbers(array![[0.0], [1.0]].view(), -1.0).is_err());
+        assert!(coordination_numbers(array![[0.0], [1.0]].view(), f64::NAN).is_err());
+    }
+
+    #[test]
     fn blur_spreads_mass_into_empty_bins() {
         let mut h = Histogram2d::new(0.0, 2.0, 2, 0.0, 2.0, 2).unwrap();
         h.add(0.5, 0.5, 1.0);
-        let sharp = FreeEnergy::from_histogram(&h, 1.0);
-        let soft = FreeEnergy::from_histogram_blurred(&h, 1.0, 1.0);
+        let sharp = FreeEnergy::from_histogram(&h, 1.0).unwrap();
+        let soft = FreeEnergy::from_histogram_blurred(&h, 1.0, 1.0).unwrap();
         assert_eq!(sharp.f[(0, 1)], None);
         assert!(soft.rho[(0, 1)] > 0.0);
         assert!(soft.f[(0, 1)].is_some());
@@ -712,7 +754,7 @@ mod tests {
         h.add(0.5, 0.5, 10.0);
         h.add(0.5, 1.5, 10.0);
         h.add(2.5, 2.5, 1.0);
-        let mut fes = FreeEnergy::from_histogram(&h, 1.0);
+        let mut fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         assert!(fes.f[(2, 2)].is_some());
         fes.connected_body(0.05);
         assert!(fes.f[(0, 0)].is_some());
@@ -726,7 +768,7 @@ mod tests {
         h.add(0.5, 0.5, 1.0);
         h.add(0.5, 0.5, 1.0);
         h.add(1.5, 1.5, 1.0);
-        let fes = FreeEnergy::from_histogram(&h, 1.0);
+        let fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         assert_eq!(fes.f[(0, 0)], Some(0.0));
         assert_eq!(fes.f[(0, 1)], None);
         assert_eq!(fes.f[(1, 0)], None);
