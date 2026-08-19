@@ -423,4 +423,10 @@ mod tests {
         assert!(Transfer::warp(1.0, 2.0, 1.0, 2.0, 0.0).is_err());
         assert!(Transfer::warp(1.0, 2.0, f64::NAN, 2.0, 1.0).is_err());
     }
+
+    #[test]
+    fn rejects_overflowed_derived_coefficients() {
+        assert!(Transfer::xsigmoid(1.0, 10_000.0, 1.0).is_err());
+        assert!(Transfer::warp(1.0, 10_000.0, 1.0, 1.0, 1.0).is_err());
+    }
 }
