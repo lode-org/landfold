@@ -47,6 +47,14 @@ pub fn minimize_highs(
     opts: &HighsOpts,
 ) -> Result<CgReport> {
     let mut pos = init.to_owned();
+    for v in pos.iter_mut() {
+        if let Some(b) = opts.lo {
+            *v = v.max(b);
+        }
+        if let Some(b) = opts.hi {
+            *v = v.min(b);
+        }
+    }
     let mut ev = stress.eval(pos.view(), d);
     let mut steps = 0;
     let trust0 = opts.trust.max(1e-8);
@@ -63,6 +71,16 @@ pub fn minimize_highs(
             let mut trial = pos.clone();
             for i in 0..trial.len() {
                 trial[i] += t * step[i];
+            }
+            if let Some(b) = opts.lo {
+                for v in trial.iter_mut() {
+                    *v = v.max(b);
+                }
+            }
+            if let Some(b) = opts.hi {
+                for v in trial.iter_mut() {
+                    *v = v.min(b);
+                }
             }
             let ev1 = stress.eval(trial.view(), d);
             if ev1.value < ev.value {
@@ -161,6 +179,28 @@ mod tests {
         assert!(rep.value <= ev0.value + 1e-12);
         for v in rep.coords.iter() {
             assert!(*v >= -2.0 - 1e-9 && *v <= 2.0 + 1e-9);
+        }
+    }
+
+    #[test]
+    fn highs_clips_infeasible_start_into_the_box() {
+        let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+        let hd = pairwise_euclid(pts.view()).unwrap();
+        let t = Transfer::identity();
+        let mut fhd = hd.clone();
+        apply_transfer(&mut fhd, &t);
+        let s = Stress::new(hd, fhd, t, 0.0, None, None);
+        let init = Array::from_iter([5.0, -5.0, 4.0, 4.0, -3.0, 3.0, 2.0, -2.0]);
+        let mut ho = HighsOpts::default();
+        ho.maxiter = 15;
+        ho.lo = Some(-0.3);
+        ho.hi = Some(0.3);
+        let rep = minimize_highs(&s, init.view(), 2, &ho).unwrap();
+        for v in rep.coords.iter() {
+            assert!(
+                *v >= -0.3 - 1e-9 && *v <= 0.3 + 1e-9,
+                "coord {v} left the box"
+            );
         }
     }
 }

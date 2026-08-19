@@ -30,9 +30,13 @@ fn run(label: &str, pts: &Array2<f64>, opts: IterOpts, init: Option<ndarray::Arr
     let t0 = Instant::now();
     let (emb, report) = embed(pts.view(), &Euclid, &opts, init, None, None).unwrap();
     let ms = t0.elapsed().as_secs_f64() * 1e3;
+    let max_abs = emb
+        .low
+        .iter()
+        .fold(0.0_f64, |a, v| a.max(v.abs()));
     println!(
-        "{:<18} chi={:.8e} steps={} ms={:.2}",
-        label, emb.stress, report.steps, ms
+        "{:<18} chi={:.8e} steps={} ms={:.2} max|x|={:.4}",
+        label, emb.stress, report.steps, ms, max_abs
     );
 }
 
@@ -71,4 +75,22 @@ fn main() {
     let mut s = base_opts();
     s.solver = Solver::Stochastic(StochOpts::default());
     run("stoch", &pts, s, Some(bad.view()));
+
+    #[cfg(feature = "highs")]
+    {
+        use landfold::HighsOpts;
+        println!("# HiGHS sequential LP, MDS init");
+        let mut h = base_opts();
+        h.solver = Solver::Highs(HighsOpts::default());
+        run("highs", &pts, h, None);
+        println!("# HiGHS box [-0.3,0.3], scrambled init");
+        let mut hb = HighsOpts::default();
+        hb.lo = Some(-0.3);
+        hb.hi = Some(0.3);
+        let mut h = base_opts();
+        h.solver = Solver::Highs(hb);
+        run("highs-box", &pts, h, Some(bad.view()));
+        println!("# standard, same scrambled init (unconstrained)");
+        run("standard", &pts, base_opts(), Some(bad.view()));
+    }
 }
