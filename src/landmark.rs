@@ -32,13 +32,13 @@ pub fn farthest_point(
             "landmark coordinates must be finite".into(),
         ));
     }
-    if let Some(expected) = metric.dim() {
-        if points.ncols() != expected {
-            return Err(LandfoldError::MetricSize {
-                left: points.ncols(),
-                right: expected,
-            });
-        }
+    if let Some(expected) = metric.dim()
+        && points.ncols() != expected
+    {
+        return Err(LandfoldError::MetricSize {
+            left: points.ncols(),
+            right: expected,
+        });
     }
     if let Some(w) = weights {
         if w.len() != n {
@@ -136,13 +136,13 @@ pub fn voronoi_weights(
     if landmarks.weights.len() != k {
         return Err(LandfoldError::Shape("landmark weight length"));
     }
-    if let Some(expected) = metric.dim() {
-        if d != expected {
-            return Err(LandfoldError::MetricSize {
-                left: d,
-                right: expected,
-            });
-        }
+    if let Some(expected) = metric.dim()
+        && d != expected
+    {
+        return Err(LandfoldError::MetricSize {
+            left: d,
+            right: expected,
+        });
     }
     let mut acc = vec![0.0; k];
     let mut a = vec![0.0; d];
