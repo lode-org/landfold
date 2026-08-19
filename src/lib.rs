@@ -14,6 +14,8 @@ pub mod anneal;
 pub mod array;
 pub mod cg;
 pub mod error;
+#[cfg(feature = "highs")]
+pub mod highs_slp;
 pub mod hist;
 pub mod io;
 pub mod iter;
@@ -27,6 +29,8 @@ pub mod search;
 pub mod stress;
 pub mod transfer;
 
+#[cfg(feature = "highs")]
+pub use highs_slp::HighsOpts;
 pub use anneal::AnnealOpts;
 pub use replica::ReplicaOpts;
 pub use array::to_dlpack;

@@ -71,6 +71,12 @@ enum Cmd {
         /// Replica-exchange (parallel tempering) then CG polish
         #[arg(long)]
         replica: bool,
+        /// Bound-constrained HiGHS sequential LP (needs --features highs)
+        #[arg(long)]
+        highs: bool,
+        /// Box bounds `lo,hi` for `--highs`
+        #[arg(long = "box")]
+        box_bounds: Option<String>,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -212,6 +218,8 @@ fn main() -> landfold::Result<()> {
             batch,
             anneal,
             replica,
+            highs,
+            box_bounds,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let mut opts = IterOpts {
@@ -220,7 +228,34 @@ fn main() -> landfold::Result<()> {
                 tfun_hd: Transfer::from_cli(&fun_hd)?,
                 tfun_ld: Transfer::from_cli(&fun_ld)?,
                 center,
-                solver: if replica {
+                solver: if highs {
+                    #[cfg(feature = "highs")]
+                    {
+                        let mut ho = landfold::HighsOpts::default();
+                        if let Some(spec) = box_bounds {
+                            let parts: Vec<f64> = spec
+                                .split(',')
+                                .map(|s| s.trim().parse::<f64>())
+                                .collect::<std::result::Result<Vec<_>, _>>()
+                                .map_err(|e| landfold::LandfoldError::Parse(e.to_string()))?;
+                            if parts.len() != 2 {
+                                return Err(landfold::LandfoldError::Parse(
+                                    "--box needs lo,hi".into(),
+                                ));
+                            }
+                            ho.lo = Some(parts[0]);
+                            ho.hi = Some(parts[1]);
+                        }
+                        Solver::Highs(ho)
+                    }
+                    #[cfg(not(feature = "highs"))]
+                    {
+                        let _ = box_bounds;
+                        return Err(landfold::LandfoldError::Msg(
+                            "rebuild with --features highs for the HiGHS arm".into(),
+                        ));
+                    }
+                } else if replica {
                     Solver::Replica(ReplicaOpts {
                         steps,
                         ..ReplicaOpts::default()

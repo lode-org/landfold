@@ -25,7 +25,9 @@ landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
     --frames frames.xyz --cn-csv cn.csv
 ```
 
-`--stoch`, `--anneal`, and `--replica` are extra solver arms.
+`--stoch`, `--anneal`, `--replica`, and `--highs` (needs
+`--features highs`) are extra solver arms. `--highs` is
+bound-constrained sequential LP via HiGHS.
 `Solver::Standard` (full-pair Polak-Ribiere CG) stays the default.
 `landfold mds` is the Torgerson (1952)
 initialiser; `--distances` prints pairwise distances of the embedding

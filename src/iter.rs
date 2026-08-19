@@ -20,6 +20,9 @@ pub enum Solver {
     Stochastic(StochOpts),
     Anneal(AnnealOpts),
     Replica(ReplicaOpts),
+    /// Bound-constrained sequential LP via HiGHS. Extra arm.
+    #[cfg(feature = "highs")]
+    Highs(crate::highs_slp::HighsOpts),
 }
 
 #[derive(Clone, Debug)]
@@ -151,6 +154,8 @@ pub fn embed(
         Solver::Stochastic(so) => minimize_stochastic(&stress, packed.view(), opts.lowdim, so),
         Solver::Anneal(ao) => minimize_anneal(&stress, packed.view(), opts.lowdim, ao, &opts.cg)?,
         Solver::Replica(ro) => minimize_replica(&stress, packed.view(), opts.lowdim, ro, &opts.cg)?,
+        #[cfg(feature = "highs")]
+        Solver::Highs(ho) => crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?,
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
     for i in 0..n {
