@@ -73,12 +73,12 @@ fn metropolis_sweep(
     step: f64,
     rng: &mut u64,
     d: usize,
-) {
+) -> crate::error::Result<()> {
     let nv = pos.len();
     for iu in 0..nv {
         let mut npos = pos.clone();
         npos[iu] += step * (urand(rng) - 0.5);
-        let nnrg = stress.eval(npos.view(), d).value;
+        let nnrg = stress.try_eval(npos.view(), d)?.value;
         let accept = if nnrg <= *nrg {
             1.0
         } else {
@@ -89,6 +89,7 @@ fn metropolis_sweep(
             *nrg = nnrg;
         }
     }
+    Ok(())
 }
 
 /// Geometric ladder of temperatures, Metropolis sweeps, adjacent swaps.
@@ -115,7 +116,10 @@ pub fn minimize_replica(
         }
     }
     let mut pos: Vec<ndarray::Array1<f64>> = (0..nr).map(|_| init.to_owned()).collect();
-    let mut nrg: Vec<f64> = pos.iter().map(|p| stress.eval(p.view(), d).value).collect();
+    let mut nrg: Vec<f64> = pos
+        .iter()
+        .map(|p| stress.try_eval(p.view(), d).map(|ev| ev.value))
+        .collect::<crate::error::Result<Vec<_>>>()?;
     let mut rng = opts.seed | 1;
     let mut best = nrg[0];
     let mut best_pos = pos[0].clone();
@@ -133,7 +137,7 @@ pub fn minimize_replica(
                     opts.mc_step,
                     &mut rng,
                     d,
-                );
+                )?;
             }
             if nrg[r] < best {
                 best = nrg[r];

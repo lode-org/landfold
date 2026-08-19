@@ -79,7 +79,7 @@ pub fn minimize_anneal(
     opts.validate()?;
     let nv = init.len();
     let mut pos = init.to_owned();
-    let mut ev = stress.eval(pos.view(), d);
+    let mut ev = stress.try_eval(pos.view(), d)?;
     let mut nrg = ev.value;
     let mut step = vec![opts.mc_step; nv];
     let mut accept = vec![0u64; nv];
@@ -100,7 +100,7 @@ pub fn minimize_anneal(
             tstep[iu] += 1;
             let mut npos = pos.clone();
             npos[iu] += step[iu] * (urand(&mut rng) - 0.5);
-            let nnrg = stress.eval(npos.view(), d).value;
+            let nnrg = stress.try_eval(npos.view(), d)?.value;
             let accept_p = if nnrg <= nrg {
                 1.0
             } else {
@@ -123,7 +123,7 @@ pub fn minimize_anneal(
     if opts.polish {
         return minimize(stress, pos.view(), d, cg);
     }
-    ev = stress.eval(pos.view(), d);
+    ev = stress.try_eval(pos.view(), d)?;
     Ok(CgReport {
         value: ev.value,
         coords: pos,
