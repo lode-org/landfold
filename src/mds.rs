@@ -27,6 +27,15 @@ pub struct MdsReport {
 }
 
 /// Double-centred Gram `B = -1/2 H D^{circ 2} H` (Torgerson 1952).
+fn checked_add(left: f64, right: f64, what: &'static str) -> Result<f64> {
+    let value = left + right;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(LandfoldError::Msg(what.into()))
+    }
+}
+
 fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
     let n = dist.nrows();
     if n == 0 {
@@ -60,23 +69,46 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
     for i in 0..n {
         let mut s = 0.0;
         for j in 0..n {
-            s += d2[i * n + j];
+            s = checked_add(
+                s,
+                d2[i * n + j],
+                "MDS row-centering accumulation overflowed",
+            )?;
         }
         row_mean[i] = s * inv_n;
-        grand += s;
+        grand = checked_add(
+            grand,
+            s,
+            "MDS grand-centering accumulation overflowed",
+        )?;
     }
     grand *= inv_n * inv_n;
+    if !grand.is_finite() {
+        return Err(LandfoldError::Msg(
+            "MDS grand-centering accumulation overflowed".into(),
+        ));
+    }
     for j in 0..n {
         let mut s = 0.0;
         for i in 0..n {
-            s += d2[i * n + j];
+            s = checked_add(
+                s,
+                d2[i * n + j],
+                "MDS column-centering accumulation overflowed",
+            )?;
         }
         col_mean[j] = s * inv_n;
     }
     let mut b = vec![0.0; n * n];
     for i in 0..n {
         for j in 0..n {
-            b[i * n + j] = -0.5 * (d2[i * n + j] - row_mean[i] - col_mean[j] + grand);
+            let value = -0.5 * (d2[i * n + j] - row_mean[i] - col_mean[j] + grand);
+            if !value.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "MDS centered Gram matrix overflowed".into(),
+                ));
+            }
+            b[i * n + j] = value;
         }
     }
     Ok((n, b))
