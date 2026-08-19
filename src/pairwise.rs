@@ -30,6 +30,31 @@ fn validate_finite_points(points: ArrayView2<f64>) -> Result<()> {
     Ok(())
 }
 
+fn stable_euclid(a: &[f64], b: &[f64]) -> f64 {
+    let mut scale = 0.0;
+    let mut sum = 0.0;
+    for (&ai, &bi) in a.iter().zip(b) {
+        let delta = (bi - ai).abs();
+        if !delta.is_finite() {
+            return f64::INFINITY;
+        }
+        if delta > scale {
+            let ratio = if scale == 0.0 { 0.0 } else { scale / delta };
+            sum = sum * ratio * ratio + 1.0;
+            scale = delta;
+        } else if scale > 0.0 {
+            let ratio = delta / scale;
+            sum += ratio * ratio;
+        }
+    }
+    scale * sum.sqrt()
+}
+
+fn gemm_euclid(norm_i: f64, norm_j: f64, gram: f64) -> Option<f64> {
+    let squared = norm_i + norm_j - 2.0 * gram;
+    squared.is_finite().then(|| squared.max(0.0).sqrt())
+}
+
 /// Symmetric `n x n` distance matrix. Diagonal is zero.
 pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f64>> {
     let n = points.nrows();
@@ -104,30 +129,34 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
         .map(|r| r.iter().map(|x| x * x).sum())
         .collect();
     let gram = points.dot(&points.t());
-    if norms.iter().any(|&value| !value.is_finite()) || gram.iter().any(|&value| !value.is_finite())
-    {
-        return Err(crate::error::LandfoldError::Msg(
-            "Euclidean distance calculation overflowed".into(),
-        ));
-    }
+    let gemm_valid =
+        norms.iter().all(|&value| value.is_finite()) && gram.iter().all(|&value| value.is_finite());
     let mut out = Array2::<f64>::zeros((n, n));
     #[cfg(feature = "parallel")]
     {
         use rayon::prelude::*;
+        let packed: Vec<f64> = points.iter().copied().collect();
         let gram_s = gram.as_slice().expect("gram contiguous");
         let norms_s = norms.as_slice().expect("norms contiguous");
         let rows: Vec<Vec<f64>> = (0..n)
             .into_par_iter()
-            .map(|i| {
+            .map(|i| -> Result<Vec<f64>> {
                 let mut row = vec![0.0; i];
                 for j in 0..i {
-                    row[j] = (norms_s[i] + norms_s[j] - 2.0 * gram_s[i * n + j])
-                        .max(0.0)
-                        .sqrt();
+                    let a = &packed[i * points.ncols()..(i + 1) * points.ncols()];
+                    let b = &packed[j * points.ncols()..(j + 1) * points.ncols()];
+                    let distance = if gemm_valid {
+                        gemm_euclid(norms_s[i], norms_s[j], gram_s[i * n + j])
+                            .unwrap_or_else(|| stable_euclid(a, b))
+                    } else {
+                        stable_euclid(a, b)
+                    };
+                    validate_distance(distance)?;
+                    row[j] = distance;
                 }
-                row
+                Ok(row)
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
         for i in 0..n {
             for j in 0..i {
                 let v = rows[i][j];
@@ -141,7 +170,16 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
     {
         for i in 0..n {
             for j in 0..i {
-                let v = (norms[i] + norms[j] - 2.0 * gram[(i, j)]).max(0.0).sqrt();
+                let a = points.row(i);
+                let b = points.row(j);
+                let v = if gemm_valid {
+                    gemm_euclid(norms[i], norms[j], gram[(i, j)]).unwrap_or_else(|| {
+                        stable_euclid(a.as_slice().unwrap(), b.as_slice().unwrap())
+                    })
+                } else {
+                    stable_euclid(a.as_slice().unwrap(), b.as_slice().unwrap())
+                };
+                validate_distance(v)?;
                 out[(i, j)] = v;
                 out[(j, i)] = v;
             }
@@ -229,9 +267,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_euclidean_overflow() {
+    fn handles_finite_distances_beyond_gram_range() {
         let points = array![[1.0e200, 0.0], [0.0, 0.0]];
-        assert!(pairwise_euclid(points.view()).is_err());
+        let distances = pairwise_euclid(points.view()).unwrap();
+        assert_eq!(distances[(0, 1)], 1.0e200);
     }
 
     #[test]
