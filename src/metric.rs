@@ -20,6 +20,14 @@ pub trait Metric: Send + Sync {
                 right: b.len(),
             });
         }
+        if let Some(expected) = self.dim() {
+            if a.len() != expected {
+                return Err(LandfoldError::MetricSize {
+                    left: a.len(),
+                    right: expected,
+                });
+            }
+        }
         Ok(self.dist_unchecked(a, b))
     }
 
@@ -219,6 +227,16 @@ mod tests {
         assert!(Periodic::new(vec![f64::NAN]).is_err());
         assert!(Sphere::new(Vec::new()).is_err());
         assert!(Sphere::new(vec![-1.0]).is_err());
+    }
+
+    #[test]
+    fn rejects_metric_dimension_mismatches() {
+        let periodic = Periodic::isotropic(1, 1.0).unwrap();
+        assert!(periodic.dist(&[], &[]).is_err());
+        assert!(periodic.dist(&[0.0, 0.0], &[0.0, 0.0]).is_err());
+        let sphere = Sphere::new(vec![1.0, 1.0]).unwrap();
+        assert!(sphere.dist(&[0.0], &[0.0]).is_err());
+        assert!(sphere.dist(&[0.0, 0.0, 0.0], &[0.0, 0.0, 0.0]).is_err());
     }
 
     #[test]
