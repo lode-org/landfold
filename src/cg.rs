@@ -120,10 +120,23 @@ pub fn minimize_oracle<F>(oracle: F, init: ArrayView1<f64>, opts: &CgOpts) -> Cg
 where
     F: Fn(ArrayView1<f64>) -> (f64, Array1<f64>) + Send + Sync,
 {
-    let obj = Oracle::unbounded(init.len(), oracle);
-    minimize_diff(&obj, init, opts).unwrap_or_else(|_| CgReport {
+    try_minimize_oracle(oracle, init, opts).unwrap_or_else(|_| CgReport {
         value: f64::INFINITY,
         coords: init.to_owned(),
         steps: 0,
     })
+}
+
+/// Checked Polak-Ribiere + Brent minimization for projection and other
+/// callers that must distinguish an optimizer failure from a valid report.
+pub fn try_minimize_oracle<F>(
+    oracle: F,
+    init: ArrayView1<f64>,
+    opts: &CgOpts,
+) -> Result<CgReport>
+where
+    F: Fn(ArrayView1<f64>) -> (f64, Array1<f64>) + Send + Sync,
+{
+    let obj = Oracle::unbounded(init.len(), oracle);
+    minimize_diff(&obj, init, opts)
 }

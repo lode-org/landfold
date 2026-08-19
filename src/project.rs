@@ -12,7 +12,7 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::cg::{CgOpts, minimize_oracle};
+use crate::cg::{CgOpts, try_minimize_oracle};
 use crate::error::{LandfoldError, Result};
 use crate::iter::Embedding;
 use crate::metric::Metric;
@@ -193,7 +193,7 @@ pub fn project_report(
             ls_tol: 1e-9,
             ..CgOpts::default()
         };
-        let report = minimize_oracle(|x| eval(x), best.view(), &cgopts);
+        let report = try_minimize_oracle(|x| eval(x), best.view(), &cgopts)?;
         best = report.coords;
     }
 
