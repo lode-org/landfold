@@ -63,7 +63,10 @@ impl Histogram1d {
         if n == 0 || !lo.is_finite() || !hi.is_finite() || hi <= lo {
             return Err(LandfoldError::Shape("histogram needs n>0 and hi>lo"));
         }
-        let mut edges = Array1::zeros(n + 1);
+        let edge_len = n
+            .checked_add(1)
+            .ok_or(LandfoldError::Msg("histogram edge dimension overflowed".into()))?;
+        let mut edges = Array1::zeros(edge_len);
         for i in 0..=n {
             edges[i] = lo + (hi - lo) * (i as f64) / n as f64;
         }
@@ -177,8 +180,16 @@ impl Histogram2d {
         {
             return Err(LandfoldError::Shape("2d histogram bounds"));
         }
-        let mut x_edges = Array1::zeros(nx + 1);
-        let mut y_edges = Array1::zeros(ny + 1);
+        let x_edge_len = nx
+            .checked_add(1)
+            .ok_or(LandfoldError::Msg("histogram x-edge dimension overflowed".into()))?;
+        let y_edge_len = ny
+            .checked_add(1)
+            .ok_or(LandfoldError::Msg("histogram y-edge dimension overflowed".into()))?;
+        nx.checked_mul(ny)
+            .ok_or(LandfoldError::Msg("histogram cell dimension overflowed".into()))?;
+        let mut x_edges = Array1::zeros(x_edge_len);
+        let mut y_edges = Array1::zeros(y_edge_len);
         for i in 0..=nx {
             x_edges[i] = xlo + (xhi - xlo) * (i as f64) / nx as f64;
         }
@@ -836,7 +847,10 @@ pub fn coordination_histogram(
     max_cn: usize,
 ) -> Result<Histogram1d> {
     let cn = coordination_numbers(pos, cutoff)?;
-    let mut h = Histogram1d::new(-0.5, max_cn as f64 + 0.5, max_cn + 1)?;
+    let bins = max_cn
+        .checked_add(1)
+        .ok_or(LandfoldError::Msg("coordination histogram dimension overflowed".into()))?;
+    let mut h = Histogram1d::new(-0.5, max_cn as f64 + 0.5, bins)?;
     h.add_many(cn.view(), None)?;
     Ok(h)
 }
@@ -845,6 +859,13 @@ pub fn coordination_histogram(
 mod tests {
     use super::*;
     use ndarray::array;
+
+    #[test]
+    fn rejects_overflowing_histogram_dimensions() {
+        assert!(Histogram1d::new(0.0, 1.0, usize::MAX).is_err());
+        assert!(Histogram2d::new(0.0, 1.0, usize::MAX, 0.0, 1.0, 1).is_err());
+        assert!(coordination_histogram(array![[0.0, 0.0]].view(), 1.0, usize::MAX).is_err());
+    }
 
     #[test]
     fn fes_min_at_dense_bin() {
