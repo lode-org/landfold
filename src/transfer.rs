@@ -24,7 +24,7 @@ pub enum TransferMode {
 #[derive(Clone, Debug)]
 pub struct Transfer {
     mode: TransferMode,
-    /// Internal packed parameters after `set_mode` conversion.
+    /// Packed coefficients for the closed-form `f` / `df`.
     pars: Vec<f64>,
 }
 
@@ -42,7 +42,7 @@ impl Transfer {
         }
     }
 
-    /// `1 - 1/(1 + (x/sigma)^2)`. `npars = [sigma]`.
+    /// `1 - 1/(1 + (x/sigma)^2)`.
     pub fn sigmoid(sigma: f64) -> Result<Self> {
         if !(sigma > 0.0) {
             return Err(LandfoldError::TransferParams("sigmoid sigma must be > 0"));
@@ -54,7 +54,7 @@ impl Transfer {
         })
     }
 
-    /// `1 - 1/(1 + x/sigma)`. `npars = [sigma]`.
+    /// `1 - 1/(1 + x/sigma)`.
     pub fn compress(sigma: f64) -> Result<Self> {
         if !(sigma > 0.0) {
             return Err(LandfoldError::TransferParams("compress sigma must be > 0"));
@@ -65,7 +65,7 @@ impl Transfer {
         })
     }
 
-    /// Generalised sketch-map sigmoid. `npars = [sigma, a, b]`.
+    /// Generalised sigmoid of Ceriotti 2011. Arguments `(sigma, a, b)`.
     pub fn xsigmoid(sigma: f64, a: f64, b: f64) -> Result<Self> {
         if !(sigma > 0.0) {
             return Err(LandfoldError::TransferParams("xsigmoid sigma must be > 0"));
@@ -85,11 +85,9 @@ impl Transfer {
         })
     }
 
-    /// Regularised incomplete-gamma sigmoid. `npars = [sigma, n]`.
+    /// Regularised incomplete-gamma sigmoid. Arguments `(sigma, n)`.
     ///
-    /// Matches the Boost `gamma_q(n/2, (x/(sigma sqrt(2)))^2)` form when
-    /// compiled with `USE_BOOST`. Uses the continued-fraction / series
-    /// regularised-Q implementation in this crate.
+    /// `Q(n/2, (x/(sigma sqrt(2)))^2)` via a series / continued-fraction Q.
     pub fn gamma(sigma: f64, n: f64) -> Result<Self> {
         if !(sigma > 0.0) || !(n > 0.0) {
             return Err(LandfoldError::TransferParams(
@@ -106,7 +104,7 @@ impl Transfer {
         })
     }
 
-    /// `F_LD^{-1}(F_HD(x))` warp. `npars = [sigma, a_D, b_D, a_d, b_d]`.
+    /// `F_LD^{-1}(F_HD(x))` warp. Arguments `(sigma, a_D, b_D, a_d, b_d)`.
     pub fn warp(sigma: f64, a_d: f64, b_d: f64, a_ld: f64, b_ld: f64) -> Result<Self> {
         if !(sigma > 0.0) {
             return Err(LandfoldError::TransferParams("warp sigma must be > 0"));

@@ -62,7 +62,7 @@ pub fn project_one(
     opts: &ProjOpts,
 ) -> Result<Array1<f64>> {
     if emb.low.ncols() != 2 && opts.grid_coarse > 1 {
-        // Grid global min is 2-D in the C++ projector; still allow CG-only.
+        // Coarse+fine grid search is implemented for 2-D embeddings.
     }
     let n = emb.high.nrows();
     let d_hi = emb.high.ncols();
