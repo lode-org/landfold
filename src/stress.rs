@@ -543,6 +543,12 @@ mod tests {
     }
 
     #[test]
+    fn new_rejects_invalid_state() {
+        let hd = array![[0.0, -1.0], [-1.0, 0.0]];
+        assert!(Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).is_err());
+    }
+
+    #[test]
     fn coincident_query_keeps_its_objective_value() {
         let stress = Stress::new(
             array![[0.0, 1.0], [1.0, 0.0]],
