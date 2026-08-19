@@ -87,7 +87,9 @@ cargo add landfold --features readcon-chemfiles
 chemfiles conversion layer. Use `read_con_frames` or
 `read_trajectory_frames` when frame metadata is needed, and the corresponding
 `*_positions` helpers when a validated `(n_atoms, 3)` array is the algorithm
-input. All frames in a trajectory must retain the same atom IDs and count.
+input. `read_con_batch` and `read_trajectory_batch` expose the same inputs as a
+format-neutral `FrameBatch`, retaining frame IDs, atom IDs, and the length unit.
+All frames in a trajectory must retain the same atom IDs and count.
 
 HDF5 trajectory loading belongs at the Python integration boundary: use
 `readcon-chemfiles` or `chemparseplot` to ingest the trajectory, pass NumPy

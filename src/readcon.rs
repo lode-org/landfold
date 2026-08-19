@@ -10,6 +10,7 @@ use ndarray::Array2;
 use readcon_core::types::ConFrame;
 
 use crate::{LandfoldError, Result};
+use crate::trajectory::FrameBatch;
 
 /// Read all frames from a canonical readcon CON or CONVEL file.
 pub fn read_con_frames(path: &Path) -> Result<Vec<ConFrame>> {
@@ -77,6 +78,32 @@ pub fn read_con_positions(path: &Path) -> Result<Vec<Array2<f64>>> {
     frames_positions(&frames)
 }
 
+/// Read a CON/CONVEL file into the format-neutral trajectory contract.
+pub fn read_con_batch(path: &Path) -> Result<FrameBatch> {
+    let frames = read_con_frames(path)?;
+    frames_batch(&frames)
+}
+
+/// Convert readcon frames into a validated, format-neutral trajectory batch.
+pub fn frames_batch(frames: &[ConFrame]) -> Result<FrameBatch> {
+    let positions = frames_positions(frames)?;
+    let Some(first) = frames.first() else {
+        return FrameBatch::new(Vec::new(), Vec::new(), Vec::new(), None);
+    };
+    let atom_ids = first
+        .atom_ids
+        .as_slice()
+        .ok_or(LandfoldError::Shape("readcon atom IDs must be contiguous"))?
+        .to_vec();
+    let frame_ids = frames
+        .iter()
+        .enumerate()
+        .map(|(index, frame)| frame.header.frame_index().unwrap_or(index as u64))
+        .collect();
+    let length_unit = first.header.length_unit().map(str::to_owned);
+    FrameBatch::new(positions, atom_ids, frame_ids, length_unit)
+}
+
 /// Read a chemfiles-supported trajectory through readcon's canonical frame
 /// conversion layer.
 #[cfg(feature = "readcon-chemfiles")]
@@ -90,6 +117,13 @@ pub fn read_trajectory_frames(path: &Path) -> Result<Vec<ConFrame>> {
 pub fn read_trajectory_positions(path: &Path) -> Result<Vec<Array2<f64>>> {
     let frames = read_trajectory_frames(path)?;
     frames_positions(&frames)
+}
+
+/// Read a Chemfiles-supported trajectory into the format-neutral batch.
+#[cfg(feature = "readcon-chemfiles")]
+pub fn read_trajectory_batch(path: &Path) -> Result<FrameBatch> {
+    let frames = read_trajectory_frames(path)?;
+    frames_batch(&frames)
 }
 
 #[cfg(test)]
@@ -132,10 +166,26 @@ mod tests {
         drop(writer);
 
         let positions = read_con_positions(&path).expect("read CON fixture");
+        let batch = read_con_batch(&path).expect("read CON batch");
         std::fs::remove_file(path).expect("remove CON fixture");
         assert_eq!(positions.len(), 1);
         assert_eq!(positions[0][[0, 0]], 3.0);
         assert_eq!(positions[0][[1, 0]], 4.0);
+        assert_eq!(batch.frame_ids, vec![0]);
+        assert_eq!(batch.atom_ids, vec![0, 1]);
+    }
+
+    #[test]
+    fn converts_frames_into_the_format_neutral_batch() {
+        let mut first = frame(0.0);
+        first.header.set_frame_index(41);
+        let mut second = frame(2.0);
+        second.header.set_frame_index(42);
+        let batch = frames_batch(&[first, second]).expect("convert CON frames");
+        assert_eq!(batch.frame_ids, vec![41, 42]);
+        assert_eq!(batch.atom_ids, vec![0, 1]);
+        assert_eq!(batch.n_frames(), 2);
+        assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
     }
 
     #[cfg(feature = "readcon-chemfiles")]

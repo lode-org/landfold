@@ -33,6 +33,7 @@ pub mod readcon;
 pub mod replica;
 pub mod search;
 pub mod stress;
+pub mod trajectory;
 pub mod transfer;
 
 pub use anneal::AnnealOpts;
@@ -59,6 +60,7 @@ pub use project::{
 pub use replica::ReplicaOpts;
 pub use search::StochOpts;
 pub use stress::{Stress, StressEval, query_chi};
+pub use trajectory::FrameBatch;
 pub use transfer::{Transfer, TransferMode};
 
 #[cfg(feature = "python")]
