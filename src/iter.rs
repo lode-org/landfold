@@ -157,6 +157,11 @@ pub fn embed(
                 "init embedding shape must be n x lowdim",
             ));
         }
+        if p.iter().any(|value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "init embedding coordinates must be finite".into(),
+            ));
+        }
         p.to_owned()
     } else {
         classical_mds(hd.view(), opts.lowdim)?.0
@@ -177,22 +182,20 @@ pub fn embed(
     let packed = Array1::from_iter(low.iter().copied());
     let report = match &opts.solver {
         Solver::Standard => minimize(&stress, packed.view(), opts.lowdim, &opts.cg)?,
-        Solver::Stochastic(so) => minimize_stochastic(&stress, packed.view(), opts.lowdim, so),
+        Solver::Stochastic(so) => minimize_stochastic(&stress, packed.view(), opts.lowdim, so)?,
         Solver::Anneal(ao) => minimize_anneal(&stress, packed.view(), opts.lowdim, ao, &opts.cg)?,
         Solver::Replica(ro) => minimize_replica(&stress, packed.view(), opts.lowdim, ro, &opts.cg)?,
         #[cfg(feature = "highs")]
         Solver::Highs(ho) => {
             crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?
         }
-        Solver::Quench(method) => {
-            crate::cg::minimize_quench(
-                &stress,
-                packed.view(),
-                opts.lowdim,
-                &opts.cg,
-                method.clone(),
-            )?
-        }
+        Solver::Quench(method) => crate::cg::minimize_quench(
+            &stress,
+            packed.view(),
+            opts.lowdim,
+            &opts.cg,
+            method.clone(),
+        )?,
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
     for i in 0..n {
@@ -291,6 +294,23 @@ mod tests {
                 &opts,
                 None,
                 Some(array![1.0, -1.0].view()),
+                None,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_nonfinite_custom_initial_coordinates() {
+        let points = array![[0.0, 0.0], [1.0, 0.0]];
+        let init = array![[0.0, 0.0], [f64::NAN, 1.0]];
+        assert!(
+            embed(
+                points.view(),
+                &Euclid,
+                &IterOpts::default(),
+                Some(init.view()),
+                None,
                 None,
             )
             .is_err()

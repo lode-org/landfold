@@ -8,7 +8,7 @@
 
 use ndarray::ArrayView1;
 
-use crate::cg::{minimize, CgOpts, CgReport};
+use crate::cg::{CgOpts, CgReport, minimize, validate_packed_init};
 use crate::search::splitmix;
 use crate::stress::Stress;
 
@@ -38,6 +38,31 @@ impl Default for AnnealOpts {
     }
 }
 
+impl AnnealOpts {
+    pub(crate) fn validate(&self) -> crate::error::Result<()> {
+        if !self.temp_init.is_finite()
+            || !self.temp_final.is_finite()
+            || self.temp_init <= 0.0
+            || self.temp_final <= 0.0
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "annealing temperatures must be finite and > 0".into(),
+            ));
+        }
+        if !self.mc_step.is_finite() || self.mc_step < 0.0 {
+            return Err(crate::error::LandfoldError::Msg(
+                "annealing step must be finite and nonnegative".into(),
+            ));
+        }
+        if !self.adapt.is_finite() || self.adapt <= 0.0 {
+            return Err(crate::error::LandfoldError::Msg(
+                "annealing adaptation must be finite and > 0".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub(crate) fn urand(state: &mut u64) -> f64 {
     (splitmix(state) as f64) * (1.0 / ((u64::MAX as f64) + 1.0))
 }
@@ -50,6 +75,8 @@ pub fn minimize_anneal(
     opts: &AnnealOpts,
     cg: &CgOpts,
 ) -> crate::error::Result<CgReport> {
+    validate_packed_init(init, stress.n, d)?;
+    opts.validate()?;
     let nv = init.len();
     let mut pos = init.to_owned();
     let mut ev = stress.eval(pos.view(), d);
@@ -109,7 +136,7 @@ mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{array, Array};
+    use ndarray::{Array, array};
 
     #[test]
     fn anneal_lowers_or_matches_init() {
@@ -135,5 +162,25 @@ mod tests {
         };
         let rep = minimize_anneal(&s, init.view(), 2, &ao, &CgOpts::default()).unwrap();
         assert!(rep.value <= ev0.value + 1e-12);
+    }
+
+    #[test]
+    fn rejects_invalid_options() {
+        assert!(
+            AnnealOpts {
+                mc_step: f64::NAN,
+                ..AnnealOpts::default()
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            AnnealOpts {
+                adapt: 0.0,
+                ..AnnealOpts::default()
+            }
+            .validate()
+            .is_err()
+        );
     }
 }

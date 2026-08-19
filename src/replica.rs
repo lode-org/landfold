@@ -9,7 +9,7 @@
 use ndarray::ArrayView1;
 
 use crate::anneal::urand;
-use crate::cg::{minimize, CgOpts, CgReport};
+use crate::cg::{CgOpts, CgReport, minimize, validate_packed_init};
 use crate::search::splitmix;
 use crate::stress::Stress;
 
@@ -37,6 +37,31 @@ impl Default for ReplicaOpts {
             seed: 1,
             polish: true,
         }
+    }
+}
+
+impl ReplicaOpts {
+    pub(crate) fn validate(&self) -> crate::error::Result<()> {
+        if self.replicas < 2 || self.sweep == 0 {
+            return Err(crate::error::LandfoldError::Msg(
+                "replica count must be >= 2 and sweep must be > 0".into(),
+            ));
+        }
+        if !self.temp_init.is_finite()
+            || !self.temp_final.is_finite()
+            || self.temp_init <= 0.0
+            || self.temp_final <= 0.0
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "replica temperatures must be finite and > 0".into(),
+            ));
+        }
+        if !self.mc_step.is_finite() || self.mc_step < 0.0 {
+            return Err(crate::error::LandfoldError::Msg(
+                "replica step must be finite and nonnegative".into(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -74,7 +99,9 @@ pub fn minimize_replica(
     opts: &ReplicaOpts,
     cg: &CgOpts,
 ) -> crate::error::Result<CgReport> {
-    let nr = opts.replicas.max(2);
+    validate_packed_init(init, stress.n, d)?;
+    opts.validate()?;
+    let nr = opts.replicas;
     let t0 = opts.temp_init.max(1e-300);
     let t1 = opts.temp_final.max(1e-300);
     let mut temps = vec![0.0; nr];
@@ -143,7 +170,7 @@ mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{array, Array};
+    use ndarray::{Array, array};
 
     #[test]
     fn replica_lowers_or_matches_init() {
@@ -171,5 +198,25 @@ mod tests {
         };
         let rep = minimize_replica(&s, init.view(), 2, &ro, &CgOpts::default()).unwrap();
         assert!(rep.value <= ev0.value + 1e-12);
+    }
+
+    #[test]
+    fn rejects_invalid_options() {
+        assert!(
+            ReplicaOpts {
+                replicas: 1,
+                ..ReplicaOpts::default()
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            ReplicaOpts {
+                temp_init: f64::NAN,
+                ..ReplicaOpts::default()
+            }
+            .validate()
+            .is_err()
+        );
     }
 }

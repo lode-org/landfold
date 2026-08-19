@@ -34,6 +34,27 @@ impl Default for CgOpts {
     }
 }
 
+impl CgOpts {
+    pub(crate) fn validate(&self) -> Result<()> {
+        if !self.tol.is_finite() || self.tol < 0.0 {
+            return Err(LandfoldError::Msg(
+                "CG tolerance must be finite and nonnegative".into(),
+            ));
+        }
+        if !self.ls_tol.is_finite() || self.ls_tol <= 0.0 {
+            return Err(LandfoldError::Msg(
+                "CG line-search tolerance must be finite and > 0".into(),
+            ));
+        }
+        if !self.istep.is_finite() || self.istep <= 0.0 {
+            return Err(LandfoldError::Msg(
+                "CG initial step must be finite and > 0".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CgReport {
     pub value: f64,
@@ -71,6 +92,7 @@ pub fn minimize(
     d: usize,
     opts: &CgOpts,
 ) -> Result<CgReport> {
+    validate_packed_init(init, stress.n, d)?;
     let obj = ChiObjective::new(stress, d);
     minimize_diff(&obj, init, opts)
 }
@@ -93,10 +115,28 @@ pub fn minimize_with<O>(
 where
     O: DifferentiableObjective<f64> + ?Sized,
 {
+    opts.validate()?;
+    if init.iter().any(|value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "optimizer coordinates must be finite".into(),
+        ));
+    }
     let (ctrl, ls) = control(opts);
     quench_core::minimize_method(obj, init.to_owned(), &ctrl, method, ls)
         .map(to_report)
         .map_err(|e| LandfoldError::Optimize(e.to_string()))
+}
+
+pub(crate) fn validate_packed_init(init: ArrayView1<'_, f64>, n: usize, d: usize) -> Result<()> {
+    if d == 0 || init.len() != n.saturating_mul(d) {
+        return Err(LandfoldError::Shape("optimizer coordinates shape"));
+    }
+    if init.iter().any(|value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "optimizer coordinates must be finite".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Packed χ through a quench method. `Solver::Quench` uses this path.
@@ -107,6 +147,7 @@ pub fn minimize_quench(
     opts: &CgOpts,
     method: Method,
 ) -> Result<CgReport> {
+    validate_packed_init(init, stress.n, d)?;
     let obj = ChiObjective::new(stress, d);
     minimize_with(&obj, init, opts, method)
 }
@@ -129,14 +170,35 @@ where
 
 /// Checked Polak-Ribiere + Brent minimization for projection and other
 /// callers that must distinguish an optimizer failure from a valid report.
-pub fn try_minimize_oracle<F>(
-    oracle: F,
-    init: ArrayView1<f64>,
-    opts: &CgOpts,
-) -> Result<CgReport>
+pub fn try_minimize_oracle<F>(oracle: F, init: ArrayView1<f64>, opts: &CgOpts) -> Result<CgReport>
 where
     F: Fn(ArrayView1<f64>) -> (f64, Array1<f64>) + Send + Sync,
 {
     let obj = Oracle::unbounded(init.len(), oracle);
     minimize_diff(&obj, init, opts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_invalid_options() {
+        assert!(
+            CgOpts {
+                tol: f64::NAN,
+                ..CgOpts::default()
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            CgOpts {
+                istep: 0.0,
+                ..CgOpts::default()
+            }
+            .validate()
+            .is_err()
+        );
+    }
 }
