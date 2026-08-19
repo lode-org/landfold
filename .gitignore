@@ -20,3 +20,4 @@ rustc-ice-*.txt
 .pixi/
 *.svg
 !docs/**/*.svg
+!examples/**/*.svg
