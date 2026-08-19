@@ -64,14 +64,13 @@ pub struct Periodic {
 }
 
 impl Periodic {
-    pub fn new(periods: Vec<f64>) -> Self {
-        Self { periods }
+    pub fn new(periods: Vec<f64>) -> Result<Self> {
+        validate_periods(&periods)?;
+        Ok(Self { periods })
     }
 
-    pub fn isotropic(dim: usize, period: f64) -> Self {
-        Self {
-            periods: vec![period; dim],
-        }
+    pub fn isotropic(dim: usize, period: f64) -> Result<Self> {
+        Self::new(vec![period; dim])
     }
 }
 
@@ -110,9 +109,20 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(periods: Vec<f64>) -> Self {
-        Self { periods }
+    pub fn new(periods: Vec<f64>) -> Result<Self> {
+        validate_periods(&periods)?;
+        Ok(Self { periods })
     }
+}
+
+fn validate_periods(periods: &[f64]) -> Result<()> {
+    if periods.is_empty() || periods.iter().any(|&p| !p.is_finite() || p <= 0.0) {
+        return Err(LandfoldError::PeriodSize {
+            got: periods.len(),
+            expected: 1,
+        });
+    }
+    Ok(())
 }
 
 impl Metric for Sphere {
@@ -190,18 +200,26 @@ mod tests {
 
     #[test]
     fn pbc_wraps() {
-        let m = Periodic::isotropic(1, 1.0);
+        let m = Periodic::isotropic(1, 1.0).unwrap();
         assert_relative_eq!(m.dist(&[0.05], &[0.95]).unwrap(), 0.1, epsilon = 1e-14);
     }
 
     #[test]
     fn sphere_identical_is_zero() {
-        let m = Sphere::new(vec![1.0, 1.0]);
+        let m = Sphere::new(vec![1.0, 1.0]).unwrap();
         assert_relative_eq!(
             m.dist(&[0.1, 0.2], &[0.1, 0.2]).unwrap(),
             0.0,
             epsilon = 1e-14
         );
+    }
+
+    #[test]
+    fn rejects_invalid_periods() {
+        assert!(Periodic::new(vec![0.0]).is_err());
+        assert!(Periodic::new(vec![f64::NAN]).is_err());
+        assert!(Sphere::new(Vec::new()).is_err());
+        assert!(Sphere::new(vec![-1.0]).is_err());
     }
 
     #[test]

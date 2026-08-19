@@ -286,17 +286,14 @@ fn main() -> landfold::Result<()> {
             } else {
                 None
             };
-            let euclid = Euclid;
-            let peri = Periodic::isotropic(high, period);
-            let sph = Sphere::new(vec![sphere; high]);
-            let metric: &dyn Metric = if dot {
-                &landfold::Dot
+            let metric: Box<dyn Metric> = if dot {
+                Box::new(landfold::Dot)
             } else if sphere != 0.0 {
-                &sph
+                Box::new(Sphere::new(vec![sphere; high])?)
             } else if period != 0.0 {
-                &peri
+                Box::new(Periodic::isotropic(high, period)?)
             } else {
-                &euclid
+                Box::new(Euclid)
             };
             let pre = if similarity {
                 Some(set.points.view())
@@ -305,7 +302,7 @@ fn main() -> landfold::Result<()> {
             };
             let (emb, _) = embed(
                 set.points.view(),
-                metric,
+                metric.as_ref(),
                 &opts,
                 init.as_ref().map(|p| p.points.view()),
                 set.weights.as_ref().map(|w| w.view()),
@@ -341,22 +338,20 @@ fn main() -> landfold::Result<()> {
             )?;
             let t_hd = Transfer::from_cli(&fun_hd)?;
             let t_ld = Transfer::from_cli(&fun_ld)?;
-            let euclid = Euclid;
-            let peri = Periodic::isotropic(high, period);
-            let metric: &dyn Metric = if dot {
-                &Dot
+            let metric: Box<dyn Metric> = if dot {
+                Box::new(Dot)
             } else if period != 0.0 {
-                &peri
+                Box::new(Periodic::isotropic(high, period)?)
             } else {
-                &euclid
+                Box::new(Euclid)
             };
             let emb = Embedding::from_landmarks(
-                hi.points, lo.points, metric, t_hd, t_ld, imix, hi.weights,
+                hi.points, lo.points, metric.as_ref(), t_hd, t_ld, imix, hi.weights,
             )?;
             let mut po = ProjOpts::from_cli(&grid)?;
             po.cg_steps = refine;
             let q = read_points(io::stdin().lock(), high, false)?;
-            let reports = project_many_report(&emb, q.points.view(), metric, &po)?;
+            let reports = project_many_report(&emb, q.points.view(), metric.as_ref(), &po)?;
             let mut out = io::stdout().lock();
             for r in &reports {
                 for h in 0..r.coords.len() {
@@ -383,18 +378,16 @@ fn main() -> landfold::Result<()> {
             wgamma,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
-            let euclid = Euclid;
-            let peri = Periodic::isotropic(high, period);
-            let metric: &dyn Metric = if dot {
-                &Dot
+            let metric: Box<dyn Metric> = if dot {
+                Box::new(Dot)
             } else if period != 0.0 {
-                &peri
+                Box::new(Periodic::isotropic(high, period)?)
             } else {
-                &euclid
+                Box::new(Euclid)
             };
             let mut lm = farthest_point(
                 set.points.view(),
-                metric,
+                metric.as_ref(),
                 nland,
                 set.weights.as_ref().map(|w| w.view()),
                 seed,
@@ -402,7 +395,7 @@ fn main() -> landfold::Result<()> {
             if voronoi {
                 lm.assign_voronoi(
                     set.points.view(),
-                    metric,
+                    metric.as_ref(),
                     set.weights.as_ref().map(|w| w.view()),
                     wgamma,
                 )?;
@@ -422,7 +415,7 @@ fn main() -> landfold::Result<()> {
             let d = if period == 0.0 {
                 pairwise_euclid(set.points.view())?
             } else {
-                pairwise(set.points.view(), &Periodic::isotropic(high, period))?
+                pairwise(set.points.view(), &Periodic::isotropic(high, period)?)?
             };
             write_points(&mut io::stdout().lock(), &d, None)?;
         }
@@ -433,11 +426,13 @@ fn main() -> landfold::Result<()> {
             distances,
         } => {
             let set = read_points(io::stdin().lock(), high, false)?;
-            let euclid = Euclid;
-            let peri = Periodic::isotropic(high, period);
-            let metric: &dyn Metric = if period != 0.0 { &peri } else { &euclid };
+            let metric: Box<dyn Metric> = if period != 0.0 {
+                Box::new(Periodic::isotropic(high, period)?)
+            } else {
+                Box::new(Euclid)
+            };
             let (emb, report) =
-                mds_from_points(set.points.view(), metric, low, MdsMode::Classical)?;
+                mds_from_points(set.points.view(), metric.as_ref(), low, MdsMode::Classical)?;
             if distances {
                 write_points(
                     &mut io::stdout().lock(),

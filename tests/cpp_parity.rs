@@ -149,7 +149,7 @@ fn cpp_oracle_goldens_exist_and_match() {
         epsilon = METRIC_ABS
     );
     let p = blocks["metric pbc_wrap"][0][0];
-    let pbc = Periodic::isotropic(1, 1.0);
+    let pbc = Periodic::isotropic(1, 1.0).unwrap();
     assert_relative_eq!(pbc.dist(&[0.05], &[0.95]).unwrap(), p, epsilon = METRIC_ABS);
     let d = blocks["metric dot_self"][0][0];
     let u = [1.0 / 2.0_f64.sqrt(), 1.0 / 2.0_f64.sqrt()];
