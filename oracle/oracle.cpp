@@ -1,4 +1,6 @@
-/* Dump goldens from NLDRFunction / NLDRMetric / NLDRITERChi (interpol off). */
+/* Dump goldens from NLDRFunction / NLDRMetric / NLDRMDS / NLDRITERChi
+ * (interpol off). MDS block values are i<j Euclidean distances of the
+ * private embedding p (invariant to eigenvector sign). */
 #include "dimreduce.hpp"
 #include <cmath>
 #include <cstdio>
@@ -13,6 +15,50 @@ static void dump_xfer(const char* tag, NLDRFunction& fn) {
         double v = 0.0, d = 0.0;
         fn.fdf(x, v, d);
         std::printf("%.17e %.17e %.17e\n", x, v, d);
+    }
+    std::printf("END\n");
+}
+
+/* Upper-triangle i<j pairwise distances under a metric. */
+static void dump_pair(const char* tag, NLDRMetric& met, const double* data,
+                      unsigned long n, unsigned long D) {
+    std::printf("BEGIN pair %s\n", tag);
+    for (unsigned long i = 0; i < n; ++i) {
+        for (unsigned long j = i + 1; j < n; ++j) {
+            const double* a = data + i * D;
+            const double* b = data + j * D;
+            std::printf("%.17e\n", met.dist(a, b, D));
+        }
+    }
+    std::printf("END\n");
+}
+
+/* Torgerson MDS: p is private, so dump i<j Euclidean distances of p.
+ * Those distances are invariant to eigenvector sign flips. */
+static void dump_mds(const char* tag, const double* data, unsigned long n,
+                     unsigned long D, unsigned long lowdim) {
+    FMatrix<double> pts(n, D, 0.0);
+    for (unsigned long i = 0; i < n; ++i)
+        for (unsigned long h = 0; h < D; ++h) pts(i, h) = data[i * D + h];
+
+    NLDRMetricEuclid eu;
+    NLDRMDSOptions opts;
+    opts.metric = &eu;
+    opts.mode = MDS;
+    opts.lowdim = lowdim;
+    opts.verbose = false;
+    NLDRProjection proj;
+    NLDRMDSReport report;
+    NLDRMDS(pts, proj, opts, report);
+
+    std::valarray<std::valarray<double> > nP, np;
+    proj.get_points(nP, np);
+
+    std::printf("BEGIN mds %s\n", tag);
+    for (unsigned long i = 0; i < n; ++i) {
+        for (unsigned long j = i + 1; j < n; ++j) {
+            std::printf("%.17e\n", eu.dist(&np[i][0], &np[j][0], lowdim));
+        }
     }
     std::printf("END\n");
 }
@@ -109,6 +155,17 @@ int main() {
     const double pa[] = {0.05};
     const double pb[] = {0.95};
     std::printf("BEGIN metric pbc_wrap\n%.17e\nEND\n", pbc.dist(pa, pb, 1));
+
+    const double tri[] = {0.0, 0.0, 1.0, 0.0, 0.0, 1.0};
+    dump_pair("euclid_triangle", eu, tri, 3, 2);
+    dump_mds("torgerson_triangle", tri, 3, 2, 2);
+
+    const double tetra[] = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    dump_pair("euclid_tetra", eu, tetra, 4, 3);
+    dump_mds("torgerson_tetra", tetra, 4, 3, 2);
+
+    const double pbc3[] = {0.05, 0.50, 0.95};
+    dump_pair("pbc_3pt", pbc, pbc3, 3, 1);
 
     const double u[] = {1.0 / std::sqrt(2.0), 1.0 / std::sqrt(2.0)};
     NLDRMetricDot dot;
