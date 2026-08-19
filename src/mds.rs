@@ -35,16 +35,22 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
     if dist.ncols() != n {
         return Err(LandfoldError::Shape("MDS distance matrix must be square"));
     }
-    if dist.iter().any(|&value| !value.is_finite()) {
+    if dist.iter().any(|&value| !value.is_finite() || value < 0.0) {
         return Err(LandfoldError::Msg(
-            "MDS distance matrix must be finite".into(),
+            "MDS distance matrix must be finite and nonnegative".into(),
         ));
     }
     let mut d2 = vec![0.0; n * n];
     for i in 0..n {
         for j in 0..n {
             let d = dist[(i, j)];
-            d2[i * n + j] = d * d;
+            let squared = d * d;
+            if !squared.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "MDS distance squaring overflowed".into(),
+                ));
+            }
+            d2[i * n + j] = squared;
         }
     }
     let inv_n = 1.0 / n as f64;
@@ -385,5 +391,7 @@ mod tests {
         assert!(classical_mds(array![[0.0, 1.0], [1.0, 0.0], [2.0, 3.0]].view(), 1).is_err());
         assert!(classical_mds(array![[0.0, f64::NAN], [f64::NAN, 0.0]].view(), 1).is_err());
         assert!(randomized_mds(array![[0.0, f64::INFINITY], [1.0, 0.0]].view(), 1, 2, 0).is_err());
+        assert!(classical_mds(array![[0.0, -1.0], [-1.0, 0.0]].view(), 1).is_err());
+        assert!(randomized_mds(array![[0.0, 1.0e200], [1.0e200, 0.0]].view(), 1, 2, 0).is_err());
     }
 }
