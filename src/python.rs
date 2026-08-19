@@ -62,7 +62,7 @@ fn embed_euclid<'py>(
 
 /// Return an embedding together with the metadata needed by result consumers.
 #[pyfunction]
-#[pyo3(signature = (points, lowdim=2, fun_hd="identity", fun_ld="identity", imix=0.0, steps=100))]
+#[pyo3(signature = (points, lowdim=2, fun_hd="identity", fun_ld="identity", imix=0.0, steps=100, metadata=None))]
 fn embed_euclid_result<'py>(
     py: Python<'py>,
     points: PyReadonlyArray2<'py, f64>,
@@ -71,6 +71,7 @@ fn embed_euclid_result<'py>(
     fun_ld: &str,
     imix: f64,
     steps: usize,
+    metadata: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let emb = embedding_options(copy_f64_2d(points), lowdim, fun_hd, fun_ld, imix, steps)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -87,12 +88,12 @@ fn embed_euclid_result<'py>(
     result.set_item("fun_hd", fun_hd)?;
     result.set_item("fun_ld", fun_ld)?;
     result.set_item("imix", imix)?;
-    result.set_item("units", py.None())?;
+    result.set_item("metadata", metadata.unwrap_or_else(|| PyDict::new(py)))?;
     Ok(result)
 }
 
 #[pyfunction]
-#[pyo3(signature = (high, low, query, fun_hd="identity", fun_ld="identity", imix=0.0, gridw=1.0, grid_coarse=21, grid_fine=201, refine=0))]
+#[pyo3(signature = (high, low, query, fun_hd="identity", fun_ld="identity", imix=0.0, gridw=1.0, grid_coarse=21, grid_fine=201, refine=0, metadata=None))]
 #[allow(clippy::too_many_arguments)]
 fn project_euclid<'py>(
     py: Python<'py>,
@@ -155,6 +156,7 @@ fn project_euclid_result<'py>(
     grid_coarse: usize,
     grid_fine: usize,
     refine: usize,
+    metadata: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let high = copy_f64_2d(high);
     let low = copy_f64_2d(low);
@@ -199,7 +201,7 @@ fn project_euclid_result<'py>(
     result.set_item("fun_hd", fun_hd)?;
     result.set_item("fun_ld", fun_ld)?;
     result.set_item("imix", imix)?;
-    result.set_item("units", py.None())?;
+    result.set_item("metadata", metadata.unwrap_or_else(|| PyDict::new(py)))?;
     Ok(result)
 }
 
@@ -218,7 +220,7 @@ fn farthest_euclid<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (xy, nx=80, ny=80, kt=1.0, pad=0.05))]
+#[pyo3(signature = (xy, nx=80, ny=80, kt=1.0, pad=0.05, metadata=None))]
 fn fes_xy<'py>(
     py: Python<'py>,
     xy: PyReadonlyArray2<'py, f64>,
@@ -255,6 +257,7 @@ fn fes_xy_result<'py>(
     ny: usize,
     kt: f64,
     pad: f64,
+    metadata: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pts = copy_f64_2d(xy);
     let fes = fes_from_points(pts.view(), nx, ny, kt, pad, None)
@@ -269,7 +272,7 @@ fn fes_xy_result<'py>(
     result.set_item("free_energy", to_pyarray2(py, f))?;
     result.set_item("density", to_pyarray2(py, fes.rho))?;
     result.set_item("kt", kt)?;
-    result.set_item("units", py.None())?;
+    result.set_item("metadata", metadata.unwrap_or_else(|| PyDict::new(py)))?;
     Ok(result)
 }
 
