@@ -7,7 +7,7 @@
 use ndarray::{Array1, Array2, ArrayView2};
 
 use crate::error::Result;
-use crate::metric::Metric;
+use crate::metric::{Metric, validate_distance};
 
 fn validate_metric_dim(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<()> {
     match metric.dim() {
@@ -47,16 +47,18 @@ pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f
         let packed: Vec<f64> = points.iter().copied().collect();
         let rows: Vec<Vec<f64>> = (0..n)
             .into_par_iter()
-            .map(|i| {
+            .map(|i| -> Result<Vec<f64>> {
                 let a = &packed[i * d..(i + 1) * d];
                 let mut row = vec![0.0; i];
                 for j in 0..i {
                     let b = &packed[j * d..(j + 1) * d];
-                    row[j] = metric.dist_unchecked(a, b);
+                    let distance = metric.dist_unchecked(a, b);
+                    validate_distance(distance)?;
+                    row[j] = distance;
                 }
-                row
+                Ok(row)
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
         for i in 0..n {
             for j in 0..i {
                 let v = rows[i][j];
@@ -80,6 +82,7 @@ pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f
                     bj[k] = v;
                 }
                 let v = metric.dist_unchecked(&ai, &bj);
+                validate_distance(v)?;
                 out[(i, j)] = v;
                 out[(j, i)] = v;
             }
@@ -101,6 +104,12 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
         .map(|r| r.iter().map(|x| x * x).sum())
         .collect();
     let gram = points.dot(&points.t());
+    if norms.iter().any(|&value| !value.is_finite()) || gram.iter().any(|&value| !value.is_finite())
+    {
+        return Err(crate::error::LandfoldError::Msg(
+            "Euclidean distance calculation overflowed".into(),
+        ));
+    }
     let mut out = Array2::<f64>::zeros((n, n));
     #[cfg(feature = "parallel")]
     {
@@ -185,6 +194,26 @@ mod tests {
     fn rejects_nonfinite_points() {
         let points = array![[0.0, f64::NAN], [1.0, 0.0]];
         assert!(pairwise(points.view(), &Euclid).is_err());
+        assert!(pairwise_euclid(points.view()).is_err());
+    }
+
+    struct InvalidMetric;
+
+    impl Metric for InvalidMetric {
+        fn dist_unchecked(&self, _a: &[f64], _b: &[f64]) -> f64 {
+            f64::NAN
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_metric_distances() {
+        let points = array![[0.0], [1.0]];
+        assert!(pairwise(points.view(), &InvalidMetric).is_err());
+    }
+
+    #[test]
+    fn rejects_euclidean_overflow() {
+        let points = array![[1.0e200, 0.0], [0.0, 0.0]];
         assert!(pairwise_euclid(points.view()).is_err());
     }
 }

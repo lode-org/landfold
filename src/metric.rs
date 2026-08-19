@@ -29,7 +29,9 @@ pub trait Metric: Send + Sync {
             }
             _ => {}
         }
-        Ok(self.dist_unchecked(a, b))
+        let distance = self.dist_unchecked(a, b);
+        validate_distance(distance)?;
+        Ok(distance)
     }
 
     fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64;
@@ -45,6 +47,15 @@ pub trait Metric: Send + Sync {
             c[i] = a[i] - b[i];
         }
     }
+}
+
+pub(crate) fn validate_distance(distance: f64) -> Result<()> {
+    if !distance.is_finite() || distance < 0.0 {
+        return Err(LandfoldError::Msg(
+            "metric distance must be finite and nonnegative".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -245,5 +256,22 @@ mod tests {
         let m = Dot;
         let a = [1.0_f64 / 2.0_f64.sqrt(); 2];
         assert_relative_eq!(m.dist(&a, &a).unwrap(), 0.0, epsilon = 1e-14);
+    }
+
+    struct InvalidMetric {
+        distance: f64,
+    }
+
+    impl Metric for InvalidMetric {
+        fn dist_unchecked(&self, _a: &[f64], _b: &[f64]) -> f64 {
+            self.distance
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_metric_distances() {
+        for distance in [f64::NAN, f64::INFINITY, -1.0] {
+            assert!(InvalidMetric { distance }.dist(&[0.0], &[1.0]).is_err());
+        }
     }
 }

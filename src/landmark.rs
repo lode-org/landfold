@@ -57,7 +57,7 @@ pub fn farthest_point(
     let start = seed % n;
     chosen.push(start);
     selected[start] = true;
-    update_min_d(points, metric, start, &mut min_d);
+    update_min_d(points, metric, start, &mut min_d)?;
     while chosen.len() < k {
         let mut best = None;
         let mut best_s = f64::NEG_INFINITY;
@@ -77,7 +77,7 @@ pub fn farthest_point(
         })?;
         chosen.push(best);
         selected[best] = true;
-        update_min_d(points, metric, best, &mut min_d);
+        update_min_d(points, metric, best, &mut min_d)?;
     }
     let mut lp = Array2::<f64>::zeros((k, d));
     let mut lw = Array1::<f64>::zeros(k);
@@ -157,7 +157,7 @@ pub fn voronoi_weights(
             for (h, value) in a.iter_mut().enumerate().take(d) {
                 *value = landmarks.points[(i, h)];
             }
-            let dist = metric.dist_unchecked(&a, &b);
+            let dist = metric.dist(&a, &b)?;
             if dist < best_d {
                 best_d = dist;
                 best_i = i;
@@ -189,7 +189,12 @@ impl Landmarks {
     }
 }
 
-fn update_min_d(points: ArrayView2<f64>, metric: &dyn Metric, src: usize, min_d: &mut [f64]) {
+fn update_min_d(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    src: usize,
+    min_d: &mut [f64],
+) -> Result<()> {
     let d = points.ncols();
     let mut a = vec![0.0; d];
     let mut b = vec![0.0; d];
@@ -200,11 +205,12 @@ fn update_min_d(points: ArrayView2<f64>, metric: &dyn Metric, src: usize, min_d:
         for h in 0..d {
             b[h] = points[(i, h)];
         }
-        let dist = metric.dist_unchecked(&a, &b);
+        let dist = metric.dist(&a, &b)?;
         if dist < min_d[i] {
             min_d[i] = dist;
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

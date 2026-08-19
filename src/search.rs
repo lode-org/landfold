@@ -100,7 +100,7 @@ pub fn minimize_stochastic(
             let (lo, hi) = if i > j { (j, i) } else { (i, j) };
             let xi = &pos.as_slice().unwrap()[lo * d..(lo + 1) * d];
             let xj = &pos.as_slice().unwrap()[hi * d..(hi + 1) * d];
-            let ld = metric.dist_unchecked(xi, xj);
+            let ld = metric.dist(xi, xj)?;
             let (fld, dfld) = stress.tfun_ld.fdf(ld);
             let wij = stress.weights.as_ref().map(|w| w[(lo, hi)]).unwrap_or(1.0);
             tw += wij;

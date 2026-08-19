@@ -131,7 +131,7 @@ pub fn project_report(
         for (h, value) in landmark.iter_mut().enumerate().take(d_hi) {
             *value = emb.high[(i, h)];
         }
-        let d = metric.dist_unchecked(&qslice, &landmark);
+        let d = metric.dist(&qslice, &landmark)?;
         hd_row[i] = d;
         if d < nearest {
             nearest = d;
