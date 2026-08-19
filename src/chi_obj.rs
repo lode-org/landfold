@@ -113,17 +113,17 @@ mod tests {
         let obj = ChiObjective::new(&s, 2);
         let mut start = coords.clone();
         start[0] += 0.3;
-        let report = quench_core::minimize_method(
+        let report = xtsci_optimize::minimize_method(
             &obj,
             start,
-            &quench_core::Control {
+            &xtsci_optimize::Control {
                 maxiter: 80,
                 gtol: 1e-10,
                 istep: 0.1,
                 maxmove: None,
             },
-            quench_core::Method::lbfgs(),
-            quench_core::LineSearch::Brent {
+            xtsci_optimize::Method::lbfgs(),
+            xtsci_optimize::LineSearch::Brent {
                 maxiter: 40,
                 tol: 1e-12,
             },

@@ -73,7 +73,7 @@ enum Cmd {
         /// Bound-constrained HiGHS sequential LP (needs --features highs)
         #[arg(long)]
         highs: bool,
-        /// Unconstrained L-BFGS quench (extra arm; same ChiObjective)
+        /// xtsci-optimize L-BFGS (extra arm; same ChiObjective)
         #[arg(long)]
         lbfgs: bool,
         /// Box bounds `lo,hi` for `--highs`
@@ -259,7 +259,7 @@ fn main() -> landfold::Result<()> {
                         ));
                     }
                 } else if lbfgs {
-                    Solver::Quench(quench_core::Method::lbfgs())
+                    Solver::Xtsci(xtsci_optimize::Method::lbfgs())
                 } else if replica {
                     Solver::Replica(ReplicaOpts {
                         steps,

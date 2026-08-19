@@ -1,11 +1,11 @@
-//! Polak-Ribiere conjugate gradient with Brent line search, via quench-core.
+//! Polak-Ribiere conjugate gradient with Brent line search, via xtsci-optimize.
 //!
 //! Direction and β are Nocedal and Wright algorithm 5.4 / 5.44 (Polak and
 //! Ribiere, *Rev. Fr. Inform. Rech. Opér.* **16**, 35 (1969)). Line search
 //! is Brent (*Algorithms for Minimization without Derivatives*, 1973).
 
 use ndarray::{Array1, ArrayView1};
-use quench_core::{Control, LineSearch, Method, Oracle};
+use xtsci_optimize::{Control, LineSearch, Method, Oracle};
 
 use eindir_core::DifferentiableObjective;
 
@@ -77,7 +77,7 @@ fn control(opts: &CgOpts) -> (Control, LineSearch) {
     )
 }
 
-fn to_report(r: quench_core::Report) -> CgReport {
+fn to_report(r: xtsci_optimize::Report) -> CgReport {
     CgReport {
         value: r.value,
         coords: r.coords,
@@ -105,7 +105,7 @@ where
     minimize_with(obj, init, opts, Method::polak_ribiere())
 }
 
-/// Any quench [`Method`] on χ. landfold extra arms (L-BFGS, BFGS, ...) use this.
+/// Any xtsci-optimize [`Method`] on χ. landfold extra arms (L-BFGS, BFGS, ...) use this.
 pub fn minimize_with<O>(
     obj: &O,
     init: ArrayView1<f64>,
@@ -122,7 +122,7 @@ where
         ));
     }
     let (ctrl, ls) = control(opts);
-    quench_core::minimize_method(obj, init.to_owned(), &ctrl, method, ls)
+    xtsci_optimize::minimize_method(obj, init.to_owned(), &ctrl, method, ls)
         .map(to_report)
         .map_err(|e| LandfoldError::Optimize(e.to_string()))
 }
@@ -139,8 +139,8 @@ pub(crate) fn validate_packed_init(init: ArrayView1<'_, f64>, n: usize, d: usize
     Ok(())
 }
 
-/// Packed χ through a quench method. `Solver::Quench` uses this path.
-pub fn minimize_quench(
+/// Packed χ through xtsci-optimize. `Solver::Xtsci` uses this path.
+pub fn minimize_xtsci(
     stress: &Stress,
     init: ArrayView1<f64>,
     d: usize,

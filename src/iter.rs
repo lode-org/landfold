@@ -23,8 +23,8 @@ pub enum Solver {
     /// Bound-constrained sequential LP via HiGHS. Extra arm.
     #[cfg(feature = "highs")]
     Highs(crate::highs_slp::HighsOpts),
-    /// Unconstrained quench (L-BFGS, BFGS, SR1, Adam, other NLCG). Extra arm.
-    Quench(quench_core::Method),
+    /// xtsci-optimize (L-BFGS, BFGS, SR1, Adam, other NLCG). Extra arm.
+    Xtsci(xtsci_optimize::Method),
 }
 
 #[derive(Clone, Debug)]
@@ -189,7 +189,7 @@ pub fn embed(
         Solver::Highs(ho) => {
             crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?
         }
-        Solver::Quench(method) => crate::cg::minimize_quench(
+        Solver::Xtsci(method) => crate::cg::minimize_xtsci(
             &stress,
             packed.view(),
             opts.lowdim,
