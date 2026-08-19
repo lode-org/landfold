@@ -160,6 +160,20 @@ mod tests {
     }
 
     #[test]
+    fn rejects_overflowed_transfer_during_search() {
+        let hd = Array2::from_shape_vec((2, 2), vec![0.0, 1.0, 1.0, 0.0]).unwrap();
+        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None).unwrap();
+        stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        let opts = StochOpts {
+            steps: 1,
+            batch: 1,
+            seed: 1,
+            step0: 0.1,
+        };
+        assert!(minimize_stochastic(&stress, array![0.0, 1.0e154].view(), 1, &opts).is_err());
+    }
+
+    #[test]
     fn handles_empty_and_singleton_point_sets() {
         for n in [0, 1] {
             let hd = Array2::zeros((n, n));
