@@ -16,17 +16,11 @@ pub struct Landmarks {
     pub weights: Array1<f64>,
 }
 
-pub fn farthest_point(
+fn validate_landmark_inputs(
     points: ArrayView2<f64>,
     metric: &dyn Metric,
-    k: usize,
     weights: Option<ArrayView1<f64>>,
-    seed: usize,
-) -> Result<Landmarks> {
-    let n = points.nrows();
-    if k == 0 || k > n {
-        return Err(LandfoldError::LowDim { low: k, high: n });
-    }
+) -> Result<()> {
     if points.iter().any(|&value| !value.is_finite()) {
         return Err(LandfoldError::Msg(
             "landmark coordinates must be finite".into(),
@@ -41,7 +35,7 @@ pub fn farthest_point(
         });
     }
     if let Some(w) = weights {
-        if w.len() != n {
+        if w.len() != points.nrows() {
             return Err(LandfoldError::Shape("landmark weight length"));
         }
         if w.iter().any(|&value| !value.is_finite() || value < 0.0) {
@@ -50,6 +44,21 @@ pub fn farthest_point(
             ));
         }
     }
+    Ok(())
+}
+
+pub fn farthest_point(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    seed: usize,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    if k == 0 || k > n {
+        return Err(LandfoldError::LowDim { low: k, high: n });
+    }
+    validate_landmark_inputs(points, metric, weights)?;
     let mut min_d = vec![f64::INFINITY; n];
     let mut selected = vec![false; n];
     let mut chosen = Vec::with_capacity(k);
@@ -85,11 +94,7 @@ pub fn farthest_point_ifirst(
     if ifirst == 0 {
         return farthest_point(points, metric, k, weights, 0);
     }
-    if points.iter().any(|&value| !value.is_finite()) {
-        return Err(LandfoldError::Msg(
-            "landmark coordinates must be finite".into(),
-        ));
-    }
+    validate_landmark_inputs(points, metric, weights)?;
     let pin = ifirst.min(k).min(n);
     let mut min_d = vec![f64::INFINITY; n];
     let mut selected = vec![false; n];
@@ -337,6 +342,27 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn pinned_landmarks_validate_metric_and_weight_shapes() {
+        let pts = array![[0.0], [1.0], [2.0]];
+        assert!(farthest_point_ifirst(
+            pts.view(),
+            &crate::metric::Periodic::isotropic(2, 1.0).unwrap(),
+            2,
+            None,
+            1,
+        )
+        .is_err());
+        assert!(farthest_point_ifirst(
+            pts.view(),
+            &Euclid,
+            2,
+            Some(array![1.0].view()),
+            1,
+        )
+        .is_err());
     }
 
     #[test]
