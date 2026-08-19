@@ -59,6 +59,29 @@ cargo tree -e features --features python
 
 `landfold --help` records the pin. The CLI itself does not link pyo3.
 
+## readcon and chemparseplot
+
+The optional `readcon` feature reads canonical CON/CONVEL files through
+`readcon-core` while keeping complete `ConFrame` values available for
+headers, units, atom IDs, and optional sections:
+
+```
+cargo add landfold --features readcon
+cargo add landfold --features readcon-chemfiles
+```
+
+`readcon-chemfiles` adds foreign trajectory ingress through readcon's
+chemfiles conversion layer. Use `read_con_frames` or
+`read_trajectory_frames` when frame metadata is needed, and the corresponding
+`*_positions` helpers when a validated `(n_atoms, 3)` array is the algorithm
+input. All frames in a trajectory must retain the same atom IDs and count.
+
+HDF5 trajectory loading belongs at the Python integration boundary: use
+`readcon-chemfiles` or `chemparseplot` to ingest the trajectory, pass NumPy
+coordinate arrays to landfold's existing Python functions, and retain source
+frame IDs and units in the surrounding result object. Landfold does not make
+HDF5 a required Rust dependency or replace CON as the canonical frame format.
+
 ## License
 
 MIT. See `CITATION.cff` for the papers to cite with the method.

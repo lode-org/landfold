@@ -20,6 +20,11 @@ pub fn read_con_frames(path: &Path) -> Result<Vec<ConFrame>> {
 /// Convert one readcon frame to an `(n_atoms, 3)` array in frame atom order.
 pub fn frame_positions(frame: &ConFrame) -> Result<Array2<f64>> {
     let n_atoms = frame.positions.nrows();
+    if frame.atom_ids.len() != n_atoms {
+        return Err(LandfoldError::Shape(
+            "readcon positions and atom IDs have different lengths",
+        ));
+    }
     let mut values = Vec::with_capacity(n_atoms * 3);
     for atom in 0..n_atoms {
         let position = frame.positions.as_f64_row(atom);
