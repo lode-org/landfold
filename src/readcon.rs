@@ -120,4 +120,21 @@ mod tests {
         let error = frames_positions(&[first, second]).expect_err("identity must be stable");
         assert!(error.to_string().contains("different atom IDs"));
     }
+
+    #[test]
+    fn reads_positions_from_a_con_file() {
+        use readcon_core::writer::ConFrameWriter;
+
+        let path =
+            std::env::temp_dir().join(format!("landfold-readcon-{}.con", std::process::id()));
+        let mut writer = ConFrameWriter::from_path(&path).expect("create CON fixture");
+        writer.write_frame(&frame(3.0)).expect("write CON fixture");
+        drop(writer);
+
+        let positions = read_con_positions(&path).expect("read CON fixture");
+        std::fs::remove_file(path).expect("remove CON fixture");
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0][[0, 0]], 3.0);
+        assert_eq!(positions[0][[1, 0]], 4.0);
+    }
 }
