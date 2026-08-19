@@ -2,13 +2,13 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::anneal::{minimize_anneal, AnnealOpts};
-use crate::cg::{minimize, CgOpts, CgReport};
+use crate::anneal::{AnnealOpts, minimize_anneal};
+use crate::cg::{CgOpts, CgReport, minimize};
 use crate::error::Result;
 use crate::mds::classical_mds;
 use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
-use crate::search::{minimize_stochastic, StochOpts};
+use crate::search::{StochOpts, minimize_stochastic};
 use crate::stress::Stress;
 use crate::transfer::Transfer;
 
@@ -61,6 +61,45 @@ pub struct Embedding {
 impl Embedding {
     pub fn packed_low(&self) -> Array1<f64> {
         Array1::from_iter(self.low.iter().copied())
+    }
+
+    /// Landmark table already fitted in low-D. Used by out-of-sample project.
+    pub fn from_landmarks(
+        high: Array2<f64>,
+        low: Array2<f64>,
+        metric: &dyn Metric,
+        tfun_hd: Transfer,
+        tfun_ld: Transfer,
+        imix: f64,
+        weights: Option<Array1<f64>>,
+    ) -> Result<Self> {
+        if high.nrows() != low.nrows() {
+            return Err(crate::error::LandfoldError::Shape(
+                "landmark HD/LD count mismatch",
+            ));
+        }
+        if high.nrows() == 0 {
+            return Err(crate::error::LandfoldError::Empty);
+        }
+        let n = high.nrows();
+        let hd = if metric.is_euclid() {
+            pairwise_euclid(high.view())?
+        } else {
+            pairwise(high.view(), metric)?
+        };
+        let mut fhd = hd.clone();
+        apply_transfer(&mut fhd, &tfun_hd);
+        Ok(Self {
+            high,
+            low,
+            weights: weights.unwrap_or_else(|| Array1::ones(n)),
+            stress: 0.0,
+            hd,
+            fhd,
+            tfun_hd,
+            tfun_ld,
+            imix,
+        })
     }
 }
 

@@ -140,13 +140,18 @@ impl Stress {
         let coords = coords.as_slice().expect("packed coords contiguous");
         let hd = self.hd.as_slice().expect("hd contiguous");
         let fhd = self.fhd.as_slice().expect("fhd contiguous");
-        let weights = self.weights.as_ref().map(|w| w.as_slice().expect("w contiguous"));
+        let weights = self
+            .weights
+            .as_ref()
+            .map(|w| w.as_slice().expect("w contiguous"));
         let omix = 1.0 - self.imix;
         let mut pval = 0.0;
         let mut tw = 0.0;
         let mut pgrad = vec![0.0; n * d];
         for i in 0..n {
-            self.pair_kernel(i, n, d, coords, hd, fhd, weights, omix, &mut pval, &mut tw, &mut pgrad);
+            self.pair_kernel(
+                i, n, d, coords, hd, fhd, weights, omix, &mut pval, &mut tw, &mut pgrad,
+            );
         }
         Self::finish(pval, tw, pgrad)
     }
@@ -246,41 +251,64 @@ impl Stress {
         fhd_row: ArrayView1<f64>,
         point_w: ArrayView1<f64>,
     ) -> (f64, Array1<f64>) {
-        let d = x.len();
-        let n = landmarks.nrows();
-        let mut vv = 0.0;
-        let mut vg = Array1::<f64>::zeros(d);
-        let mut tw = 0.0;
-        let omix = 1.0 - self.imix;
-        for i in 0..n {
-            let mut v1 = vec![0.0; d];
-            let mut ld2 = 0.0;
-            for h in 0..d {
-                v1[h] = landmarks[(i, h)] - x[h];
-                ld2 += v1[h] * v1[h];
-            }
-            let ld = ld2.sqrt();
-            if ld <= 0.0 {
-                continue;
-            }
-            let (lfd, ldfd) = self.tfun_ld.fdf(ld);
-            let w = if point_w.len() == n { point_w[i] } else { 1.0 };
-            let diff = fhd_row[i] - lfd;
-            let dd = hd_row[i] - ld;
-            vv += (diff * diff * omix + self.imix * dd * dd) * w;
-            let scale = 2.0 * (diff * ldfd * omix + self.imix * dd) / ld * w;
-            for h in 0..d {
-                vg[h] += v1[h] * scale;
-            }
-            tw += w;
-        }
-        if tw <= 0.0 {
-            tw = 1.0;
-        }
-        vv /= tw;
-        vg.mapv_inplace(|g| g / tw);
-        (vv, vg)
+        query_chi(
+            x,
+            landmarks,
+            hd_row,
+            fhd_row,
+            &self.tfun_ld,
+            self.imix,
+            point_w,
+        )
     }
+}
+
+/// One-point χ of a low-D query against landmarks (JCTC 2013, Eq. 4).
+///
+/// Matches `compute_chi1` in the C++ reference (no skip index: the query is
+/// not one of the landmarks).
+pub fn query_chi(
+    x: ArrayView1<f64>,
+    landmarks: ArrayView2<f64>,
+    hd_row: ArrayView1<f64>,
+    fhd_row: ArrayView1<f64>,
+    tfun_ld: &Transfer,
+    imix: f64,
+    point_w: ArrayView1<f64>,
+) -> (f64, Array1<f64>) {
+    let d = x.len();
+    let n = landmarks.nrows();
+    let mut vv = 0.0;
+    let mut vg = Array1::<f64>::zeros(d);
+    let mut tw = 0.0;
+    let omix = 1.0 - imix;
+    for i in 0..n {
+        let mut ld2 = 0.0;
+        for h in 0..d {
+            let delta = landmarks[(i, h)] - x[h];
+            ld2 += delta * delta;
+        }
+        let ld = ld2.sqrt();
+        if ld <= 0.0 {
+            continue;
+        }
+        let (lfd, ldfd) = tfun_ld.fdf(ld);
+        let w = if point_w.len() == n { point_w[i] } else { 1.0 };
+        let diff = fhd_row[i] - lfd;
+        let dd = hd_row[i] - ld;
+        vv += (diff * diff * omix + imix * dd * dd) * w;
+        let scale = 2.0 * (diff * ldfd * omix + imix * dd) / ld * w;
+        for h in 0..d {
+            vg[h] += (landmarks[(i, h)] - x[h]) * scale;
+        }
+        tw += w;
+    }
+    if tw <= 0.0 {
+        tw = 1.0;
+    }
+    vv /= tw;
+    vg.mapv_inplace(|g| g / tw);
+    (vv, vg)
 }
 
 #[cfg(test)]
@@ -289,7 +317,7 @@ mod tests {
     use crate::pairwise::pairwise_euclid;
     use crate::transfer::Transfer;
     use approx::assert_relative_eq;
-    use ndarray::{array, Array};
+    use ndarray::{Array, array};
 
     #[test]
     fn identity_stress_zero_on_isometry() {
@@ -308,11 +336,7 @@ mod tests {
     #[cfg(feature = "parallel")]
     #[test]
     fn parallel_matches_serial() {
-        let hd = array![
-            [0.0, 1.0, 2.0],
-            [1.0, 0.0, 1.5],
-            [2.0, 1.5, 0.0]
-        ];
+        let hd = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.5], [2.0, 1.5, 0.0]];
         let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
         let mut fhd = hd.clone();
         crate::pairwise::apply_transfer(&mut fhd, &t);
@@ -328,11 +352,7 @@ mod tests {
 
     #[test]
     fn gradient_matches_finite_difference() {
-        let hd = array![
-            [0.0, 1.0, 2.0],
-            [1.0, 0.0, 1.5],
-            [2.0, 1.5, 0.0]
-        ];
+        let hd = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.5], [2.0, 1.5, 0.0]];
         let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
         let mut fhd = hd.clone();
         crate::pairwise::apply_transfer(&mut fhd, &t);

@@ -38,34 +38,60 @@ pub struct CgReport {
     pub steps: usize,
 }
 
-pub fn minimize(stress: &Stress, init: ArrayView1<f64>, d: usize, opts: &CgOpts) -> Result<CgReport> {
+/// Full-pair χ on packed coordinates. `Solver::Standard` uses this path.
+pub fn minimize(
+    stress: &Stress,
+    init: ArrayView1<f64>,
+    d: usize,
+    opts: &CgOpts,
+) -> Result<CgReport> {
+    Ok(minimize_oracle(
+        |x| {
+            let ev = stress.eval(x, d);
+            (ev.value, ev.grad)
+        },
+        init,
+        opts,
+    ))
+}
+
+/// Polak-Ribiere + Brent on any scalar `f` with analytic gradient.
+///
+/// Out-of-sample projection uses this on the one-point χ of Ceriotti,
+/// Tribello and Parrinello, *J. Chem. Theory Comput.* **9**, 1521 (2013),
+/// <https://doi.org/10.1021/ct3010563>.
+pub fn minimize_oracle<F>(mut oracle: F, init: ArrayView1<f64>, opts: &CgOpts) -> CgReport
+where
+    F: FnMut(ArrayView1<f64>) -> (f64, Array1<f64>),
+{
     let mut pos = init.to_owned();
-    let mut ev = stress.eval(pos.view(), d);
-    let mut dir = ev.grad.clone();
-    let mut og = dir.clone();
-    let mut value = ev.value;
+    let (mut value, mut grad) = oracle(pos.view());
+    let mut dir = grad.clone();
+    let mut og = grad.clone();
     let mut istep = opts.istep;
 
     for step in 0..opts.maxiter {
-        let gnorm: f64 = ev.grad.iter().map(|g| g * g).sum::<f64>().sqrt();
+        let gnorm: f64 = grad.iter().map(|g| g * g).sum::<f64>().sqrt();
         if gnorm < opts.tol {
-            return Ok(CgReport {
+            return CgReport {
                 value,
                 coords: pos,
                 steps: step,
-            });
+            };
         }
-        let (npos, nval, lsstep) = line_search(stress, pos.view(), dir.view(), d, istep, opts);
+        let (npos, nval, lsstep) =
+            line_search_oracle(&mut oracle, pos.view(), dir.view(), istep, opts);
         if nval < value {
             pos = npos;
-            value = nval;
         }
-        ev = stress.eval(pos.view(), d);
+        let ev = oracle(pos.view());
+        value = ev.0;
+        grad = ev.1;
         let mut gg = 0.0;
         let mut gamma = 0.0;
         for i in 0..og.len() {
             gg += og[i] * og[i];
-            gamma += (ev.grad[i] - og[i]) * ev.grad[i];
+            gamma += (grad[i] - og[i]) * grad[i];
         }
         if gg > 0.0 {
             gamma /= gg;
@@ -73,45 +99,54 @@ pub fn minimize(stress: &Stress, init: ArrayView1<f64>, d: usize, opts: &CgOpts)
             gamma = 0.0;
         }
         for i in 0..dir.len() {
-            dir[i] = gamma * dir[i] + ev.grad[i];
+            dir[i] = gamma * dir[i] + grad[i];
         }
-        og.assign(&ev.grad);
+        og.assign(&grad);
         istep = if lsstep <= 0.0 {
             opts.istep
         } else {
             lsstep * 0.5
         };
     }
-    Ok(CgReport {
+    CgReport {
         value,
         coords: pos,
         steps: opts.maxiter,
-    })
+    }
 }
 
-fn line_search(
-    stress: &Stress,
+fn line_search_oracle<F>(
+    oracle: &mut F,
     pos: ArrayView1<f64>,
     dir: ArrayView1<f64>,
-    d: usize,
     istep: f64,
     opts: &CgOpts,
-) -> (Array1<f64>, f64, f64) {
-    let f0 = stress.eval(pos, d).value;
-    let phi = |t: f64| {
-        let x = &pos + &(&dir * t);
-        stress.eval(x.view(), d).value
+) -> (Array1<f64>, f64, f64)
+where
+    F: FnMut(ArrayView1<f64>) -> (f64, Array1<f64>),
+{
+    let f0 = oracle(pos).0;
+    let mut phi = |t: f64| {
+        let mut x = pos.to_owned();
+        for i in 0..x.len() {
+            x[i] = pos[i] + t * dir[i];
+        }
+        oracle(x.view()).0
     };
-    let (a, b) = bracket(phi, 0.0, istep.max(1e-12), opts.ls_maxiter);
-    let (t, ft) = brent(phi, a, b, opts.ls_tol, opts.ls_maxiter.max(20));
+    let (a, b) = bracket(&mut phi, 0.0, istep.max(1e-12), opts.ls_maxiter);
+    let (t, ft) = brent(&mut phi, a, b, opts.ls_tol, opts.ls_maxiter.max(20));
     if ft < f0 {
-        (pos.to_owned() + &(dir.to_owned() * t), ft, t.abs())
+        let mut x = pos.to_owned();
+        for i in 0..x.len() {
+            x[i] = pos[i] + t * dir[i];
+        }
+        (x, ft, t.abs())
     } else {
         (pos.to_owned(), f0, 0.0)
     }
 }
 
-fn bracket(mut phi: impl FnMut(f64) -> f64, mut a: f64, mut b: f64, maxiter: usize) -> (f64, f64) {
+fn bracket(phi: &mut impl FnMut(f64) -> f64, mut a: f64, mut b: f64, maxiter: usize) -> (f64, f64) {
     let gold = 1.618_034;
     let mut fa = phi(a);
     let mut fb = phi(b);
@@ -134,15 +169,11 @@ fn bracket(mut phi: impl FnMut(f64) -> f64, mut a: f64, mut b: f64, maxiter: usi
         it += 1;
         let _ = fa;
     }
-    if a < c {
-        (a, c)
-    } else {
-        (c, a)
-    }
+    if a < c { (a, c) } else { (c, a) }
 }
 
 fn brent(
-    mut phi: impl FnMut(f64) -> f64,
+    phi: &mut impl FnMut(f64) -> f64,
     ax: f64,
     cx: f64,
     tol: f64,

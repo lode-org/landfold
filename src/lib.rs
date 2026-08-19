@@ -24,19 +24,24 @@ pub mod search;
 pub mod stress;
 pub mod transfer;
 
+pub use anneal::AnnealOpts;
 pub use array::to_dlpack;
 pub use error::{LandfoldError, Result};
-pub use hist::{coordination_histogram, coordination_numbers, FreeEnergy, Histogram1d, Histogram2d};
-pub use io::{read_points, read_points_path, write_points, PointSet};
-pub use iter::{embed, embed_points, Embedding, IterOpts, Solver};
-pub use anneal::AnnealOpts;
-pub use search::StochOpts;
-pub use landmark::{farthest_point, Landmarks};
-pub use mds::{classical_mds, mds_from_points, randomized_mds, MdsMode, MdsReport};
+pub use hist::{
+    FreeEnergy, Histogram1d, Histogram2d, coordination_histogram, coordination_numbers,
+    fes_from_points,
+};
+pub use io::{PointSet, read_points, read_points_path, write_points};
+pub use iter::{Embedding, IterOpts, Solver, embed, embed_points};
+pub use landmark::{Landmarks, farthest_point, voronoi_weights};
+pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use metric::{Dot, Euclid, Metric, Periodic, Sphere};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
-pub use project::{project_many, project_one, ProjOpts};
-pub use stress::{Stress, StressEval};
+pub use project::{
+    ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
+};
+pub use search::StochOpts;
+pub use stress::{Stress, StressEval, query_chi};
 pub use transfer::{Transfer, TransferMode};
 
 #[cfg(feature = "python")]

@@ -6,7 +6,7 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::error::{Result, LandfoldError};
+use crate::error::{LandfoldError, Result};
 use crate::metric::Metric;
 
 #[derive(Clone, Debug)]
@@ -62,6 +62,74 @@ pub fn farthest_point(
     })
 }
 
+/// Voronoi mass of each landmark: sum of source weights of the nearest
+/// points, then `w_i^wgamma` and renormalise (Ceriotti `-w` / `-wgamma`).
+pub fn voronoi_weights(
+    points: ArrayView2<f64>,
+    landmarks: &Landmarks,
+    metric: &dyn Metric,
+    src_weights: Option<ArrayView1<f64>>,
+    wgamma: f64,
+) -> Result<Array1<f64>> {
+    let n = points.nrows();
+    let k = landmarks.index.len();
+    if k == 0 {
+        return Err(LandfoldError::Empty);
+    }
+    if let Some(w) = src_weights {
+        if w.len() != n {
+            return Err(LandfoldError::Shape("source weight length"));
+        }
+    }
+    let d = points.ncols();
+    if landmarks.points.ncols() != d {
+        return Err(LandfoldError::Shape("landmark dim"));
+    }
+    let mut acc = vec![0.0; k];
+    let mut a = vec![0.0; d];
+    let mut b = vec![0.0; d];
+    for j in 0..n {
+        for h in 0..d {
+            b[h] = points[(j, h)];
+        }
+        let mut best_i = 0usize;
+        let mut best_d = f64::INFINITY;
+        for i in 0..k {
+            for h in 0..d {
+                a[h] = landmarks.points[(i, h)];
+            }
+            let dist = metric.dist_unchecked(&a, &b);
+            if dist < best_d {
+                best_d = dist;
+                best_i = i;
+            }
+        }
+        acc[best_i] += src_weights.map(|w| w[j]).unwrap_or(1.0);
+    }
+    let mut tw = 0.0;
+    for w in &mut acc {
+        *w = if *w > 0.0 { w.powf(wgamma) } else { 0.0 };
+        tw += *w;
+    }
+    if tw <= 0.0 {
+        tw = 1.0;
+    }
+    Ok(Array1::from_iter(acc.into_iter().map(|w| w / tw)))
+}
+
+impl Landmarks {
+    pub fn assign_voronoi(
+        &mut self,
+        points: ArrayView2<f64>,
+        metric: &dyn Metric,
+        src_weights: Option<ArrayView1<f64>>,
+        wgamma: f64,
+    ) -> Result<()> {
+        self.weights = voronoi_weights(points, self, metric, src_weights, wgamma)?;
+        Ok(())
+    }
+}
+
 fn update_min_d(points: ArrayView2<f64>, metric: &dyn Metric, src: usize, min_d: &mut [f64]) {
     let d = points.ncols();
     let mut a = vec![0.0; d];
@@ -95,5 +163,24 @@ mod tests {
         s.sort();
         s.dedup();
         assert_eq!(s.len(), 3);
+    }
+
+    #[test]
+    fn square_plus_centre_is_0_3_1() {
+        let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]];
+        let lm = farthest_point(pts.view(), &Euclid, 3, None, 0).unwrap();
+        assert_eq!(lm.index, vec![0, 3, 1]);
+    }
+
+    #[test]
+    fn voronoi_mass_on_a_line() {
+        let pts = array![[0.0], [0.1], [0.2], [10.0]];
+        let lm = farthest_point(pts.view(), &Euclid, 2, None, 0).unwrap();
+        // seed 0 then farthest = 10 -> indices 0, 3
+        assert_eq!(lm.index, vec![0, 3]);
+        let mut lm = lm;
+        lm.assign_voronoi(pts.view(), &Euclid, None, 1.0).unwrap();
+        assert!((lm.weights[0] - 0.75).abs() < 1e-12);
+        assert!((lm.weights[1] - 0.25).abs() < 1e-12);
     }
 }
