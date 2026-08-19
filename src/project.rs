@@ -236,7 +236,7 @@ pub fn project_many_report(
         (0..nq)
             .into_par_iter()
             .map(|i| project_report(emb, queries.row(i), metric, opts))
-            .collect();
+            .collect()
     }
     #[cfg(not(feature = "parallel"))]
     {
