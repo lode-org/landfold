@@ -40,7 +40,7 @@ fn embed_lowers_chi_below_mds() {
         hd.clone(),
         {
             let mut f = hd.clone();
-            landfold::apply_transfer(&mut f, &opts.tfun_hd);
+            landfold::apply_transfer(&mut f, &opts.tfun_hd).unwrap();
             f
         },
         opts.tfun_ld.clone(),

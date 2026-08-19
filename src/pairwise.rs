@@ -150,17 +150,44 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
     }
 }
 
-/// Apply a transfer function to a precomputed distance matrix (in place).
-pub fn apply_transfer(dist: &mut Array2<f64>, t: &crate::transfer::Transfer) {
+/// Apply a transfer function to a precomputed distance matrix transactionally.
+pub fn apply_transfer(
+    dist: &mut Array2<f64>,
+    t: &crate::transfer::Transfer,
+) -> crate::error::Result<()> {
     let n = dist.nrows();
+    if dist.ncols() != n {
+        return Err(crate::error::LandfoldError::Shape(
+            "distance matrix must be square",
+        ));
+    }
+    if dist.iter().any(|&value| !value.is_finite() || value < 0.0) {
+        return Err(crate::error::LandfoldError::Msg(
+            "distance matrix must be finite and nonnegative".into(),
+        ));
+    }
+    let mut transformed = Array2::<f64>::zeros((n, n));
+    let diagonal = t.f(0.0);
+    if !diagonal.is_finite() || diagonal < 0.0 {
+        return Err(crate::error::LandfoldError::Msg(
+            "transfer output must be finite and nonnegative".into(),
+        ));
+    }
     for i in 0..n {
-        dist[(i, i)] = t.f(0.0);
+        transformed[(i, i)] = diagonal;
         for j in 0..i {
             let v = t.f(dist[(i, j)]);
-            dist[(i, j)] = v;
-            dist[(j, i)] = v;
+            if !v.is_finite() || v < 0.0 {
+                return Err(crate::error::LandfoldError::Msg(
+                    "transfer output must be finite and nonnegative".into(),
+                ));
+            }
+            transformed[(i, j)] = v;
+            transformed[(j, i)] = v;
         }
     }
+    *dist = transformed;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -215,5 +242,21 @@ mod tests {
     fn rejects_euclidean_overflow() {
         let points = array![[1.0e200, 0.0], [0.0, 0.0]];
         assert!(pairwise_euclid(points.view()).is_err());
+    }
+
+    #[test]
+    fn transfer_application_is_checked_and_transactional() {
+        let transfer = crate::transfer::Transfer::identity();
+        let mut nonsquare = Array2::<f64>::zeros((2, 1));
+        assert!(apply_transfer(&mut nonsquare, &transfer).is_err());
+
+        let mut invalid = array![[0.0, f64::NAN], [f64::NAN, 0.0]];
+        let original = invalid.clone();
+        assert!(apply_transfer(&mut invalid, &transfer).is_err());
+        assert_eq!(invalid, original);
+
+        let mut distances = array![[7.0, 2.0], [2.0, 9.0]];
+        apply_transfer(&mut distances, &transfer).unwrap();
+        assert_eq!(distances, array![[0.0, 2.0], [2.0, 0.0]]);
     }
 }

@@ -108,7 +108,7 @@ impl Embedding {
             pairwise(high.view(), metric)?
         };
         let mut fhd = hd.clone();
-        apply_transfer(&mut fhd, &tfun_hd);
+        apply_transfer(&mut fhd, &tfun_hd)?;
         Ok(Self {
             high,
             low,
@@ -149,7 +149,7 @@ pub fn embed(
         None => pairwise(points, metric)?,
     };
     let mut fhd = hd.clone();
-    apply_transfer(&mut fhd, &opts.tfun_hd);
+    apply_transfer(&mut fhd, &opts.tfun_hd)?;
 
     let mut low = if let Some(p) = init {
         if p.nrows() != n || p.ncols() != opts.lowdim {

@@ -25,7 +25,7 @@ fn main() {
     let t_hd = landfold::Transfer::xsigmoid(5.0, 8.0, 1.0).unwrap();
     let t_ld = landfold::Transfer::xsigmoid(5.0, 2.0, 2.0).unwrap();
     let mut fhd = hd.clone();
-    landfold::apply_transfer(&mut fhd, &t_hd);
+    landfold::apply_transfer(&mut fhd, &t_hd).unwrap();
     let s = landfold::stress::Stress::new(hd, fhd, t_ld, 0.0, None, None);
     let mut low = ndarray::Array1::<f64>::zeros(n * 2);
     for k in 0..n * 2 {

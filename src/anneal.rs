@@ -151,7 +151,7 @@ mod tests {
         let hd = pairwise_euclid(pts.view()).unwrap();
         let t = Transfer::xsigmoid(1.0, 4.0, 2.0).unwrap();
         let mut fhd = hd.clone();
-        apply_transfer(&mut fhd, &t);
+        apply_transfer(&mut fhd, &t).unwrap();
         let s = Stress::new(hd, fhd, t, 0.0, None, None);
         let init = Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2, 1.0, 1.1, 1.2, 0.8]);
         let ev0 = s.eval(init.view(), 2);

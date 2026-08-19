@@ -530,7 +530,7 @@ mod tests {
         let hd = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.5], [2.0, 1.5, 0.0]];
         let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
         let mut fhd = hd.clone();
-        crate::pairwise::apply_transfer(&mut fhd, &t);
+        crate::pairwise::apply_transfer(&mut fhd, &t).unwrap();
         let s = Stress::new(hd, fhd, t, 0.1, None, None);
         let coords = array![0.0, 0.0, 0.8, 0.1, -0.2, 0.7];
         let a = s.eval_serial(coords.view(), 2);
@@ -546,7 +546,7 @@ mod tests {
         let hd = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.5], [2.0, 1.5, 0.0]];
         let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
         let mut fhd = hd.clone();
-        crate::pairwise::apply_transfer(&mut fhd, &t);
+        crate::pairwise::apply_transfer(&mut fhd, &t).unwrap();
         let s = Stress::new(hd, fhd, t, 0.1, None, None);
         let coords = array![0.0, 0.0, 0.8, 0.1, -0.2, 0.7];
         let ev = s.eval(coords.view(), 2);
