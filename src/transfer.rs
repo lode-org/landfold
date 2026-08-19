@@ -191,6 +191,22 @@ impl Transfer {
             }
         }
     }
+
+    /// Checked value and derivative on the nonnegative distance domain.
+    pub fn try_fdf(&self, x: f64) -> Result<(f64, f64)> {
+        if !x.is_finite() || x < 0.0 {
+            return Err(LandfoldError::Msg(
+                "transfer distance must be finite and nonnegative".into(),
+            ));
+        }
+        let (value, derivative) = self.fdf(x);
+        if !value.is_finite() || value < 0.0 || !derivative.is_finite() || derivative < 0.0 {
+            return Err(LandfoldError::Msg(
+                "transfer evaluation is non-finite or non-monotone".into(),
+            ));
+        }
+        Ok((value, derivative))
+    }
 }
 
 fn pow_exp(base: f64, exp: f64) -> f64 {
@@ -356,6 +372,15 @@ mod tests {
         let t = Transfer::identity();
         assert_eq!(t.f(3.5), 3.5);
         assert_eq!(t.df(3.5), 1.0);
+    }
+
+    #[test]
+    fn checked_evaluation_rejects_invalid_domain_and_overflow() {
+        let t = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        assert!(t.try_fdf(-1.0).is_err());
+        assert!(t.try_fdf(f64::NAN).is_err());
+        assert!(t.try_fdf(1.0e200).is_err());
+        assert!(Transfer::identity().try_fdf(1.0).is_ok());
     }
 
     #[test]

@@ -167,21 +167,11 @@ pub fn apply_transfer(
         ));
     }
     let mut transformed = Array2::<f64>::zeros((n, n));
-    let diagonal = t.f(0.0);
-    if !diagonal.is_finite() || diagonal < 0.0 {
-        return Err(crate::error::LandfoldError::Msg(
-            "transfer output must be finite and nonnegative".into(),
-        ));
-    }
+    let diagonal = t.try_fdf(0.0)?.0;
     for i in 0..n {
         transformed[(i, i)] = diagonal;
         for j in 0..i {
-            let v = t.f(dist[(i, j)]);
-            if !v.is_finite() || v < 0.0 {
-                return Err(crate::error::LandfoldError::Msg(
-                    "transfer output must be finite and nonnegative".into(),
-                ));
-            }
+            let v = t.try_fdf(dist[(i, j)])?.0;
             transformed[(i, j)] = v;
             transformed[(j, i)] = v;
         }
@@ -253,10 +243,12 @@ mod tests {
         let mut invalid = array![[0.0, f64::NAN], [f64::NAN, 0.0]];
         let original = invalid.clone();
         assert!(apply_transfer(&mut invalid, &transfer).is_err());
-        assert!(invalid
-            .iter()
-            .zip(original.iter())
-            .all(|(left, right)| left.to_bits() == right.to_bits()));
+        assert!(
+            invalid
+                .iter()
+                .zip(original.iter())
+                .all(|(left, right)| left.to_bits() == right.to_bits())
+        );
 
         let mut distances = array![[7.0, 2.0], [2.0, 9.0]];
         apply_transfer(&mut distances, &transfer).unwrap();
