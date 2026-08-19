@@ -75,6 +75,39 @@ pub(crate) fn validate_imix(imix: f64) -> crate::error::Result<()> {
 }
 
 impl Stress {
+    fn validate_state(&self) -> crate::error::Result<()> {
+        let n = self.n;
+        if self.hd.nrows() != n
+            || self.hd.ncols() != n
+            || self.fhd.nrows() != n
+            || self.fhd.ncols() != n
+            || self
+                .weights
+                .as_ref()
+                .is_some_and(|weights| weights.nrows() != n || weights.ncols() != n)
+        {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress state matrices must be square and match n",
+            ));
+        }
+        if self
+            .hd
+            .iter()
+            .chain(self.fhd.iter())
+            .any(|&value| !value.is_finite() || value < 0.0)
+            || self.weights.as_ref().is_some_and(|weights| {
+                weights
+                    .iter()
+                    .any(|&value| !value.is_finite() || value < 0.0)
+            })
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress distances and weights must be finite and nonnegative".into(),
+            ));
+        }
+        validate_imix(self.imix)
+    }
+
     pub fn try_new(
         hd: Array2<f64>,
         fhd: Array2<f64>,
@@ -173,6 +206,7 @@ impl Stress {
 
     /// Checked evaluation for external callers with fallible input handling.
     pub fn try_eval(&self, coords: ArrayView1<f64>, d: usize) -> crate::error::Result<StressEval> {
+        self.validate_state()?;
         if d == 0 {
             return Err(crate::error::LandfoldError::LowDim {
                 low: 0,
