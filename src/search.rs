@@ -7,10 +7,10 @@
 //! `n²` standard CG pass is too expensive. The default solver remains
 //! [`crate::cg::minimize`].
 
-use ndarray::{Array1, ArrayView1};
+use ndarray::ArrayView1;
 
 use crate::cg::CgReport;
-use crate::metric::Euclid;
+use crate::metric::{Euclid, Metric};
 use crate::stress::{Stress, OVERLAP};
 
 #[derive(Clone, Debug)]

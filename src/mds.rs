@@ -10,7 +10,7 @@ use nalgebra::{DMatrix, SymmetricEigen};
 use ndarray::{Array1, Array2, ArrayView2};
 
 use crate::error::{Result, LandfoldError};
-use crate::metric::Metric;
+use crate::metric::{Euclid, Metric};
 use crate::pairwise::pairwise;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

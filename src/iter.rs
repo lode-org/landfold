@@ -171,5 +171,6 @@ pub fn mds_init(
     metric: &dyn Metric,
     lowdim: usize,
 ) -> Result<Array2<f64>> {
-    Ok(mds_from_points(points, metric, lowdim, MdsMode::Classical)?.0)
+    let dist = pairwise(points, metric)?;
+    Ok(classical_mds(dist.view(), lowdim)?.0)
 }
