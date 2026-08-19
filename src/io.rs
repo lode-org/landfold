@@ -5,7 +5,7 @@ use std::path::Path;
 
 use ndarray::{Array1, Array2};
 
-use crate::error::{Result, LandfoldError};
+use crate::error::{LandfoldError, Result};
 
 #[derive(Clone, Debug)]
 pub struct PointSet {
@@ -67,7 +67,11 @@ pub fn read_points_path(path: &Path, dim: usize, weighted: bool) -> Result<Point
     read_points(std::io::BufReader::new(f), dim, weighted)
 }
 
-pub fn write_points<W: Write>(w: &mut W, pts: &Array2<f64>, weights: Option<&Array1<f64>>) -> Result<()> {
+pub fn write_points<W: Write>(
+    w: &mut W,
+    pts: &Array2<f64>,
+    weights: Option<&Array1<f64>>,
+) -> Result<()> {
     for i in 0..pts.nrows() {
         for j in 0..pts.ncols() {
             if j > 0 {

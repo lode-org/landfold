@@ -6,7 +6,7 @@
 //! Csanyi, *Phys. Rev. B* **87**, 184115 (2013),
 //! <https://doi.org/10.1103/PhysRevB.87.184115>.
 
-use crate::error::{Result, LandfoldError};
+use crate::error::{LandfoldError, Result};
 
 pub trait Metric: Send + Sync {
     fn dim(&self) -> Option<usize> {
@@ -169,11 +169,7 @@ impl Metric for Dot {
         for i in 0..a.len() {
             acc += b[i] * a[i];
         }
-        if acc <= 0.0 {
-            f64::INFINITY
-        } else {
-            -acc.ln()
-        }
+        if acc <= 0.0 { f64::INFINITY } else { -acc.ln() }
     }
 }
 

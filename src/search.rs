@@ -11,7 +11,7 @@ use ndarray::ArrayView1;
 
 use crate::cg::CgReport;
 use crate::metric::{Euclid, Metric};
-use crate::stress::{Stress, OVERLAP};
+use crate::stress::{OVERLAP, Stress};
 
 #[derive(Clone, Debug)]
 pub struct StochOpts {

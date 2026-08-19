@@ -8,7 +8,7 @@
 //! *Proc. Natl. Acad. Sci. U.S.A.* **108**, 13023 (2011),
 //! <https://doi.org/10.1073/pnas.1108486108>).
 
-use crate::error::{Result, LandfoldError};
+use crate::error::{LandfoldError, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
@@ -75,13 +75,7 @@ impl Transfer {
         }
         Ok(Self {
             mode: TransferMode::XSigmoid,
-            pars: vec![
-                1.0 / sigma,
-                2.0_f64.powf(a / b) - 1.0,
-                a,
-                b,
-                -b / a,
-            ],
+            pars: vec![1.0 / sigma, 2.0_f64.powf(a / b) - 1.0, a, b, -b / a],
         })
     }
 

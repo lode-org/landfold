@@ -8,7 +8,7 @@
 
 use ndarray::ArrayView1;
 
-use crate::cg::{minimize, CgOpts, CgReport};
+use crate::cg::{CgOpts, CgReport, minimize};
 use crate::search::splitmix;
 use crate::stress::Stress;
 
@@ -109,7 +109,7 @@ mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{array, Array};
+    use ndarray::{Array, array};
 
     #[test]
     fn anneal_lowers_or_matches_init() {

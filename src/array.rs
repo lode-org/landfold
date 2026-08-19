@@ -3,7 +3,7 @@
 use dlpk::DLPackTensor;
 use ndarray::{Array2, ArrayD, IxDyn};
 
-use crate::error::{Result, LandfoldError};
+use crate::error::{LandfoldError, Result};
 
 /// Zero-copy-capable DLPack export of an `n x k` f64 matrix.
 ///

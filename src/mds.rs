@@ -9,7 +9,7 @@
 use nalgebra::{DMatrix, QR, SymmetricEigen};
 use ndarray::{Array1, Array2, ArrayView2};
 
-use crate::error::{Result, LandfoldError};
+use crate::error::{LandfoldError, Result};
 use crate::metric::Metric;
 use crate::pairwise::pairwise;
 
@@ -68,7 +68,12 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
     Ok((n, b))
 }
 
-fn coords_from_eigen(n: usize, lowdim: usize, evals: &[f64], evecs: &DMatrix<f64>) -> (Array2<f64>, Array1<f64>, f64) {
+fn coords_from_eigen(
+    n: usize,
+    lowdim: usize,
+    evals: &[f64],
+    evecs: &DMatrix<f64>,
+) -> (Array2<f64>, Array1<f64>, f64) {
     let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (evals[k], k)).collect();
     pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let mut coords = Array2::<f64>::zeros((n, lowdim));
