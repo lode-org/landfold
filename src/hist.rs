@@ -22,7 +22,7 @@ pub struct Histogram1d {
 
 impl Histogram1d {
     pub fn new(lo: f64, hi: f64, n: usize) -> Result<Self> {
-        if n == 0 || hi <= lo {
+        if n == 0 || !lo.is_finite() || !hi.is_finite() || hi <= lo {
             return Err(LandfoldError::Shape("histogram needs n>0 and hi>lo"));
         }
         let mut edges = Array1::zeros(n + 1);
@@ -39,6 +39,9 @@ impl Histogram1d {
     }
 
     pub fn add(&mut self, x: f64, w: f64) {
+        if !x.is_finite() || !w.is_finite() {
+            return;
+        }
         self.samples += w;
         if x < self.edges[0] {
             self.below += w;
@@ -88,7 +91,15 @@ pub struct Histogram2d {
 
 impl Histogram2d {
     pub fn new(xlo: f64, xhi: f64, nx: usize, ylo: f64, yhi: f64, ny: usize) -> Result<Self> {
-        if nx == 0 || ny == 0 || xhi <= xlo || yhi <= ylo {
+        if nx == 0
+            || ny == 0
+            || !xlo.is_finite()
+            || !xhi.is_finite()
+            || !ylo.is_finite()
+            || !yhi.is_finite()
+            || xhi <= xlo
+            || yhi <= ylo
+        {
             return Err(LandfoldError::Shape("2d histogram bounds"));
         }
         let mut x_edges = Array1::zeros(nx + 1);
@@ -108,6 +119,9 @@ impl Histogram2d {
     }
 
     pub fn add(&mut self, x: f64, y: f64, w: f64) {
+        if !x.is_finite() || !y.is_finite() || !w.is_finite() {
+            return;
+        }
         let nx = self.counts.ncols();
         let ny = self.counts.nrows();
         let xlo = self.x_edges[0];
@@ -353,6 +367,22 @@ pub fn fes_from_points(
     if xy.ncols() < 2 || xy.nrows() == 0 {
         return Err(LandfoldError::Shape("fes needs n x 2 points"));
     }
+    if !kt.is_finite() || kt <= 0.0 {
+        return Err(LandfoldError::Msg("fes kT must be finite and > 0".into()));
+    }
+    if !pad.is_finite() || pad < 0.0 {
+        return Err(LandfoldError::Msg("fes pad must be finite and >= 0".into()));
+    }
+    if xy.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg("fes coordinates must be finite".into()));
+    }
+    if weights.is_some_and(|w| {
+        w.len() != xy.nrows() || w.iter().any(|&value| !value.is_finite() || value < 0.0)
+    }) {
+        return Err(LandfoldError::Msg(
+            "fes weights must be finite and nonnegative".into(),
+        ));
+    }
     let mut xmin = f64::INFINITY;
     let mut xmax = f64::NEG_INFINITY;
     let mut ymin = f64::INFINITY;
@@ -371,11 +401,7 @@ pub fn fes_from_points(
 }
 
 fn plus_zero(x: f64) -> f64 {
-    if x == 0.0 {
-        0.0
-    } else {
-        x
-    }
+    if x == 0.0 { 0.0 } else { x }
 }
 
 /// Orange (low F) to ice-blue (high F), matching the reference figure palette.
@@ -392,9 +418,9 @@ fn fes_color(t: f64) -> (u8, u8, u8) {
     for w in stops.windows(2) {
         if t <= w[1].0 {
             let u = (t - w[0].0) / (w[1].0 - w[0].0);
-            let r = w[0].1 .0 + u * (w[1].1 .0 - w[0].1 .0);
-            let g = w[0].1 .1 + u * (w[1].1 .1 - w[0].1 .1);
-            let b = w[0].1 .2 + u * (w[1].1 .2 - w[0].1 .2);
+            let r = w[0].1.0 + u * (w[1].1.0 - w[0].1.0);
+            let g = w[0].1.1 + u * (w[1].1.1 - w[0].1.1);
+            let b = w[0].1.2 + u * (w[1].1.2 - w[0].1.2);
             return (r as u8, g as u8, b as u8);
         }
     }
@@ -606,6 +632,17 @@ mod tests {
         }
         assert_eq!(min_f, 0.0);
         assert_eq!(at, (2, 2));
+    }
+
+    #[test]
+    fn rejects_nonfinite_fes_inputs() {
+        assert!(Histogram1d::new(f64::NAN, 1.0, 4).is_err());
+        assert!(Histogram2d::new(0.0, f64::NAN, 4, 0.0, 1.0, 4).is_err());
+        let points = array![[0.0, f64::NAN], [1.0, 0.0]];
+        assert!(fes_from_points(points.view(), 4, 4, 1.0, 0.05, None).is_err());
+        let points = array![[0.0, 0.0], [1.0, 1.0]];
+        assert!(fes_from_points(points.view(), 4, 4, 0.0, 0.05, None).is_err());
+        assert!(fes_from_points(points.view(), 4, 4, 1.0, -0.1, None).is_err());
     }
 
     #[test]
