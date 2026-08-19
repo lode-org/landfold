@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn accepts_non_contiguous_point_rows() {
-        let points = array![[0.0, 0.0, 9.0], [3.0, 4.0, 9.0]];
+        let points = array![[0.0, 3.0], [0.0, 4.0], [9.0, 9.0]];
         let strided = points.view().reversed_axes();
         let distances = pairwise_euclid(strided).unwrap();
         assert_relative_eq!(distances[(0, 1)], 5.0, epsilon = 1e-14);
