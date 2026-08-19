@@ -47,6 +47,24 @@ Single package, one =landfold= binary. =clap= is a package dependency
 because Cargo cannot mark a dep bin-only without a workspace split
 (=landfold-w1p0=). The library API does not use clap.
 
+* Python pin
+
+=--features python= pulls =pyo3= and =numpy= 0.29, the same minor as
+dlpk 0.4.1. dlpk's optional =pyo3= feature stays off: =pyo3-ffi= is
+=links = "python"=, so a second pyo3 major cannot coexist. Bump
+landfold only when dlpk publishes a graph that still resolves to one
+pyo3 major.
+
+Verify on the remote builder:
+
+#+begin_src sh
+bash scripts/check_pyo3_pin.sh
+# cargo tree -e features --features python
+#+end_src
+
+The CLI binary does not link pyo3. =landfold --help= records the pin.
+=Solver::Standard= remains the default full-pair CG for =embed=.
+
 * Landmarks
 
 Gonzalez farthest-point (2-approximate k-center) traversal. Seed

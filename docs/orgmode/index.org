@@ -22,4 +22,5 @@ high-dimensional molecular data (Ceriotti, Tribello, Parrinello, PNAS
 | =mds= | classical Torgerson MDS; =--distances= dumps the sign-invariant pairwise |
 | =fes= | =F=-ln(ρ/ρ_max)= CSV/SVG + integer CN histogram |
 
-See [[file:spec.org][spec.org]] and [[file:getting-started.org][getting-started.org]].
+Optional =--features python= is pyo3/numpy 0.29 (one major with dlpk
+0.4.1). See [[file:spec.org][spec.org]] and [[file:getting-started.org][getting-started.org]].

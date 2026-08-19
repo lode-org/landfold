@@ -24,6 +24,12 @@ landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
     --frames frames.xyz --cn-csv cn.csv
 #+end_src
 
+* Python
+
+=--features python= binds =embed_euclid=, =project_euclid=,
+=farthest_euclid=, and =fes_xy=. pyo3/numpy stay on 0.29 so the graph
+shares one major with dlpk 0.4.1. dlpk's =pyo3= feature stays off.
+
 * License
 
 MIT.

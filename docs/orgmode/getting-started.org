@@ -13,6 +13,22 @@ cargo test --release
 cargo build --release --bins
 #+end_src
 
+* Python feature
+
+Optional CPython module (=embed_euclid=, =project_euclid=,
+=farthest_euclid=, =fes_xy=). pyo3/numpy stay on 0.29 so the graph
+shares one major with dlpk 0.4.1. Do not enable =dlpk/pyo3= (that
+would add a second =pyo3-ffi= =links = "python"= edge).
+
+#+begin_src sh
+cargo tree -e features --features python
+bash scripts/check_pyo3_pin.sh
+cargo check --release --features python
+#+end_src
+
+=landfold --version= is the CLI binary and does not load the
+extension. =Solver::Standard= stays the default full-pair CG.
+
 * C++ oracle goldens
 
 Regenerate =tests/goldens/cpp_oracle.txt= on the remote builder from

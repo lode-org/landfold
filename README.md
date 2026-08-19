@@ -43,6 +43,20 @@ C++ goldens are `tests/goldens/cpp_oracle.txt`, rebuilt on the remote
 builder by `scripts/gen_cpp_goldens.sh` against the HaoZeke `addLocks`
 tree (`SKMAP_SRC`). `cargo test --release --test cpp_parity` loads that file.
 
+## Python
+
+`--features python` binds `embed_euclid`, `project_euclid`,
+`farthest_euclid`, and `fes_xy`. pyo3/numpy stay on 0.29 so the graph
+shares one major with dlpk 0.4.1. dlpk's `pyo3` feature stays off
+(`pyo3-ffi` is `links = "python"`). Check on the remote builder:
+
+```
+bash scripts/check_pyo3_pin.sh
+cargo tree -e features --features python
+```
+
+`landfold --help` records the pin. The CLI itself does not link pyo3.
+
 ## License
 
 MIT. See `CITATION.cff` for the papers to cite with the method.
