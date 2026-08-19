@@ -20,7 +20,7 @@ pub enum TransferMode {
     Warp,
 }
 
-/// High-D or low-D sketch-map transfer function with analytic derivative.
+/// High-D or low-D distance transfer function with analytic derivative.
 #[derive(Clone, Debug)]
 pub struct Transfer {
     mode: TransferMode,

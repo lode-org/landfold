@@ -6,7 +6,7 @@
 //! follows Halko, Martinsson and Tropp, *SIAM Rev.* **53**, 217 (2011),
 //! <https://doi.org/10.1137/090771806>.
 
-use nalgebra::{DMatrix, SymmetricEigen};
+use nalgebra::{DMatrix, QR, SymmetricEigen};
 use ndarray::{Array1, Array2, ArrayView2};
 
 use crate::error::{Result, LandfoldError};
@@ -26,17 +26,11 @@ pub struct MdsReport {
     pub ld_error: f64,
 }
 
-/// Classical Torgerson MDS from a symmetric distance matrix.
-pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64>, MdsReport)> {
+/// Double-centred Gram `B = -1/2 H D^{circ 2} H` (Torgerson 1952).
+fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
     let n = dist.nrows();
     if n == 0 {
         return Err(LandfoldError::Empty);
-    }
-    if lowdim == 0 || lowdim > n {
-        return Err(LandfoldError::LowDim {
-            low: lowdim,
-            high: n,
-        });
     }
     let mut d2 = vec![0.0; n * n];
     for i in 0..n {
@@ -71,12 +65,12 @@ pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64
             b[i * n + j] = -0.5 * (d2[i * n + j] - row_mean[i] - col_mean[j] + grand);
         }
     }
+    Ok((n, b))
+}
 
-    let dm = DMatrix::<f64>::from_row_slice(n, n, &b);
-    let eigen = SymmetricEigen::new(dm);
-    let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (eigen.eigenvalues[k], k)).collect();
+fn coords_from_eigen(n: usize, lowdim: usize, evals: &[f64], evecs: &DMatrix<f64>) -> (Array2<f64>, Array1<f64>, f64) {
+    let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (evals[k], k)).collect();
     pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
     let mut coords = Array2::<f64>::zeros((n, lowdim));
     let mut kept = Array1::<f64>::zeros(lowdim);
     let trace: f64 = pairs.iter().map(|p| p.0).sum();
@@ -86,7 +80,7 @@ pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64
         kept[h] = lam;
         let scale = lam.sqrt();
         for i in 0..n {
-            coords[(i, h)] = eigen.eigenvectors[(i, src)] * scale;
+            coords[(i, h)] = evecs[(i, src)] * scale;
         }
     }
     let ld_error = if trace.abs() > 0.0 {
@@ -94,6 +88,22 @@ pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64
     } else {
         0.0
     };
+    (coords, kept, ld_error)
+}
+
+/// Classical Torgerson MDS from a symmetric distance matrix.
+pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64>, MdsReport)> {
+    let (n, b) = torgerson_b(dist)?;
+    if lowdim == 0 || lowdim > n {
+        return Err(LandfoldError::LowDim {
+            low: lowdim,
+            high: n,
+        });
+    }
+    let dm = DMatrix::<f64>::from_row_slice(n, n, &b);
+    let eigen = SymmetricEigen::new(dm);
+    let evals: Vec<f64> = (0..n).map(|k| eigen.eigenvalues[k]).collect();
+    let (coords, kept, ld_error) = coords_from_eigen(n, lowdim, &evals, &eigen.eigenvectors);
     Ok((
         coords,
         MdsReport {
@@ -103,36 +113,70 @@ pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64
     ))
 }
 
-/// Randomised rangefinder MDS for large `n` (Halko, Martinsson, Tropp 2011).
+/// Randomised rangefinder MDS (Halko, Martinsson, Tropp, *SIAM Rev.* 2011).
+///
+/// Draw `Omega`, form `Y = B Omega`, thin QR `Y = QR`, then the small
+/// eigenproblem on `Q^T B Q`. `seed` is the SplitMix64 start.
 pub fn randomized_mds(
     dist: ArrayView2<f64>,
     lowdim: usize,
     oversample: usize,
     seed: u64,
 ) -> Result<(Array2<f64>, MdsReport)> {
-    let n = dist.nrows();
-    if n == 0 {
-        return Err(LandfoldError::Empty);
+    let (n, b) = torgerson_b(dist)?;
+    if lowdim == 0 || lowdim > n {
+        return Err(LandfoldError::LowDim {
+            low: lowdim,
+            high: n,
+        });
     }
-    let (full, _) = classical_mds(dist, (lowdim + oversample).min(n))?;
-    // Thin path: for modest n the Torgerson factorisation is already the
-    // exact leading subspace; slice it. A dedicated rangefinder can replace
-    // this once n is large enough that forming B dominates.
-    let d = lowdim.min(full.ncols());
-    let coords = full.slice(ndarray::s![.., ..d]).to_owned();
-    let mut evals = Array1::zeros(d);
-    for h in 0..d {
-        let mut acc = 0.0;
-        for i in 0..n {
-            acc += coords[(i, h)] * coords[(i, h)];
+    let ell = (lowdim + oversample.max(2)).min(n);
+    let bm = DMatrix::<f64>::from_row_slice(n, n, &b);
+    let mut omega = DMatrix::<f64>::zeros(n, ell);
+    let mut state = seed | 1;
+    for i in 0..n {
+        for j in 0..ell {
+            // Box-Muller
+            state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            let u1 = ((z ^ (z >> 31)) as f64 / u64::MAX as f64).clamp(1e-12, 1.0);
+            state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z2 = state;
+            z2 = (z2 ^ (z2 >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z2 = (z2 ^ (z2 >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            let u2 = (z2 ^ (z2 >> 31)) as f64 / u64::MAX as f64;
+            omega[(i, j)] = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
         }
-        evals[h] = acc;
     }
-    let _ = seed;
+    let y = &bm * &omega;
+    let qr = QR::new(y);
+    let q = qr.q();
+    let small = q.transpose() * &bm * &q;
+    let eigen = SymmetricEigen::new(small);
+    let mut pairs: Vec<(f64, usize)> = (0..ell).map(|k| (eigen.eigenvalues[k], k)).collect();
+    pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    let d = lowdim.min(ell);
+    let mut coords = Array2::<f64>::zeros((n, d));
+    let mut kept = Array1::<f64>::zeros(d);
+    for h in 0..d {
+        let (lam, src) = pairs[h];
+        let lam = lam.max(0.0);
+        kept[h] = lam;
+        let scale = lam.sqrt();
+        for i in 0..n {
+            let mut acc = 0.0;
+            for r in 0..ell {
+                acc += q[(i, r)] * eigen.eigenvectors[(r, src)];
+            }
+            coords[(i, h)] = acc * scale;
+        }
+    }
     Ok((
         coords,
         MdsReport {
-            eigenvalues: evals,
+            eigenvalues: kept,
             ld_error: 0.0,
         },
     ))
@@ -274,6 +318,20 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 assert_relative_eq!(d0[(i, j)], d1[(i, j)], epsilon = 1e-8);
+            }
+        }
+    }
+
+    #[test]
+    fn randomized_mds_recovers_triangle() {
+        let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let dist = pairwise_euclid(pts.view()).unwrap();
+        let (emb, _) = randomized_mds(dist.view(), 2, 2, 7).unwrap();
+        let d0 = pairwise_euclid(pts.view()).unwrap();
+        let d1 = pairwise_euclid(emb.view()).unwrap();
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_relative_eq!(d0[(i, j)], d1[(i, j)], epsilon = 1e-5);
             }
         }
     }

@@ -7,7 +7,7 @@
 
 use ndarray::{Array1, ArrayView1};
 
-use crate::error::{Result, LandfoldError};
+use crate::error::Result;
 use crate::stress::Stress;
 
 #[derive(Clone, Debug)]
@@ -227,6 +227,5 @@ fn brent(
             }
         }
     }
-    let _ = LandfoldError::Optimize("brent hit maxiter".into());
     (x, fx)
 }
