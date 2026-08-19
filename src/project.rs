@@ -86,7 +86,7 @@ pub fn project_one(
     Ok(project_report(emb, query, metric, opts)?.coords)
 }
 
-/// Grid + local refine, then the χ report C++ `dimproj` prints after the coords.
+/// Grid + local refine, then the one-point χ and nearest-landmark HD distance.
 pub fn project_report(
     emb: &Embedding,
     query: ArrayView1<f64>,

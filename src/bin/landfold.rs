@@ -11,14 +11,17 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    coordination_histogram, embed, farthest_point, mds_from_points, pairwise, pairwise_euclid,
-    project_many_report, read_points, write_points, AnnealOpts, Dot, Embedding, Euclid, FreeEnergy,
-    Histogram2d, IterOpts, MdsMode, Metric, Periodic, ProjOpts, Solver, Sphere, StochOpts,
-    Transfer,
+    AnnealOpts, Dot, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts, MdsMode, Metric,
+    Periodic, ProjOpts, Solver, Sphere, StochOpts, Transfer, coordination_histogram, embed,
+    farthest_point, mds_from_points, pairwise, pairwise_euclid, project_many_report, read_points,
+    write_points,
 };
 
 #[derive(Parser, Debug)]
-#[command(name = "landfold", about = "Landscape And Nonlinear Distance Folding Onto Low Dimensions")]
+#[command(
+    name = "landfold",
+    about = "Landscape And Nonlinear Distance Folding Onto Low Dimensions"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -91,7 +94,7 @@ enum Cmd {
         /// Polak-Ribiere + Brent steps after the grid minimum
         #[arg(long = "refine", default_value_t = 0)]
         refine: usize,
-        /// Also print χ and nearest-landmark HD distance (C++ dimproj columns)
+        /// Also print χ and nearest-landmark HD distance
         #[arg(long)]
         print_error: bool,
     },
@@ -301,13 +304,7 @@ fn main() -> landfold::Result<()> {
                 &euclid
             };
             let emb = Embedding::from_landmarks(
-                hi.points,
-                lo.points,
-                metric,
-                t_hd,
-                t_ld,
-                imix,
-                hi.weights,
+                hi.points, lo.points, metric, t_hd, t_ld, imix, hi.weights,
             )?;
             let mut po = ProjOpts::from_cli(&grid)?;
             po.cg_steps = refine;

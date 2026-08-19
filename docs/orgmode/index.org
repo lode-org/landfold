@@ -16,10 +16,10 @@ high-dimensional molecular data (Ceriotti, Tribello, Parrinello, PNAS
 | Subcommand | Role |
 |------------+------|
 | =embed= | Torgerson MDS init + standard full-pair CG (or =--stoch=) |
-| =project= | out-of-sample |
-| =landmarks= | farthest-point |
+| =project= | coarse then fine χ grid + =--refine= (JCTC 2013) |
+| =landmarks= | Gonzalez farthest-point; =--voronoi= masses |
 | =dist= | pairwise |
 | =mds= | classical Torgerson MDS; =--distances= dumps the sign-invariant pairwise |
-| =fes= | 2-D FES CSV/SVG + coordination histogram |
+| =fes= | =F=-ln(ρ/ρ_max)= CSV/SVG + integer CN histogram |
 
 See [[file:spec.org][spec.org]] and [[file:getting-started.org][getting-started.org]].
