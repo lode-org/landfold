@@ -5,7 +5,7 @@
 //! is Brent (*Algorithms for Minimization without Derivatives*, 1973).
 
 use ndarray::{Array1, ArrayView1};
-use quench_core::{Conjugacy, Control, LineSearch, Oracle, Restart};
+use quench_core::{Control, LineSearch, Method, Oracle};
 
 use eindir_core::DifferentiableObjective;
 
@@ -80,17 +80,35 @@ pub fn minimize_diff<O>(obj: &O, init: ArrayView1<f64>, opts: &CgOpts) -> Result
 where
     O: DifferentiableObjective<f64> + ?Sized,
 {
+    minimize_with(obj, init, opts, Method::polak_ribiere())
+}
+
+/// Any quench [`Method`] on χ. landfold extra arms (L-BFGS, BFGS, ...) use this.
+pub fn minimize_with<O>(
+    obj: &O,
+    init: ArrayView1<f64>,
+    opts: &CgOpts,
+    method: Method,
+) -> Result<CgReport>
+where
+    O: DifferentiableObjective<f64> + ?Sized,
+{
     let (ctrl, ls) = control(opts);
-    quench_core::minimize(
-        obj,
-        init.to_owned(),
-        &ctrl,
-        Conjugacy::PolakRibiere,
-        Restart::Never,
-        ls,
-    )
-    .map(to_report)
-    .map_err(|e| LandfoldError::Optimize(e.to_string()))
+    quench_core::minimize_method(obj, init.to_owned(), &ctrl, method, ls)
+        .map(to_report)
+        .map_err(|e| LandfoldError::Optimize(e.to_string()))
+}
+
+/// Packed χ through a quench method. `Solver::Quench` uses this path.
+pub fn minimize_quench(
+    stress: &Stress,
+    init: ArrayView1<f64>,
+    d: usize,
+    opts: &CgOpts,
+    method: Method,
+) -> Result<CgReport> {
+    let obj = ChiObjective::new(stress, d);
+    minimize_with(&obj, init, opts, method)
 }
 
 /// Polak-Ribiere + Brent on any scalar `f` with analytic gradient.

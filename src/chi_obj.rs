@@ -108,6 +108,35 @@ mod tests {
     }
 
     #[test]
+    fn lbfgs_uses_the_same_chi_objective() {
+        let (s, coords) = toy();
+        let obj = ChiObjective::new(&s, 2);
+        let mut start = coords.clone();
+        start[0] += 0.3;
+        let report = quench_core::minimize_method(
+            &obj,
+            start,
+            &quench_core::Control {
+                maxiter: 80,
+                gtol: 1e-10,
+                istep: 0.1,
+                maxmove: None,
+            },
+            quench_core::Method::lbfgs(),
+            quench_core::LineSearch::Brent {
+                maxiter: 40,
+                tol: 1e-12,
+            },
+        )
+        .unwrap();
+        assert!(
+            report.value < 1e-10,
+            "L-BFGS chi {} (same ChiObjective, no rewrite)",
+            report.value
+        );
+    }
+
+    #[test]
     fn box_bounds_clip_domain() {
         let (s, _) = toy();
         let obj = ChiObjective::with_box(&s, 2, -0.3, 0.3);

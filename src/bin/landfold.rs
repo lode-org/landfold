@@ -74,6 +74,9 @@ enum Cmd {
         /// Bound-constrained HiGHS sequential LP (needs --features highs)
         #[arg(long)]
         highs: bool,
+        /// Unconstrained L-BFGS quench (extra arm; same ChiObjective)
+        #[arg(long)]
+        lbfgs: bool,
         /// Box bounds `lo,hi` for `--highs`
         #[arg(long = "box")]
         box_bounds: Option<String>,
@@ -219,6 +222,7 @@ fn main() -> landfold::Result<()> {
             anneal,
             replica,
             highs,
+            lbfgs,
             box_bounds,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
@@ -255,6 +259,8 @@ fn main() -> landfold::Result<()> {
                             "rebuild with --features highs for the HiGHS arm".into(),
                         ));
                     }
+                } else if lbfgs {
+                    Solver::Quench(quench_core::Method::lbfgs())
                 } else if replica {
                     Solver::Replica(ReplicaOpts {
                         steps,

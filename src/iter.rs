@@ -23,6 +23,8 @@ pub enum Solver {
     /// Bound-constrained sequential LP via HiGHS. Extra arm.
     #[cfg(feature = "highs")]
     Highs(crate::highs_slp::HighsOpts),
+    /// Unconstrained quench (L-BFGS, BFGS, SR1, Adam, other NLCG). Extra arm.
+    Quench(quench_core::Method),
 }
 
 #[derive(Clone, Debug)]
@@ -163,6 +165,13 @@ pub fn embed(
         Solver::Replica(ro) => minimize_replica(&stress, packed.view(), opts.lowdim, ro, &opts.cg)?,
         #[cfg(feature = "highs")]
         Solver::Highs(ho) => crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?,
+        Solver::Quench(method) => crate::cg::minimize_quench(
+            &stress,
+            packed.view(),
+            opts.lowdim,
+            &opts.cg,
+            *method,
+        )?,
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
     for i in 0..n {
