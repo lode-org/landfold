@@ -875,6 +875,7 @@ dependencies = [
  "numpy",
  "plotters",
  "pyo3",
+ "quench-core",
  "rayon",
  "thiserror",
 ]
@@ -1295,6 +1296,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "quench-core"
+version = "0.1.0"
+dependencies = [
+ "eindir-core",
+ "ndarray",
+ "num-traits",
+ "thiserror",
 ]
 
 [[package]]
