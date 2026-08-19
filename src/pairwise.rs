@@ -30,10 +30,13 @@ fn validate_finite_points(points: ArrayView2<f64>) -> Result<()> {
     Ok(())
 }
 
-fn stable_euclid(a: impl Iterator<Item = &f64>, b: impl Iterator<Item = &f64>) -> f64 {
+fn stable_euclid<'a, 'b>(
+    a: impl Iterator<Item = &'a f64>,
+    b: impl Iterator<Item = &'b f64>,
+) -> f64 {
     let mut scale = 0.0;
     let mut sum = 0.0;
-    for (&ai, &bi) in a.iter().zip(b) {
+    for (&ai, &bi) in a.zip(b) {
         let delta = (bi - ai).abs();
         if !delta.is_finite() {
             return f64::INFINITY;
