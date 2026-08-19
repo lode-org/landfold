@@ -10,7 +10,7 @@
 use highs::{RowProblem, Sense};
 use ndarray::{Array1, ArrayView1};
 
-use crate::cg::CgReport;
+use crate::cg::{CgReport, validate_packed_init};
 use crate::error::{LandfoldError, Result};
 use crate::stress::Stress;
 
@@ -39,6 +39,34 @@ impl Default for HighsOpts {
     }
 }
 
+impl HighsOpts {
+    fn validate(&self) -> Result<()> {
+        if !self.trust.is_finite() || self.trust <= 0.0 {
+            return Err(LandfoldError::Msg(
+                "HiGHS trust radius must be finite and > 0".into(),
+            ));
+        }
+        if self
+            .lo
+            .into_iter()
+            .chain(self.hi)
+            .any(|value| !value.is_finite())
+        {
+            return Err(LandfoldError::Msg(
+                "HiGHS bounds must be finite".into(),
+            ));
+        }
+        if let (Some(lo), Some(hi)) = (self.lo, self.hi) {
+            if lo > hi {
+                return Err(LandfoldError::Msg(
+                    "HiGHS lower bound must not exceed upper bound".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Sequential LP steps on packed χ. Each LP is solved by HiGHS.
 pub fn minimize_highs(
     stress: &Stress,
@@ -46,6 +74,8 @@ pub fn minimize_highs(
     d: usize,
     opts: &HighsOpts,
 ) -> Result<CgReport> {
+    validate_packed_init(init, stress.n, d)?;
+    opts.validate()?;
     let mut pos = init.to_owned();
     for v in pos.iter_mut() {
         if let Some(b) = opts.lo {
@@ -55,7 +85,7 @@ pub fn minimize_highs(
             *v = v.min(b);
         }
     }
-    let mut ev = stress.eval(pos.view(), d);
+    let mut ev = stress.try_eval(pos.view(), d)?;
     let mut steps = 0;
     let trust0 = opts.trust.max(1e-8);
     let mut trust = trust0;
@@ -82,7 +112,7 @@ pub fn minimize_highs(
                     *v = v.min(b);
                 }
             }
-            let ev1 = stress.eval(trial.view(), d);
+            let ev1 = stress.try_eval(trial.view(), d)?;
             if ev1.value < ev.value {
                 pos = trial;
                 ev = ev1;
@@ -206,5 +236,31 @@ mod tests {
                 "coord {v} left the box"
             );
         }
+    }
+
+    #[test]
+    fn rejects_invalid_options_and_transfer_overflow() {
+        let hd = array![[0.0, 1.0], [1.0, 0.0]];
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None).unwrap();
+        assert!(minimize_highs(
+            &stress,
+            array![0.0, 0.0].view(),
+            1,
+            &HighsOpts {
+                trust: f64::NAN,
+                ..HighsOpts::default()
+            }
+        )
+        .is_err());
+
+        let mut stress = stress;
+        stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        assert!(minimize_highs(
+            &stress,
+            array![0.0, 1.0e154].view(),
+            1,
+            &HighsOpts::default()
+        )
+        .is_err());
     }
 }
