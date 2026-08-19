@@ -60,10 +60,16 @@ impl FrameBatch {
                 "trajectory frames must have a stable shape and finite coordinates".into(),
             ));
         }
-        let unique_ids: HashSet<u64> = atom_ids.iter().copied().collect();
-        if unique_ids.len() != atom_ids.len() {
+        let unique_atom_ids: HashSet<u64> = atom_ids.iter().copied().collect();
+        if unique_atom_ids.len() != atom_ids.len() {
             return Err(LandfoldError::Msg(
                 "trajectory atom IDs must be unique".into(),
+            ));
+        }
+        let unique_frame_ids: HashSet<u64> = frame_ids.iter().copied().collect();
+        if unique_frame_ids.len() != frame_ids.len() {
+            return Err(LandfoldError::Msg(
+                "trajectory frame IDs must be unique".into(),
             ));
         }
         Ok(Self {
@@ -117,6 +123,15 @@ mod tests {
     #[test]
     fn rejects_mismatched_frame_shape_and_ids() {
         assert!(FrameBatch::new(Vec::new(), vec![0], Vec::new(), None).is_err());
+        assert!(
+            FrameBatch::new(
+                vec![array![[0.0, 0.0, 0.0]], array![[1.0, 0.0, 0.0]]],
+                vec![0],
+                vec![4, 4],
+                None,
+            )
+            .is_err()
+        );
         assert!(
             FrameBatch::new(
                 vec![array![[0.0, 0.0, 0.0]], array![[1.0, 0.0]]],

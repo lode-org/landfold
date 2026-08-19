@@ -101,6 +101,16 @@ pub fn frames_batch(frames: &[ConFrame]) -> Result<FrameBatch> {
         .map(|(index, frame)| frame.header.frame_index().unwrap_or(index as u64))
         .collect();
     let length_unit = first.header.length_unit().map(str::to_owned);
+    if frames
+        .iter()
+        .skip(1)
+        .map(|frame| frame.header.length_unit())
+        .any(|unit| unit != length_unit.as_deref())
+    {
+        return Err(LandfoldError::Msg(
+            "readcon frames have inconsistent length units".into(),
+        ));
+    }
     FrameBatch::new(positions, atom_ids, frame_ids, length_unit)
 }
 
