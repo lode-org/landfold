@@ -342,6 +342,34 @@ mod tests {
     }
 
     #[test]
+    fn rejects_mutated_embedding_state() {
+        let high = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let low = high.clone();
+        let mut emb = Embedding::from_landmarks(
+            high,
+            low,
+            &Euclid,
+            Transfer::identity(),
+            Transfer::identity(),
+            0.0,
+            None,
+        )
+        .unwrap();
+        let opts = ProjOpts {
+            gridw: 1.0,
+            grid_coarse: 1,
+            grid_fine: 1,
+            cg_steps: 0,
+        };
+        emb.low = array![[0.0], [1.0], [0.0]];
+        assert!(project_report(&emb, array![0.0, 0.0].view(), &Euclid, &opts).is_err());
+
+        emb.low = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        emb.weights = array![1.0, 1.0];
+        assert!(project_report(&emb, array![0.0, 0.0].view(), &Euclid, &opts).is_err());
+    }
+
+    #[test]
     fn rejects_invalid_imix_in_landmark_embeddings() {
         let high = array![[0.0, 0.0], [1.0, 0.0]];
         let low = high.clone();
