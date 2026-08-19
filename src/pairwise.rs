@@ -253,7 +253,10 @@ mod tests {
         let mut invalid = array![[0.0, f64::NAN], [f64::NAN, 0.0]];
         let original = invalid.clone();
         assert!(apply_transfer(&mut invalid, &transfer).is_err());
-        assert_eq!(invalid, original);
+        assert!(invalid
+            .iter()
+            .zip(original.iter())
+            .all(|(left, right)| left.to_bits() == right.to_bits()));
 
         let mut distances = array![[7.0, 2.0], [2.0, 9.0]];
         apply_transfer(&mut distances, &transfer).unwrap();
