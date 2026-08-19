@@ -44,7 +44,7 @@ impl Transfer {
 
     /// `1 - 1/(1 + (x/sigma)^2)`.
     pub fn sigmoid(sigma: f64) -> Result<Self> {
-        if !(sigma > 0.0) {
+        if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("sigmoid sigma must be > 0"));
         }
         let inv = 1.0 / sigma;
@@ -56,7 +56,7 @@ impl Transfer {
 
     /// `1 - 1/(1 + x/sigma)`.
     pub fn compress(sigma: f64) -> Result<Self> {
-        if !(sigma > 0.0) {
+        if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("compress sigma must be > 0"));
         }
         Ok(Self {
@@ -67,11 +67,13 @@ impl Transfer {
 
     /// Generalised sigmoid of Ceriotti 2011. Arguments `(sigma, a, b)`.
     pub fn xsigmoid(sigma: f64, a: f64, b: f64) -> Result<Self> {
-        if !(sigma > 0.0) {
+        if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("xsigmoid sigma must be > 0"));
         }
-        if a == 0.0 {
-            return Err(LandfoldError::TransferParams("xsigmoid a must be nonzero"));
+        if !(a.is_finite() && a > 0.0 && b.is_finite() && b > 0.0) {
+            return Err(LandfoldError::TransferParams(
+                "xsigmoid a and b must be finite and > 0",
+            ));
         }
         Ok(Self {
             mode: TransferMode::XSigmoid,
@@ -83,7 +85,7 @@ impl Transfer {
     ///
     /// `P(n/2, (x/(sigma sqrt(2)))^2)` via a series / continued-fraction Q.
     pub fn gamma(sigma: f64, n: f64) -> Result<Self> {
-        if !(sigma > 0.0) || !(n > 0.0) {
+        if !(sigma.is_finite() && sigma > 0.0) || !(n.is_finite() && n > 0.0) {
             return Err(LandfoldError::TransferParams(
                 "gamma needs sigma > 0 and n > 0",
             ));
@@ -100,8 +102,16 @@ impl Transfer {
 
     /// `F_LD^{-1}(F_HD(x))` warp. Arguments `(sigma, a_D, b_D, a_d, b_d)`.
     pub fn warp(sigma: f64, a_d: f64, b_d: f64, a_ld: f64, b_ld: f64) -> Result<Self> {
-        if !(sigma > 0.0) {
+        if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("warp sigma must be > 0"));
+        }
+        if ![a_d, b_d, a_ld, b_ld]
+            .into_iter()
+            .all(|p| p.is_finite() && p > 0.0)
+        {
+            return Err(LandfoldError::TransferParams(
+                "warp shape parameters must be finite and > 0",
+            ));
         }
         Ok(Self {
             mode: TransferMode::Warp,
@@ -374,5 +384,18 @@ mod tests {
         assert!(t.f(1.0) > 0.0);
         assert!(t.f(2.0) > t.f(1.0));
         assert!(t.df(1.0) > 0.0);
+    }
+
+    #[test]
+    fn rejects_invalid_xsigmoid_parameters() {
+        assert!(Transfer::xsigmoid(1.0, 2.0, 0.0).is_err());
+        assert!(Transfer::xsigmoid(f64::NAN, 2.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_warp_parameters() {
+        assert!(Transfer::warp(1.0, 0.0, 1.0, 2.0, 1.0).is_err());
+        assert!(Transfer::warp(1.0, 2.0, 1.0, 2.0, 0.0).is_err());
+        assert!(Transfer::warp(1.0, 2.0, f64::NAN, 2.0, 1.0).is_err());
     }
 }
