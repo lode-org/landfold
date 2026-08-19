@@ -185,7 +185,13 @@ pub fn embed(
             crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?
         }
         Solver::Quench(method) => {
-            crate::cg::minimize_quench(&stress, packed.view(), opts.lowdim, &opts.cg, *method)?
+            crate::cg::minimize_quench(
+                &stress,
+                packed.view(),
+                opts.lowdim,
+                &opts.cg,
+                method.clone(),
+            )?
         }
     };
     let mut out = Array2::<f64>::zeros((n, opts.lowdim));
