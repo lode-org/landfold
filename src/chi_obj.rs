@@ -169,4 +169,16 @@ mod tests {
         let clipped = obj.bounds().clip(out.view());
         assert_relative_eq!(clipped[0], 0.3, epsilon = 1e-15);
     }
+
+    #[test]
+    fn optimizer_objective_stays_finite_on_transfer_overflow() {
+        let (mut stress, _) = toy();
+        stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        let obj = ChiObjective::new(&stress, 2);
+        let x = array![0.0, 0.0, 1.0e154, 0.0, 0.0, 0.0];
+        let (value, grad) = obj.value_and_gradient(x.view());
+        assert!(value.is_finite());
+        assert!(grad.iter().all(|&component| component.is_finite()));
+        assert!(value > 1.0e100);
+    }
 }

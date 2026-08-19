@@ -681,4 +681,12 @@ mod tests {
         stress.n = 3;
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_err());
     }
+
+    #[test]
+    fn checked_eval_rejects_transfer_overflow() {
+        let hd = array![[0.0, 1.0], [1.0, 0.0]];
+        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
+        assert!(stress.try_eval(array![0.0, 1.0e154].view(), 1).is_err());
+    }
 }
