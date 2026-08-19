@@ -19,6 +19,15 @@ octahedron start. =lj38.17.xyz= / =lj38.19.xyz= are metadynamics
 snapshots. =lj38_fcc.xyz= / =lj38_ico.xyz= are the two competing
 minima.
 
+The public zip and =lab-cosmo/sampling-tutorial= ship =ts.all= (the
+exercise 5.5 transition-state ensemble, 3451 frames). They do not ship
+=out.all=, the long MD used for the JCTC 2013 landscape
+(Ceriotti, Tribello, Parrinello, DOI 10.1021/ct3010563). The composed
+figure is therefore a Gaussian KDE of the TSE embedding, drawn in that
+paper's panel class (connected F/eps blob, colorbar 0-2, structures
+on the map with leader lines, integer CN 3-12 bars). It is not a
+reconstruction of the missing =out.all= sample.
+
 Exercise 5 parameters (verbatim):
 
 - high-D sigmoid =5,8,1=
@@ -31,4 +40,5 @@ Exercise 5 parameters (verbatim):
 #+begin_src sh
 # remote builder, release landfold on PATH
 ./run.sh
+# compose_fes.py writes out/lj38_fes.png and lj38_fes.png
 #+end_src

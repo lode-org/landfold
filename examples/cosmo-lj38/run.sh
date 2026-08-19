@@ -59,4 +59,10 @@ if command -v xyzrender >/dev/null; then
   done
 fi
 
+# JCTC 2013 panel class: filled FES, leader lines, CN 3-12. Needs the
+# projected TSE and xyzrender frames above. Teaching zip has no out.all.
+if command -v python3 >/dev/null; then
+  python3 "$ROOT/compose_fes.py"
+fi
+
 echo "wrote $ROOT/out"
