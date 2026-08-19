@@ -12,6 +12,7 @@
 
 pub mod anneal;
 pub mod array;
+pub mod artifact;
 pub mod cg;
 pub mod chi_obj;
 pub mod error;

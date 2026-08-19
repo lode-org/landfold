@@ -7,6 +7,7 @@
 use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 use crate::{
     embed_points, farthest_point, fes_from_points, project_one, Euclid, IterOpts, ProjOpts,
@@ -22,6 +23,25 @@ fn to_pyarray2<'py>(py: Python<'py>, mat: Array2<f64>) -> Bound<'py, PyArray2<f6
     PyArray2::from_owned_array(py, mat)
 }
 
+fn embedding_options(
+    points: Array2<f64>,
+    lowdim: usize,
+    fun_hd: &str,
+    fun_ld: &str,
+    imix: f64,
+    steps: usize,
+) -> crate::Result<crate::Embedding> {
+    let mut opts = IterOpts {
+        lowdim,
+        imix,
+        ..IterOpts::default()
+    };
+    opts.cg.maxiter = steps;
+    opts.tfun_hd = Transfer::from_cli(fun_hd)?;
+    opts.tfun_ld = Transfer::from_cli(fun_ld)?;
+    embed_points(points.view(), &Euclid, &opts)
+}
+
 type PyFesResult<'py> = PyResult<(Vec<f64>, Vec<f64>, Bound<'py, PyArray2<f64>>)>;
 
 #[pyfunction]
@@ -35,18 +55,40 @@ fn embed_euclid<'py>(
     imix: f64,
     steps: usize,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-    let pts = copy_f64_2d(points);
-    let mut opts = IterOpts {
-        lowdim,
-        imix,
-        ..IterOpts::default()
-    };
-    opts.cg.maxiter = steps;
-    opts.tfun_hd = Transfer::from_cli(fun_hd).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    opts.tfun_ld = Transfer::from_cli(fun_ld).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let emb = embed_points(pts.view(), &Euclid, &opts)
+    let emb = embedding_options(copy_f64_2d(points), lowdim, fun_hd, fun_ld, imix, steps)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(to_pyarray2(py, emb.low))
+}
+
+/// Return an embedding together with the metadata needed by result consumers.
+#[pyfunction]
+#[pyo3(signature = (points, lowdim=2, fun_hd="identity", fun_ld="identity", imix=0.0, steps=100))]
+fn embed_euclid_result<'py>(
+    py: Python<'py>,
+    points: PyReadonlyArray2<'py, f64>,
+    lowdim: usize,
+    fun_hd: &str,
+    fun_ld: &str,
+    imix: f64,
+    steps: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let emb = embedding_options(copy_f64_2d(points), lowdim, fun_hd, fun_ld, imix, steps)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let highdim = emb.high.ncols();
+    let lowdim = emb.low.ncols();
+    let n_points = emb.high.nrows();
+    let result = PyDict::new(py);
+    result.set_item("schema", crate::artifact::EMBEDDING_SCHEMA)?;
+    result.set_item("coordinates", to_pyarray2(py, emb.low))?;
+    result.set_item("stress", emb.stress)?;
+    result.set_item("n_points", n_points)?;
+    result.set_item("highdim", highdim)?;
+    result.set_item("lowdim", lowdim)?;
+    result.set_item("fun_hd", fun_hd)?;
+    result.set_item("fun_ld", fun_ld)?;
+    result.set_item("imix", imix)?;
+    result.set_item("units", py.None())?;
+    Ok(result)
 }
 
 #[pyfunction]
@@ -97,6 +139,70 @@ fn project_euclid<'py>(
     Ok(to_pyarray2(py, out))
 }
 
+/// Return projected coordinates together with χ and nearest-landmark data.
+#[pyfunction]
+#[pyo3(signature = (high, low, query, fun_hd="identity", fun_ld="identity", imix=0.0, gridw=1.0, grid_coarse=21, grid_fine=201, refine=0))]
+#[allow(clippy::too_many_arguments)]
+fn project_euclid_result<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray2<'py, f64>,
+    low: PyReadonlyArray2<'py, f64>,
+    query: PyReadonlyArray2<'py, f64>,
+    fun_hd: &str,
+    fun_ld: &str,
+    imix: f64,
+    gridw: f64,
+    grid_coarse: usize,
+    grid_fine: usize,
+    refine: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let high = copy_f64_2d(high);
+    let low = copy_f64_2d(low);
+    let query = copy_f64_2d(query);
+    let emb = crate::Embedding::from_landmarks(
+        high,
+        low,
+        &Euclid,
+        Transfer::from_cli(fun_hd).map_err(|e| PyValueError::new_err(e.to_string()))?,
+        Transfer::from_cli(fun_ld).map_err(|e| PyValueError::new_err(e.to_string()))?,
+        imix,
+        None,
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let opts = ProjOpts {
+        gridw,
+        grid_coarse,
+        grid_fine,
+        cg_steps: refine,
+    };
+    let reports = crate::project_many_report(&emb, query.view(), &Euclid, &opts)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let dim = emb.low.ncols();
+    let mut coordinates = Array2::<f64>::zeros((reports.len(), dim));
+    let mut chi = Vec::with_capacity(reports.len());
+    let mut nearest = Vec::with_capacity(reports.len());
+    let mut nearest_idx = Vec::with_capacity(reports.len());
+    for (row, report) in reports.iter().enumerate() {
+        for column in 0..dim {
+            coordinates[(row, column)] = report.coords[column];
+        }
+        chi.push(report.chi);
+        nearest.push(report.nearest);
+        nearest_idx.push(report.nearest_idx);
+    }
+    let result = PyDict::new(py);
+    result.set_item("schema", crate::artifact::PROJECTION_SCHEMA)?;
+    result.set_item("coordinates", to_pyarray2(py, coordinates))?;
+    result.set_item("chi", chi)?;
+    result.set_item("nearest_distance", nearest)?;
+    result.set_item("nearest_index", nearest_idx)?;
+    result.set_item("fun_hd", fun_hd)?;
+    result.set_item("fun_ld", fun_ld)?;
+    result.set_item("imix", imix)?;
+    result.set_item("units", py.None())?;
+    Ok(result)
+}
+
 #[pyfunction]
 #[pyo3(signature = (points, k, seed=0))]
 fn farthest_euclid<'py>(
@@ -139,12 +245,43 @@ fn fes_xy<'py>(
     ))
 }
 
+/// Return a FES with density and grid metadata for plotting adapters.
+#[pyfunction]
+#[pyo3(signature = (xy, nx=80, ny=80, kt=1.0, pad=0.05))]
+fn fes_xy_result<'py>(
+    py: Python<'py>,
+    xy: PyReadonlyArray2<'py, f64>,
+    nx: usize,
+    ny: usize,
+    kt: f64,
+    pad: f64,
+) -> PyResult<Bound<'py, PyDict>> {
+    let pts = copy_f64_2d(xy);
+    let fes = fes_from_points(pts.view(), nx, ny, kt, pad, None)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let f = Array2::from_shape_fn(fes.f.raw_dim(), |(iy, ix)| {
+        fes.f[(iy, ix)].unwrap_or(f64::NAN)
+    });
+    let result = PyDict::new(py);
+    result.set_item("schema", crate::artifact::FES_SCHEMA)?;
+    result.set_item("x", fes.x_centers.to_vec())?;
+    result.set_item("y", fes.y_centers.to_vec())?;
+    result.set_item("free_energy", to_pyarray2(py, f))?;
+    result.set_item("density", to_pyarray2(py, fes.rho))?;
+    result.set_item("kt", kt)?;
+    result.set_item("units", py.None())?;
+    Ok(result)
+}
+
 #[pymodule]
 fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(embed_euclid, m)?)?;
+    m.add_function(wrap_pyfunction!(embed_euclid_result, m)?)?;
     m.add_function(wrap_pyfunction!(project_euclid, m)?)?;
+    m.add_function(wrap_pyfunction!(project_euclid_result, m)?)?;
     m.add_function(wrap_pyfunction!(farthest_euclid, m)?)?;
     m.add_function(wrap_pyfunction!(fes_xy, m)?)?;
+    m.add_function(wrap_pyfunction!(fes_xy_result, m)?)?;
     m.add("version", crate::VERSION)?;
     Ok(())
 }
