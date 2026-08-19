@@ -149,6 +149,32 @@ impl Stress {
         }
     }
 
+    /// Checked evaluation for external callers with fallible input handling.
+    pub fn try_eval(&self, coords: ArrayView1<f64>, d: usize) -> crate::error::Result<StressEval> {
+        if d == 0 {
+            return Err(crate::error::LandfoldError::LowDim {
+                low: 0,
+                high: self.n,
+            });
+        }
+        if coords.len() != self.n * d {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress coordinates must have length n * d",
+            ));
+        }
+        if coords.as_slice().is_none() {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress coordinates must be contiguous",
+            ));
+        }
+        if coords.iter().any(|&value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress coordinates must be finite".into(),
+            ));
+        }
+        Ok(self.eval(coords, d))
+    }
+
     fn pair_kernel(&self, i: usize, data: &PairData<'_>, acc: &mut PairAccum<'_>) {
         let xi = &data.coords[i * data.d..(i + 1) * data.d];
         for j in 0..i {
@@ -559,5 +585,15 @@ mod tests {
             let fd = (s.eval(up.view(), 2).value - s.eval(dn.view(), 2).value) / (2.0 * h);
             assert_relative_eq!(ev.grad[k], fd, epsilon = 1e-6);
         }
+    }
+
+    #[test]
+    fn checked_eval_rejects_malformed_coordinates() {
+        let hd = array![[0.0, 1.0], [1.0, 0.0]];
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None);
+        assert!(stress.try_eval(array![0.0].view(), 1).is_err());
+        assert!(stress.try_eval(array![0.0, f64::NAN].view(), 1).is_err());
+        assert!(stress.try_eval(array![0.0, 0.0].view(), 0).is_err());
+        assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_ok());
     }
 }
