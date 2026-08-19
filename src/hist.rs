@@ -162,8 +162,13 @@ impl Histogram2d {
     }
 
     /// Separable Gaussian blur of the count field (binned KDE).
-    pub fn blur(&self, sigma_bins: f64) -> Array2<f64> {
-        blur_separable(&self.counts, sigma_bins)
+    pub fn blur(&self, sigma_bins: f64) -> Result<Array2<f64>> {
+        if !sigma_bins.is_finite() || sigma_bins < 0.0 {
+            return Err(LandfoldError::Msg(
+                "histogram blur sigma must be finite and nonnegative".into(),
+            ));
+        }
+        Ok(blur_separable(&self.counts, sigma_bins))
     }
 }
 
@@ -187,12 +192,7 @@ impl FreeEnergy {
     /// Same invert after a separable Gaussian blur of the counts.
     pub fn from_histogram_blurred(h: &Histogram2d, kt: f64, sigma_bins: f64) -> Result<Self> {
         validate_fes_kt(kt)?;
-        if !sigma_bins.is_finite() || sigma_bins < 0.0 {
-            return Err(LandfoldError::Msg(
-                "fes blur sigma must be finite and nonnegative".into(),
-            ));
-        }
-        let counts = h.blur(sigma_bins);
+        let counts = h.blur(sigma_bins)?;
         Self::from_counts(h, &counts, kt)
     }
 
@@ -239,14 +239,25 @@ impl FreeEnergy {
     }
 
     /// Clip finite F to `[0, fmax]` (JCTC 2013 panel is `fmax = 2`).
-    pub fn clip(&mut self, fmax: f64) {
+    pub fn clip(&mut self, fmax: f64) -> Result<()> {
+        if !fmax.is_finite() || fmax < 0.0 {
+            return Err(LandfoldError::Msg(
+                "FES clip maximum must be finite and nonnegative".into(),
+            ));
+        }
         for f in self.f.iter_mut().flatten() {
             *f = f.clamp(0.0, fmax);
         }
+        Ok(())
     }
 
     /// Drop detached islands and fill interior holes so the map is one body.
-    pub fn connected_body(&mut self, floor: f64) {
+    pub fn connected_body(&mut self, floor: f64) -> Result<()> {
+        if !floor.is_finite() || floor < 0.0 {
+            return Err(LandfoldError::Msg(
+                "FES connected-body floor must be finite and nonnegative".into(),
+            ));
+        }
         let ny = self.f.nrows();
         let nx = self.f.ncols();
         let mut mask = vec![false; ny * nx];
@@ -273,6 +284,7 @@ impl FreeEnergy {
                 }
             }
         }
+        Ok(())
     }
 
     pub fn write_csv(&self, w: &mut impl std::io::Write) -> std::io::Result<()> {
@@ -698,6 +710,7 @@ mod tests {
         }
         assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, -1.0).is_err());
         assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, f64::NAN).is_err());
+        assert!(h.blur(-1.0).is_err());
     }
 
     #[test]
@@ -780,7 +793,7 @@ mod tests {
         h.add(2.5, 2.5, 1.0).unwrap();
         let mut fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
         assert!(fes.f[(2, 2)].is_some());
-        fes.connected_body(0.05);
+        fes.connected_body(0.05).unwrap();
         assert!(fes.f[(0, 0)].is_some());
         assert!(fes.f[(1, 0)].is_some());
         assert_eq!(fes.f[(2, 2)], None);
@@ -800,5 +813,16 @@ mod tests {
         assert!((f11 - 0.5_f64.ln().abs()).abs() < 1e-12);
         assert!((fes.rho[(0, 0)] - 2.0 / 3.0).abs() < 1e-12);
         assert!((fes.rho[(1, 1)] - 1.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rejects_invalid_fes_postprocessing_parameters() {
+        let mut h = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        h.add(0.25, 0.25, 1.0).unwrap();
+        let mut fes = FreeEnergy::from_histogram(&h, 1.0).unwrap();
+        assert!(fes.clip(-1.0).is_err());
+        assert!(fes.clip(f64::NAN).is_err());
+        assert!(fes.connected_body(-1.0).is_err());
+        assert!(fes.connected_body(f64::NAN).is_err());
     }
 }

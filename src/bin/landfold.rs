@@ -507,7 +507,7 @@ fn main() -> landfold::Result<()> {
                 FreeEnergy::from_histogram(&h, kt)?
             };
             if floor > 0.0 {
-                fes.connected_body(floor);
+                fes.connected_body(floor)?;
             }
             if let Some(p) = csv {
                 fes.write_csv(&mut std::fs::File::create(p)?)?;
