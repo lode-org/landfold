@@ -14,6 +14,9 @@ pub struct PointSet {
 }
 
 pub fn read_points<R: BufRead>(r: R, dim: usize, weighted: bool) -> Result<PointSet> {
+    if dim == 0 {
+        return Err(LandfoldError::Shape("point dimension must be > 0"));
+    }
     let mut rows: Vec<Vec<f64>> = Vec::new();
     let mut weights: Vec<f64> = Vec::new();
     for (lineno, line) in r.lines().enumerate() {
@@ -36,9 +39,9 @@ pub fn read_points<R: BufRead>(r: R, dim: usize, weighted: bool) -> Result<Point
             )));
         }
         let need = dim + usize::from(weighted);
-        if nums.len() < need {
+        if nums.len() != need {
             return Err(LandfoldError::Parse(format!(
-                "line {}: expected {need} columns, got {}",
+                "line {}: expected exactly {need} columns, got {}",
                 lineno + 1,
                 nums.len()
             )));
@@ -78,6 +81,19 @@ pub fn write_points<W: Write>(
     pts: &Array2<f64>,
     weights: Option<&Array1<f64>>,
 ) -> Result<()> {
+    if let Some(weights) = weights {
+        if weights.len() != pts.nrows() {
+            return Err(LandfoldError::Shape("point weight length"));
+        }
+        if weights.iter().any(|&value| !value.is_finite()) {
+            return Err(LandfoldError::Msg("point weights must be finite".into()));
+        }
+    }
+    if pts.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "point coordinates must be finite".into(),
+        ));
+    }
     for i in 0..pts.nrows() {
         for j in 0..pts.ncols() {
             if j > 0 {
@@ -101,5 +117,7 @@ mod tests {
     #[test]
     fn rejects_nonfinite_input_values() {
         assert!(read_points(Cursor::new("0 NaN\n"), 2, false).is_err());
+        assert!(read_points(Cursor::new("0 1 2\n"), 0, false).is_err());
+        assert!(read_points(Cursor::new("0 1 2\n"), 2, false).is_err());
     }
 }

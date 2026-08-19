@@ -27,6 +27,19 @@ pub fn farthest_point(
     if k == 0 || k > n {
         return Err(LandfoldError::LowDim { low: k, high: n });
     }
+    if points.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "landmark coordinates must be finite".into(),
+        ));
+    }
+    if let Some(expected) = metric.dim() {
+        if points.ncols() != expected {
+            return Err(LandfoldError::MetricSize {
+                left: points.ncols(),
+                right: expected,
+            });
+        }
+    }
     if let Some(w) = weights {
         if w.len() != n {
             return Err(LandfoldError::Shape("landmark weight length"));
@@ -95,12 +108,41 @@ pub fn voronoi_weights(
     if k == 0 {
         return Err(LandfoldError::Empty);
     }
+    if !wgamma.is_finite() {
+        return Err(LandfoldError::Msg("wgamma must be finite".into()));
+    }
+    if points.iter().any(|&value| !value.is_finite())
+        || landmarks.points.iter().any(|&value| !value.is_finite())
+    {
+        return Err(LandfoldError::Msg(
+            "landmark coordinates must be finite".into(),
+        ));
+    }
+    if landmarks.index.iter().any(|&i| i >= n) {
+        return Err(LandfoldError::Shape("landmark index out of bounds"));
+    }
     if src_weights.is_some_and(|w| w.len() != n) {
         return Err(LandfoldError::Shape("source weight length"));
     }
+    if src_weights.is_some_and(|w| w.iter().any(|&value| !value.is_finite() || value < 0.0)) {
+        return Err(LandfoldError::Msg(
+            "source weights must be finite and nonnegative".into(),
+        ));
+    }
     let d = points.ncols();
-    if landmarks.points.ncols() != d {
+    if landmarks.points.nrows() != k || landmarks.points.ncols() != d {
         return Err(LandfoldError::Shape("landmark dim"));
+    }
+    if landmarks.weights.len() != k {
+        return Err(LandfoldError::Shape("landmark weight length"));
+    }
+    if let Some(expected) = metric.dim() {
+        if d != expected {
+            return Err(LandfoldError::MetricSize {
+                left: d,
+                right: expected,
+            });
+        }
     }
     let mut acc = vec![0.0; k];
     let mut a = vec![0.0; d];
@@ -196,22 +238,43 @@ mod tests {
     fn rejects_invalid_landmark_weights() {
         let pts = array![[0.0], [1.0], [2.0]];
         assert!(farthest_point(pts.view(), &Euclid, 2, Some(array![1.0, 1.0].view()), 0).is_err());
-        assert!(farthest_point(
-            pts.view(),
-            &Euclid,
-            2,
-            Some(array![1.0, -1.0, 1.0].view()),
-            0
-        )
-        .is_err());
-        assert!(farthest_point(
-            pts.view(),
-            &Euclid,
-            2,
-            Some(array![1.0, f64::NAN, 1.0].view()),
-            0
-        )
-        .is_err());
+        assert!(
+            farthest_point(
+                pts.view(),
+                &Euclid,
+                2,
+                Some(array![1.0, -1.0, 1.0].view()),
+                0
+            )
+            .is_err()
+        );
+        assert!(
+            farthest_point(
+                pts.view(),
+                &Euclid,
+                2,
+                Some(array![1.0, f64::NAN, 1.0].view()),
+                0
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_voronoi_inputs() {
+        let pts = array![[0.0], [1.0]];
+        let lm = farthest_point(pts.view(), &Euclid, 1, None, 0).unwrap();
+        assert!(
+            voronoi_weights(
+                pts.view(),
+                &lm,
+                &Euclid,
+                Some(array![1.0, f64::NAN].view()),
+                1.0,
+            )
+            .is_err()
+        );
+        assert!(voronoi_weights(pts.view(), &lm, &Euclid, None, f64::NAN).is_err());
     }
 
     #[test]
