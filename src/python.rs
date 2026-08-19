@@ -63,6 +63,7 @@ fn embed_euclid<'py>(
 /// Return an embedding together with the metadata needed by result consumers.
 #[pyfunction]
 #[pyo3(signature = (points, lowdim=2, fun_hd="identity", fun_ld="identity", imix=0.0, steps=100, metadata=None))]
+#[allow(clippy::too_many_arguments)]
 fn embed_euclid_result<'py>(
     py: Python<'py>,
     points: PyReadonlyArray2<'py, f64>,
