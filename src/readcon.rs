@@ -137,4 +137,21 @@ mod tests {
         assert_eq!(positions[0][[0, 0]], 3.0);
         assert_eq!(positions[0][[1, 0]], 4.0);
     }
+
+    #[cfg(feature = "readcon-chemfiles")]
+    #[test]
+    fn reads_positions_from_a_chemfiles_xyz_trajectory() {
+        let path = std::env::temp_dir().join(format!(
+            "landfold-readcon-chemfiles-{}.xyz",
+            std::process::id()
+        ));
+        let xyz = "2\nframe 0\nH 0 0 0\nH 1 0 0\n2\nframe 1\nH 2 0 0\nH 3 0 0\n";
+        std::fs::write(&path, xyz).expect("write XYZ fixture");
+
+        let positions = read_trajectory_positions(&path).expect("read XYZ fixture");
+        std::fs::remove_file(path).expect("remove XYZ fixture");
+        assert_eq!(positions.len(), 2);
+        assert_eq!(positions[0][[0, 0]], 0.0);
+        assert_eq!(positions[1][[0, 0]], 2.0);
+    }
 }
