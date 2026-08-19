@@ -11,10 +11,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    AnnealOpts, Dot, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts, MdsMode, Metric,
+    AnnealOpts, Dot, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts, L1, MdsMode, Metric,
     Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Transfer, coordination_histogram,
-    embed, farthest_point, mds_from_points, pairwise, pairwise_euclid, project_many_report,
-    read_points, write_points,
+    embed, farthest_point, farthest_point_ifirst, mds_from_points, pairwise, pairwise_euclid,
+    project_many_report, read_points, write_points,
 };
 
 #[derive(Parser, Debug)]
@@ -45,6 +45,8 @@ enum Cmd {
         weighted: bool,
         #[arg(long)]
         dot: bool,
+        #[arg(long)]
+        l1: bool,
         #[arg(long)]
         center: bool,
         #[arg(long)]
@@ -122,10 +124,15 @@ enum Cmd {
         period: f64,
         #[arg(long)]
         dot: bool,
+        #[arg(long)]
+        l1: bool,
         #[arg(short = 'w')]
         weighted: bool,
         #[arg(long, default_value_t = 0)]
         seed: usize,
+        /// Pin the leading N rows as landmarks before farthest-point.
+        #[arg(long = "ifirst", default_value_t = 0)]
+        ifirst: usize,
         /// Write `# indices ...` before the point table
         #[arg(long)]
         indices: bool,
@@ -209,6 +216,7 @@ fn main() -> landfold::Result<()> {
             sphere,
             weighted,
             dot,
+            l1,
             center,
             similarity,
             fun_hd,
@@ -291,7 +299,9 @@ fn main() -> landfold::Result<()> {
             } else {
                 None
             };
-            let metric: Box<dyn Metric> = if dot {
+            let metric: Box<dyn Metric> = if l1 {
+                Box::new(L1)
+            } else if dot {
                 Box::new(landfold::Dot)
             } else if sphere != 0.0 {
                 Box::new(Sphere::new(vec![sphere; high])?)
@@ -382,27 +392,41 @@ fn main() -> landfold::Result<()> {
             nland,
             period,
             dot,
+            l1,
             weighted,
             seed,
+            ifirst,
             indices,
             voronoi,
             wgamma,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
-            let metric: Box<dyn Metric> = if dot {
+            let metric: Box<dyn Metric> = if l1 {
+                Box::new(L1)
+            } else if dot {
                 Box::new(Dot)
             } else if period != 0.0 {
                 Box::new(Periodic::isotropic(high, period)?)
             } else {
                 Box::new(Euclid)
             };
-            let mut lm = farthest_point(
-                set.points.view(),
-                metric.as_ref(),
-                nland,
-                set.weights.as_ref().map(|w| w.view()),
-                seed,
-            )?;
+            let mut lm = if ifirst > 0 {
+                farthest_point_ifirst(
+                    set.points.view(),
+                    metric.as_ref(),
+                    nland,
+                    set.weights.as_ref().map(|w| w.view()),
+                    ifirst,
+                )?
+            } else {
+                farthest_point(
+                    set.points.view(),
+                    metric.as_ref(),
+                    nland,
+                    set.weights.as_ref().map(|w| w.view()),
+                    seed,
+                )?
+            };
             if voronoi {
                 lm.assign_voronoi(
                     set.points.view(),

@@ -50,7 +50,6 @@ pub fn farthest_point(
             ));
         }
     }
-    let d = points.ncols();
     let mut min_d = vec![f64::INFINITY; n];
     let mut selected = vec![false; n];
     let mut chosen = Vec::with_capacity(k);
@@ -58,6 +57,70 @@ pub fn farthest_point(
     chosen.push(start);
     selected[start] = true;
     update_min_d(points, metric, start, &mut min_d)?;
+    farthest_from_chosen(
+        points,
+        metric,
+        k,
+        weights,
+        &mut chosen,
+        &mut selected,
+        &mut min_d,
+    )?;
+    pack_landmarks(points, k, weights, &chosen)
+}
+
+/// Gonzalez farthest-point that pins the leading `ifirst` rows, then
+/// fills the rest. Used so a figure cannot drop a named reference.
+pub fn farthest_point_ifirst(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    ifirst: usize,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    if k == 0 || k > n {
+        return Err(LandfoldError::LowDim { low: k, high: n });
+    }
+    if ifirst == 0 {
+        return farthest_point(points, metric, k, weights, 0);
+    }
+    if points.iter().any(|&value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "landmark coordinates must be finite".into(),
+        ));
+    }
+    let pin = ifirst.min(k).min(n);
+    let mut min_d = vec![f64::INFINITY; n];
+    let mut selected = vec![false; n];
+    let mut chosen = Vec::with_capacity(k);
+    for (i, selected_i) in selected.iter_mut().enumerate().take(pin) {
+        chosen.push(i);
+        *selected_i = true;
+        update_min_d(points, metric, i, &mut min_d)?;
+    }
+    farthest_from_chosen(
+        points,
+        metric,
+        k,
+        weights,
+        &mut chosen,
+        &mut selected,
+        &mut min_d,
+    )?;
+    pack_landmarks(points, k, weights, &chosen)
+}
+
+fn farthest_from_chosen(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    chosen: &mut Vec<usize>,
+    selected: &mut [bool],
+    min_d: &mut [f64],
+) -> Result<()> {
+    let n = points.nrows();
     while chosen.len() < k {
         let mut best = None;
         let mut best_s = f64::NEG_INFINITY;
@@ -77,8 +140,18 @@ pub fn farthest_point(
         })?;
         chosen.push(best);
         selected[best] = true;
-        update_min_d(points, metric, best, &mut min_d)?;
+        update_min_d(points, metric, best, &mut *min_d)?;
     }
+    Ok(())
+}
+
+fn pack_landmarks(
+    points: ArrayView2<f64>,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    chosen: &[usize],
+) -> Result<Landmarks> {
+    let d = points.ncols();
     let mut lp = Array2::<f64>::zeros((k, d));
     let mut lw = Array1::<f64>::zeros(k);
     for (t, &i) in chosen.iter().enumerate() {
@@ -88,7 +161,7 @@ pub fn farthest_point(
         lw[t] = weights.map(|ww| ww[i]).unwrap_or(1.0);
     }
     Ok(Landmarks {
-        index: chosen,
+        index: chosen.to_vec(),
         points: lp,
         weights: lw,
     })

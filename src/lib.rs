@@ -16,6 +16,7 @@ pub mod artifact;
 pub mod cg;
 pub mod chi_obj;
 pub mod error;
+pub mod floor;
 #[cfg(feature = "highs")]
 pub mod highs_slp;
 pub mod hist;
@@ -26,6 +27,7 @@ pub mod mds;
 pub mod metric;
 pub mod pairwise;
 pub mod project;
+pub mod provenance;
 #[cfg(feature = "readcon")]
 pub mod readcon;
 pub mod replica;
@@ -34,10 +36,11 @@ pub mod stress;
 pub mod transfer;
 
 pub use anneal::AnnealOpts;
-pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use array::to_dlpack;
+pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use error::{LandfoldError, Result};
+pub use floor::occupancy_map_floor;
 #[cfg(feature = "highs")]
 pub use highs_slp::HighsOpts;
 pub use hist::{
@@ -46,9 +49,9 @@ pub use hist::{
 };
 pub use io::{PointSet, read_points, read_points_path, write_points};
 pub use iter::{Embedding, IterOpts, Solver, embed, embed_points};
-pub use landmark::{Landmarks, farthest_point, voronoi_weights};
+pub use landmark::{Landmarks, farthest_point, farthest_point_ifirst, voronoi_weights};
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
-pub use metric::{Dot, Euclid, Metric, Periodic, Sphere};
+pub use metric::{Dot, Euclid, L1, Metric, Periodic, Sphere};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,

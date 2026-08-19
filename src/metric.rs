@@ -234,11 +234,7 @@ mod tests {
     #[test]
     fn l1_pads_the_shorter_histogram() {
         let m = L1;
-        assert_relative_eq!(
-            m.dist(&[0.5, 0.5], &[1.0]).unwrap(),
-            1.0,
-            epsilon = 1e-15
-        );
+        assert_relative_eq!(m.dist(&[0.5, 0.5], &[1.0]).unwrap(), 1.0, epsilon = 1e-15);
     }
 
     #[test]
