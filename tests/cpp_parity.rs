@@ -12,10 +12,10 @@ use approx::assert_relative_eq;
 use landfold::pairwise::apply_transfer;
 use landfold::stress::Stress;
 use landfold::{
-    Dot, Euclid, IterOpts, Metric, Periodic, Solver, Transfer, classical_mds, farthest_point,
-    pairwise, pairwise_euclid, query_chi,
+    classical_mds, farthest_point, pairwise, pairwise_euclid, query_chi, Dot, Euclid, IterOpts,
+    Metric, Periodic, Solver, Transfer,
 };
-use ndarray::{ArrayView2, array};
+use ndarray::{array, ArrayView2};
 
 const XFER_ABS: f64 = 1e-14;
 const XFER_REL: f64 = 1e-13;
@@ -267,8 +267,8 @@ fn cpp_oracle_goldens_exist_and_match() {
     let square = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]];
     let lm = farthest_point(square.view(), &Euclid, 3, None, 0).unwrap();
     assert_eq!(lm.index.len(), 3);
-    for i in 0..3 {
-        assert_eq!(lm.index[i] as f64, fps[i]);
+    for (i, expected) in fps.iter().enumerate().take(3) {
+        assert_eq!(lm.index[i] as f64, *expected);
     }
 }
 

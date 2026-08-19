@@ -3,9 +3,7 @@
 
 use std::time::Instant;
 
-use landfold::{
-    AnnealOpts, Euclid, IterOpts, ReplicaOpts, Solver, StochOpts, Transfer, embed,
-};
+use landfold::{embed, AnnealOpts, Euclid, IterOpts, ReplicaOpts, Solver, StochOpts, Transfer};
 use ndarray::Array2;
 
 fn two_wells() -> Array2<f64> {
@@ -19,21 +17,19 @@ fn two_wells() -> Array2<f64> {
 }
 
 fn base_opts() -> IterOpts {
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap();
-    opts.tfun_ld = Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap();
-    opts
+    IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap(),
+        tfun_ld: Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap(),
+        ..IterOpts::default()
+    }
 }
 
 fn run(label: &str, pts: &Array2<f64>, opts: IterOpts, init: Option<ndarray::ArrayView2<f64>>) {
     let t0 = Instant::now();
     let (emb, report) = embed(pts.view(), &Euclid, &opts, init, None, None).unwrap();
     let ms = t0.elapsed().as_secs_f64() * 1e3;
-    let max_abs = emb
-        .low
-        .iter()
-        .fold(0.0_f64, |a, v| a.max(v.abs()));
+    let max_abs = emb.low.iter().fold(0.0_f64, |a, v| a.max(v.abs()));
     println!(
         "{:<18} chi={:.8e} steps={} ms={:.2} max|x|={:.4}",
         label, emb.stress, report.steps, ms, max_abs
@@ -84,9 +80,11 @@ fn main() {
         h.solver = Solver::Highs(HighsOpts::default());
         run("highs", &pts, h, None);
         println!("# HiGHS box [-0.3,0.3], scrambled init");
-        let mut hb = HighsOpts::default();
-        hb.lo = Some(-0.3);
-        hb.hi = Some(0.3);
+        let hb = HighsOpts {
+            lo: Some(-0.3),
+            hi: Some(0.3),
+            ..HighsOpts::default()
+        };
         let mut h = base_opts();
         h.solver = Solver::Highs(hb);
         run("highs-box", &pts, h, Some(bad.view()));
