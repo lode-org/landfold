@@ -31,10 +31,11 @@ are only kept after the C++ oracle match.
 * C++ oracle
 
 Goldens live in =tests/goldens/cpp_oracle.txt=, produced by
-=scripts/gen_cpp_goldens.sh= against HaoZeke/sketchmap =addLocks=
-(=NLDRFunction= f/df, pairwise Euclid/PBC, Torgerson MDS pairwise
-distances, =NLDRITERChi= χ/∇χ). =NLDRProjection.p= is private, so the
-MDS block is the i<j Euclidean distances of =p=, not the coordinates.
+=scripts/gen_cpp_goldens.sh= against the HaoZeke =addLocks= C++ tree
+(transfer f/df, pairwise Euclid/PBC, Torgerson MDS pairwise
+distances, χ/∇χ). The C++ embedding coordinates are private, so the
+MDS block is the i<j Euclidean distances of that embedding, not the
+coordinates.
 
 =tests/cpp_parity.rs= loads that file. A missing file is a hard fail.
 A 1e-8 shift of any compared golden is outside the match tolerance.

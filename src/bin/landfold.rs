@@ -106,7 +106,7 @@ enum Cmd {
     /// Classical Torgerson MDS (Torgerson 1952). Default solver init.
     ///
     /// `--distances` dumps i<j-equivalent full pairwise of the embedding:
-    /// those distances are the C++ `NLDRMDS` invariant (`p` is private).
+    /// those distances are the C++ Torgerson pairwise invariant (coords are unsigned).
     Mds {
         #[arg(short = 'D', default_value_t = 3)]
         high: usize,

@@ -95,7 +95,7 @@ fn coords_from_eigen(n: usize, lowdim: usize, evals: &[f64], evecs: &DMatrix<f64
 ///
 /// Eigenvector signs follow the eigensolver, so the coordinate matrix is
 /// not a C++ golden. Compare `pairwise` of the embedding instead: those
-/// distances are the invariant `NLDRMDS` dumps in `oracle/oracle.cpp`.
+/// distances are the invariant Torgerson pairwise dumps in `oracle/oracle.cpp`.
 pub fn classical_mds(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f64>, MdsReport)> {
     let (n, b) = torgerson_b(dist)?;
     if lowdim == 0 || lowdim > n {

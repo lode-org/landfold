@@ -3,7 +3,7 @@
 //! Geometric cooling and Metropolis updates follow Kirkpatrick, Gelatt
 //! and Vecchi, *Science* **220**, 671 (1983),
 //! <https://doi.org/10.1126/science.220.4598.671>. Per-axis step
-//! adaptation matches the C++ `sim_annealing` template. After the
+//! adaptation matches the C++ annealing template. After the
 //! schedule, Polak-Ribiere CG projects into the local basin.
 
 use ndarray::ArrayView1;

@@ -16,8 +16,8 @@ cargo build --release --bins
 * C++ oracle goldens
 
 Regenerate =tests/goldens/cpp_oracle.txt= on the remote builder from
-HaoZeke/sketchmap =addLocks= (needs the valarray ostream fix in
-=libs/tbdefs.hpp=):
+the HaoZeke =addLocks= C++ tree (valarray ostream fix in
+=libs/tbdefs.hpp=, =$SKMAP_SRC=):
 
 #+begin_src sh
 SKMAP_SRC=$HOME/Git/Github/HaoZeke/sketchmap \

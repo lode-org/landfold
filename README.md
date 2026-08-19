@@ -24,12 +24,11 @@ landfold fes --input ld.dat --svg fes.svg --csv fes.csv
 `--stoch` switches the embedder from the standard full-pair
 Polak-Ribiere CG to randomised pair mini-batches. `landfold mds`
 is the Torgerson (1952) initialiser; `--distances` prints pairwise
-distances of the embedding (the C++ `NLDRMDS` invariant; `p` is
-private).
+distances of the embedding (the C++ Torgerson pairwise invariant).
 
 C++ goldens are `tests/goldens/cpp_oracle.txt`, rebuilt on the remote
-builder by `scripts/gen_cpp_goldens.sh` against HaoZeke/sketchmap
-`addLocks`. `cargo test --release --test cpp_parity` loads that file.
+builder by `scripts/gen_cpp_goldens.sh` against the HaoZeke `addLocks`
+tree (`SKMAP_SRC`). `cargo test --release --test cpp_parity` loads that file.
 
 ## License
 
