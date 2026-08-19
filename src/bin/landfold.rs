@@ -1,16 +1,21 @@
 //! landfold CLI: embed, project, landmarks, dist, mds, fes.
+//!
+//! `project` is a coarse-then-fine χ grid plus `--refine` steps
+//! (Ceriotti, Tribello, Parrinello, *J. Chem. Theory Comput.* **9**,
+//! 1521 (2013), <https://doi.org/10.1021/ct3010563>). `landmarks` is
+//! Gonzalez farthest-point sampling. `fes` writes `F = -ln(rho/rhomax)`
+//! as CSV/SVG and optional coordination histograms.
 
 use std::io::{self, Write};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    apply_transfer, coordination_histogram, embed, farthest_point, mds_from_points, pairwise,
-    pairwise_euclid, project_many, read_points, write_points, AnnealOpts, Embedding, Euclid,
-    FreeEnergy, Histogram2d, IterOpts, MdsMode, Metric, Periodic, ProjOpts, Solver, Sphere,
-    StochOpts, Transfer,
+    coordination_histogram, embed, farthest_point, mds_from_points, pairwise, pairwise_euclid,
+    project_many_report, read_points, write_points, AnnealOpts, Dot, Embedding, Euclid, FreeEnergy,
+    Histogram2d, IterOpts, MdsMode, Metric, Periodic, ProjOpts, Solver, Sphere, StochOpts,
+    Transfer,
 };
-use ndarray::Array1;
 
 #[derive(Parser, Debug)]
 #[command(name = "landfold", about = "Landscape And Nonlinear Distance Folding Onto Low Dimensions")]
@@ -58,7 +63,7 @@ enum Cmd {
         #[arg(long)]
         anneal: bool,
     },
-    /// Project new high-D rows into a fitted embedding
+    /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
         #[arg(short = 'D', default_value_t = 3)]
         high: usize,
@@ -72,18 +77,25 @@ enum Cmd {
         period: f64,
         #[arg(short = 'w')]
         weighted: bool,
+        #[arg(long)]
+        dot: bool,
         #[arg(long = "fun-hd", default_value = "identity")]
         fun_hd: String,
         #[arg(long = "fun-ld", default_value = "identity")]
         fun_ld: String,
         #[arg(long = "imix", default_value_t = 0.0)]
         imix: f64,
+        /// Coarse then fine grid: half-width, coarse points, fine points
         #[arg(long = "grid", default_value = "1.0,21,201")]
         grid: String,
+        /// Polak-Ribiere + Brent steps after the grid minimum
         #[arg(long = "refine", default_value_t = 0)]
         refine: usize,
+        /// Also print χ and nearest-landmark HD distance (C++ dimproj columns)
+        #[arg(long)]
+        print_error: bool,
     },
-    /// Farthest-point landmarks
+    /// Farthest-point (Gonzalez) landmarks
     Landmarks {
         #[arg(short = 'D', default_value_t = 3)]
         high: usize,
@@ -91,10 +103,20 @@ enum Cmd {
         nland: usize,
         #[arg(long = "pi", default_value_t = 0.0)]
         period: f64,
+        #[arg(long)]
+        dot: bool,
         #[arg(short = 'w')]
         weighted: bool,
         #[arg(long, default_value_t = 0)]
         seed: usize,
+        /// Write `# indices ...` before the point table
+        #[arg(long)]
+        indices: bool,
+        /// Replace FPS scores with Voronoi masses of the source points
+        #[arg(long)]
+        voronoi: bool,
+        #[arg(long = "wgamma", default_value_t = 1.0)]
+        wgamma: f64,
     },
     /// Pairwise distance matrix
     Dist {
@@ -118,7 +140,7 @@ enum Cmd {
         #[arg(long)]
         distances: bool,
     },
-    /// 2-D free-energy surface from embedded coords
+    /// 2-D F = -ln(rho/rhomax) plus optional coordination histogram
     Fes {
         #[arg(long)]
         input: Option<PathBuf>,
@@ -129,15 +151,35 @@ enum Cmd {
         #[arg(long = "kt", default_value_t = 1.0)]
         kt: f64,
         #[arg(long)]
+        xmin: Option<f64>,
+        #[arg(long)]
+        xmax: Option<f64>,
+        #[arg(long)]
+        ymin: Option<f64>,
+        #[arg(long)]
+        ymax: Option<f64>,
+        #[arg(long)]
         csv: Option<PathBuf>,
         #[arg(long)]
         svg: Option<PathBuf>,
+        /// Cartesian frames (3-D rows) for a coordination-number histogram
         #[arg(long)]
         frames: Option<PathBuf>,
+        #[arg(long = "cn-csv")]
+        cn_csv: Option<PathBuf>,
         #[arg(long, default_value_t = 1.2)]
         cn_cutoff: f64,
         #[arg(long, default_value_t = 12)]
         cn_max: usize,
+        /// Gaussian blur of the count field, in bins (0 = off)
+        #[arg(long, default_value_t = 0.0)]
+        blur: f64,
+        /// Colour-scale ceiling for the SVG (JCTC 2013 panel uses 2)
+        #[arg(long = "fmax", default_value_t = 2.0)]
+        fmax: f64,
+        /// Keep the largest connected body above this fraction of rho_max
+        #[arg(long = "floor", default_value_t = 0.0)]
+        floor: f64,
     },
 }
 
@@ -229,11 +271,13 @@ fn main() -> landfold::Result<()> {
             low_file,
             period,
             weighted,
+            dot,
             fun_hd,
             fun_ld,
             imix,
             grid,
             refine,
+            print_error,
         } => {
             let hi = read_points(
                 std::io::BufReader::new(std::fs::File::open(&high_file)?),
@@ -245,56 +289,89 @@ fn main() -> landfold::Result<()> {
                 low,
                 false,
             )?;
-            if hi.points.nrows() != lo.points.nrows() {
-                return Err(landfold::LandfoldError::Shape(
-                    "landmark HD/LD count mismatch",
-                ));
-            }
             let t_hd = Transfer::from_cli(&fun_hd)?;
             let t_ld = Transfer::from_cli(&fun_ld)?;
             let euclid = Euclid;
             let peri = Periodic::isotropic(high, period);
-            let metric: &dyn Metric = if period != 0.0 { &peri } else { &euclid };
-            let hd = pairwise(hi.points.view(), metric)?;
-            let mut fhd = hd.clone();
-            apply_transfer(&mut fhd, &t_hd);
-            let n = hi.points.nrows();
-            let emb = Embedding {
-                high: hi.points,
-                low: lo.points,
-                weights: hi.weights.unwrap_or_else(|| Array1::ones(n)),
-                stress: 0.0,
-                hd,
-                fhd,
-                tfun_hd: t_hd,
-                tfun_ld: t_ld,
-                imix,
+            let metric: &dyn Metric = if dot {
+                &Dot
+            } else if period != 0.0 {
+                &peri
+            } else {
+                &euclid
             };
+            let emb = Embedding::from_landmarks(
+                hi.points,
+                lo.points,
+                metric,
+                t_hd,
+                t_ld,
+                imix,
+                hi.weights,
+            )?;
             let mut po = ProjOpts::from_cli(&grid)?;
             po.cg_steps = refine;
             let q = read_points(io::stdin().lock(), high, false)?;
-            let proj = project_many(&emb, q.points.view(), metric, &po)?;
-            write_points(&mut io::stdout().lock(), &proj, None)?;
+            let reports = project_many_report(&emb, q.points.view(), metric, &po)?;
+            let mut out = io::stdout().lock();
+            for r in &reports {
+                for h in 0..r.coords.len() {
+                    if h > 0 {
+                        write!(out, " ")?;
+                    }
+                    write!(out, "{:.12}", r.coords[h])?;
+                }
+                if print_error {
+                    write!(out, " {:.12} {:.12}", r.chi, r.nearest)?;
+                }
+                writeln!(out)?;
+            }
         }
         Cmd::Landmarks {
             high,
             nland,
             period,
+            dot,
             weighted,
             seed,
+            indices,
+            voronoi,
+            wgamma,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let euclid = Euclid;
             let peri = Periodic::isotropic(high, period);
-            let metric: &dyn Metric = if period != 0.0 { &peri } else { &euclid };
-            let lm = farthest_point(
+            let metric: &dyn Metric = if dot {
+                &Dot
+            } else if period != 0.0 {
+                &peri
+            } else {
+                &euclid
+            };
+            let mut lm = farthest_point(
                 set.points.view(),
                 metric,
                 nland,
                 set.weights.as_ref().map(|w| w.view()),
                 seed,
             )?;
-            write_points(&mut io::stdout().lock(), &lm.points, Some(&lm.weights))?;
+            if voronoi {
+                lm.assign_voronoi(
+                    set.points.view(),
+                    metric,
+                    set.weights.as_ref().map(|w| w.view()),
+                    wgamma,
+                )?;
+            }
+            let mut out = io::stdout().lock();
+            if indices {
+                write!(out, "# indices")?;
+                for i in &lm.index {
+                    write!(out, " {i}")?;
+                }
+                writeln!(out)?;
+            }
+            write_points(&mut out, &lm.points, Some(&lm.weights))?;
         }
         Cmd::Dist { high, period } => {
             let set = read_points(io::stdin().lock(), high, false)?;
@@ -343,11 +420,19 @@ fn main() -> landfold::Result<()> {
             nx,
             ny,
             kt,
+            xmin,
+            xmax,
+            ymin,
+            ymax,
             csv,
             svg,
             frames,
+            cn_csv,
             cn_cutoff,
             cn_max,
+            blur,
+            fmax,
+            floor,
         } => {
             let set = if let Some(p) = input {
                 read_points(std::io::BufReader::new(std::fs::File::open(p)?), 2, false)?
@@ -356,27 +441,46 @@ fn main() -> landfold::Result<()> {
             };
             let xs = set.points.column(0);
             let ys = set.points.column(1);
-            let (xmin, xmax) = minmax(xs.iter().copied());
-            let (ymin, ymax) = minmax(ys.iter().copied());
-            let px = 0.05 * (xmax - xmin).max(1e-6);
-            let py = 0.05 * (ymax - ymin).max(1e-6);
-            let mut h = Histogram2d::new(xmin - px, xmax + px, nx, ymin - py, ymax + py, ny)?;
+            let (axmin, axmax) = minmax(xs.iter().copied());
+            let (aymin, aymax) = minmax(ys.iter().copied());
+            let px = 0.05 * (axmax - axmin).max(1e-6);
+            let py = 0.05 * (aymax - aymin).max(1e-6);
+            let xlo = xmin.unwrap_or(axmin - px);
+            let xhi = xmax.unwrap_or(axmax + px);
+            let ylo = ymin.unwrap_or(aymin - py);
+            let yhi = ymax.unwrap_or(aymax + py);
+            let mut h = Histogram2d::new(xlo, xhi, nx, ylo, yhi, ny)?;
             h.add_points(set.points.view(), set.weights.as_ref().map(|w| w.view()));
-            let fes = FreeEnergy::from_histogram(&h, kt);
+            let mut fes = if blur > 0.0 {
+                FreeEnergy::from_histogram_blurred(&h, kt, blur)
+            } else {
+                FreeEnergy::from_histogram(&h, kt)
+            };
+            if floor > 0.0 {
+                fes.connected_body(floor);
+            }
             if let Some(p) = csv {
                 fes.write_csv(&mut std::fs::File::create(p)?)?;
             } else {
                 fes.write_csv(&mut io::stdout().lock())?;
             }
             if let Some(p) = svg {
-                fes.write_svg(&mut std::fs::File::create(p)?, 800, 640)?;
+                fes.write_svg_scaled(&mut std::fs::File::create(p)?, 800, 640, fmax)?;
             }
             if let Some(p) = frames {
                 let fr = read_points(std::io::BufReader::new(std::fs::File::open(p)?), 3, false)?;
                 let cn = coordination_histogram(fr.points.view(), cn_cutoff, cn_max);
-                for i in 0..cn.counts.len() {
-                    writeln!(io::stderr(), "# CN {} {}", i, cn.counts[i])?;
+                if let Some(out) = cn_csv {
+                    cn.write_cn_csv(&mut std::fs::File::create(out)?)?;
+                } else {
+                    for i in 0..cn.counts.len() {
+                        writeln!(io::stderr(), "# CN {} {}", i, cn.counts[i])?;
+                    }
                 }
+            } else if cn_csv.is_some() {
+                return Err(landfold::LandfoldError::Parse(
+                    "--cn-csv needs --frames".into(),
+                ));
             }
         }
     }
