@@ -519,7 +519,6 @@ dependencies = [
 [[package]]
 name = "eindir-core"
 version = "0.6.0"
-source = "git+https://github.com/HaoZeke/eindir.git?rev=f3c4213#f3c42130bb389ba6cd6e4cfdc8b2e182f4a764e9"
 dependencies = [
  "cbindgen",
  "dlpk 0.1.5",
@@ -903,7 +902,6 @@ dependencies = [
  "criterion",
  "dlpk 0.4.1",
  "eindir-core",
- "highs",
  "nalgebra",
  "ndarray",
  "numpy",
@@ -2000,6 +1998,8 @@ dependencies = [
  "cbindgen",
  "dlpk 0.1.5",
  "eindir-core",
+ "highs",
+ "highs-sys",
  "ndarray",
  "rand",
  "thiserror",

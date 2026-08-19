@@ -1,14 +1,16 @@
-//! Bound-constrained sequential linear program on χ, solved by HiGHS.
+//! Bound-constrained L-BFGS quadratic model on χ, solved by HiGHS.
 //!
 //! HiGHS is the LP / MIP / convex-QP solver of Huangfu and Hall,
 //! *Math. Prog. Comp.* **10**, 119 (2018),
 //! <https://doi.org/10.1007/s12532-017-0130-5>. Each step minimises
-//! `g·p` subject to an L_inf trust region, optional box bounds on the
-//! coordinates, and optional centering `sum_i p_{i,h} = 0`. Extra arm:
-//! the published default remains unconstrained Polak-Ribiere CG.
+//! `g·p + (1/2) p^T B p` where `B` is the compact L-BFGS Hessian
+//! (Nocedal-Wright 7.19), subject to an L_inf trust region, optional
+//! box bounds on the coordinates, and optional centering
+//! `sum_i p_{i,h} = 0`. Extra arm: the published default remains
+//! unconstrained Polak-Ribiere CG.
 
-use highs::{RowProblem, Sense};
-use ndarray::{Array1, ArrayView1};
+use ndarray::ArrayView1;
+use xtsci_optimize::{HighsStep, Lbfgs};
 
 use crate::cg::{CgReport, validate_packed_init};
 use crate::error::{LandfoldError, Result};
@@ -52,9 +54,7 @@ impl HighsOpts {
             .chain(self.hi)
             .any(|value| !value.is_finite())
         {
-            return Err(LandfoldError::Msg(
-                "HiGHS bounds must be finite".into(),
-            ));
+            return Err(LandfoldError::Msg("HiGHS bounds must be finite".into()));
         }
         if let (Some(lo), Some(hi)) = (self.lo, self.hi)
             && lo > hi
@@ -65,9 +65,25 @@ impl HighsOpts {
         }
         Ok(())
     }
+
+    fn step(&self, d: usize, n_atoms: usize, trust: f64) -> HighsStep {
+        let mut equalities = Vec::new();
+        if self.center {
+            for h in 0..d {
+                let coeffs: Vec<_> = (0..n_atoms).map(|i| (i * d + h, 1.0)).collect();
+                equalities.push((coeffs, 0.0));
+            }
+        }
+        HighsStep {
+            trust: Some(trust),
+            lo: self.lo,
+            hi: self.hi,
+            equalities,
+        }
+    }
 }
 
-/// Sequential LP steps on packed χ. Each LP is solved by HiGHS.
+/// Sequential L-BFGS-QP steps on packed χ. Each QP is solved by HiGHS.
 pub fn minimize_highs(
     stress: &Stress,
     init: ArrayView1<f64>,
@@ -89,12 +105,17 @@ pub fn minimize_highs(
     let mut steps = 0;
     let trust0 = opts.trust.max(1e-8);
     let mut trust = trust0;
+    let mut lbfgs = Lbfgs::with_capacity(8);
+    let n_atoms = pos.len() / d;
     for _ in 0..opts.maxiter {
         let gnorm: f64 = ev.grad.iter().map(|g| g * g).sum::<f64>().sqrt();
         if gnorm < 1e-8 {
             break;
         }
-        let step = slp_step(&pos, ev.grad.view(), d, trust, opts)?;
+        lbfgs.highs = Some(opts.step(d, n_atoms, trust));
+        let step = lbfgs
+            .highs_step(pos.view(), ev.grad.view())
+            .map_err(|e| LandfoldError::Optimize(format!("HiGHS {e}")))?;
         let mut t = 1.0;
         let mut accepted = false;
         for _ in 0..8 {
@@ -114,6 +135,9 @@ pub fn minimize_highs(
             }
             let ev1 = stress.try_eval(trial.view(), d)?;
             if ev1.value < ev.value {
+                let s = &trial - &pos;
+                let y = &ev1.grad - &ev.grad;
+                lbfgs.record(s, y);
                 pos = trial;
                 ev = ev1;
                 accepted = true;
@@ -138,58 +162,12 @@ pub fn minimize_highs(
     })
 }
 
-fn slp_step(
-    x: &Array1<f64>,
-    g: ArrayView1<f64>,
-    d: usize,
-    trust: f64,
-    opts: &HighsOpts,
-) -> Result<Array1<f64>> {
-    let nv = x.len();
-    let n = nv / d;
-    let mut pb = RowProblem::default();
-    let mut cols = Vec::with_capacity(nv);
-    for k in 0..nv {
-        let mut lo = -trust;
-        let mut hi = trust;
-        if let Some(b) = opts.lo {
-            lo = lo.max(b - x[k]);
-        }
-        if let Some(b) = opts.hi {
-            hi = hi.min(b - x[k]);
-        }
-        if lo > hi {
-            lo = hi;
-        }
-        cols.push(pb.add_column(g[k], lo..=hi));
-    }
-    if opts.center {
-        for h in 0..d {
-            let row: Vec<_> = (0..n).map(|i| (cols[i * d + h], 1.0)).collect();
-            pb.add_row(0.0..=0.0, &row);
-        }
-    }
-    let mut model = pb.optimise(Sense::Minimise);
-    model.make_quiet();
-    let solved = model
-        .try_solve()
-        .map_err(|e| LandfoldError::Optimize(format!("HiGHS {e:?}")))?;
-    let sol = solved.get_solution();
-    let p = sol.columns();
-    if p.len() != nv {
-        return Err(LandfoldError::Optimize(
-            "HiGHS returned the wrong column count".into(),
-        ));
-    }
-    Ok(Array1::from(p.to_vec()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
-    use ndarray::{array, Array};
+    use ndarray::{Array, array};
 
     #[test]
     fn highs_lowers_or_matches_init() {
@@ -242,25 +220,29 @@ mod tests {
     fn rejects_invalid_options_and_transfer_overflow() {
         let hd = array![[0.0, 1.0], [1.0, 0.0]];
         let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None).unwrap();
-        assert!(minimize_highs(
-            &stress,
-            array![0.0, 0.0].view(),
-            1,
-            &HighsOpts {
-                trust: f64::NAN,
-                ..HighsOpts::default()
-            }
-        )
-        .is_err());
+        assert!(
+            minimize_highs(
+                &stress,
+                array![0.0, 0.0].view(),
+                1,
+                &HighsOpts {
+                    trust: f64::NAN,
+                    ..HighsOpts::default()
+                }
+            )
+            .is_err()
+        );
 
         let mut stress = stress;
         stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
-        assert!(minimize_highs(
-            &stress,
-            array![0.0, 1.0e154].view(),
-            1,
-            &HighsOpts::default()
-        )
-        .is_err());
+        assert!(
+            minimize_highs(
+                &stress,
+                array![0.0, 1.0e154].view(),
+                1,
+                &HighsOpts::default()
+            )
+            .is_err()
+        );
     }
 }
