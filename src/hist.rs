@@ -21,6 +21,44 @@ pub struct Histogram1d {
 }
 
 impl Histogram1d {
+    fn validate_state(&self) -> Result<()> {
+        let n = self.counts.len();
+        if n == 0 || self.edges.len() != n + 1 {
+            return Err(LandfoldError::Shape("invalid 1d histogram dimensions"));
+        }
+        if self
+            .edges
+            .iter()
+            .zip(self.edges.iter().skip(1))
+            .any(|(&left, &right)| !left.is_finite() || right <= left)
+            || !self.edges[n].is_finite()
+            || !self.samples.is_finite()
+            || self.samples < 0.0
+            || !self.below.is_finite()
+            || self.below < 0.0
+            || !self.above.is_finite()
+            || self.above < 0.0
+            || self
+                .counts
+                .iter()
+                .any(|&count| !count.is_finite() || count < 0.0)
+        {
+            return Err(LandfoldError::Msg(
+                "1d histogram state must be finite and nonnegative".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_state_for_io(&self) -> std::io::Result<()> {
+        self.validate_state().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid 1d histogram state",
+            )
+        })
+    }
+
     pub fn new(lo: f64, hi: f64, n: usize) -> Result<Self> {
         if n == 0 || !lo.is_finite() || !hi.is_finite() || hi <= lo {
             return Err(LandfoldError::Shape("histogram needs n>0 and hi>lo"));
@@ -39,19 +77,39 @@ impl Histogram1d {
     }
 
     pub fn add(&mut self, x: f64, w: f64) -> Result<()> {
+        self.validate_state()?;
         if !x.is_finite() || !w.is_finite() || w < 0.0 {
             return Err(LandfoldError::Msg(
                 "histogram samples and weights must be finite; weights must be nonnegative".into(),
             ));
         }
-        self.samples += w;
+        let samples = self.samples + w;
+        if !samples.is_finite() {
+            return Err(LandfoldError::Msg(
+                "1d histogram sample accumulation overflowed".into(),
+            ));
+        }
         if x < self.edges[0] {
-            self.below += w;
+            let below = self.below + w;
+            if !below.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "1d histogram below-range accumulation overflowed".into(),
+                ));
+            }
+            self.samples = samples;
+            self.below = below;
             return Ok(());
         }
         let last = self.edges.len() - 1;
         if x >= self.edges[last] {
-            self.above += w;
+            let above = self.above + w;
+            if !above.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "1d histogram above-range accumulation overflowed".into(),
+                ));
+            }
+            self.samples = samples;
+            self.above = above;
             return Ok(());
         }
         let n = self.counts.len();
@@ -59,7 +117,14 @@ impl Histogram1d {
         let hi = self.edges[last];
         let t = (x - lo) / (hi - lo) * n as f64;
         let i = (t as usize).min(n - 1);
-        self.counts[i] += w;
+        let count = self.counts[i] + w;
+        if !count.is_finite() {
+            return Err(LandfoldError::Msg(
+                "1d histogram bin accumulation overflowed".into(),
+            ));
+        }
+        self.samples = samples;
+        self.counts[i] = count;
         Ok(())
     }
 
@@ -67,15 +132,18 @@ impl Histogram1d {
         if w.is_some_and(|weights| weights.len() != xs.len()) {
             return Err(LandfoldError::Shape("histogram weight length"));
         }
+        let mut next = self.clone();
         for (i, &x) in xs.iter().enumerate() {
             let ww = w.map(|ww| ww[i]).unwrap_or(1.0);
-            self.add(x, ww)?;
+            next.add(x, ww)?;
         }
+        *self = next;
         Ok(())
     }
 
     /// Integer-bin CSV (`# cn count` then `i count` per row).
     pub fn write_csv(&self, w: &mut impl std::io::Write, header: &str) -> std::io::Result<()> {
+        self.validate_state_for_io()?;
         writeln!(w, "{header}")?;
         for i in 0..self.counts.len() {
             writeln!(w, "{i} {}", self.counts[i])?;
