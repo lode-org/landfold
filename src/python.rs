@@ -10,10 +10,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::{
-    embed_points, farthest_point, fes_from_points, project_one, Euclid, IterOpts, ProjOpts,
-    Transfer,
+    Euclid, IterOpts, ProjOpts, Transfer, embed_points, farthest_point,
+    fes_from_points, project_one,
 };
 use ndarray::Array2;
+use crate::provenance::Provenance;
 
 fn copy_f64_2d(points: PyReadonlyArray2<'_, f64>) -> Array2<f64> {
     points.as_array().to_owned()
@@ -21,6 +22,50 @@ fn copy_f64_2d(points: PyReadonlyArray2<'_, f64>) -> Array2<f64> {
 
 fn to_pyarray2<'py>(py: Python<'py>, mat: Array2<f64>) -> Bound<'py, PyArray2<f64>> {
     PyArray2::from_owned_array(py, mat)
+}
+
+#[allow(dead_code)]
+fn validated_metadata<'py>(metadata: Option<Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyDict>> {
+    let metadata = metadata
+        .ok_or_else(|| PyValueError::new_err("metadata with provenance is required for result artifacts"))?;
+    let provenance = metadata
+        .get_item("provenance")?
+        .ok_or_else(|| PyValueError::new_err("metadata.provenance is required for result artifacts"))?
+        .cast::<PyDict>()
+        .map_err(|_| PyValueError::new_err("metadata.provenance must be a dictionary"))?
+        .to_owned();
+    let string = |key: &str| -> PyResult<String> {
+        provenance
+            .get_item(key)?
+            .ok_or_else(|| PyValueError::new_err(format!("metadata.provenance.{key} is required")))?
+            .extract()
+            .map_err(|_| PyValueError::new_err(format!("metadata.provenance.{key} must be a string")))
+    };
+    let integer = |key: &str| -> PyResult<u16> {
+        provenance
+            .get_item(key)?
+            .ok_or_else(|| PyValueError::new_err(format!("metadata.provenance.{key} is required")))?
+            .extract()
+            .map_err(|_| PyValueError::new_err(format!("metadata.provenance.{key} must be an integer")))
+    };
+    let layout: u32 = provenance
+        .get_item("abi_layout_revision")?
+        .ok_or_else(|| PyValueError::new_err("metadata.provenance.abi_layout_revision is required"))?
+        .extract()
+        .map_err(|_| PyValueError::new_err("metadata.provenance.abi_layout_revision must be an integer"))?;
+    Provenance::new(
+        string("run_id")?,
+        string("input_digest")?,
+        string("engine_id")?,
+        string("protocol_family")?,
+        integer("protocol_major")?,
+        integer("protocol_minor")?,
+        layout,
+        integer("dlpack_major")?,
+        integer("dlpack_minor")?,
+    )
+    .map_err(PyValueError::new_err)?;
+    Ok(metadata)
 }
 
 fn embedding_options(
@@ -74,6 +119,7 @@ fn embed_euclid_result<'py>(
     steps: usize,
     metadata: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let metadata = validated_metadata(metadata)?;
     let emb = embedding_options(copy_f64_2d(points), lowdim, fun_hd, fun_ld, imix, steps)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let highdim = emb.high.ncols();
@@ -89,7 +135,7 @@ fn embed_euclid_result<'py>(
     result.set_item("fun_hd", fun_hd)?;
     result.set_item("fun_ld", fun_ld)?;
     result.set_item("imix", imix)?;
-    result.set_item("metadata", metadata.unwrap_or_else(|| PyDict::new(py)))?;
+    result.set_item("metadata", metadata)?;
     Ok(result)
 }
 
@@ -159,6 +205,7 @@ fn project_euclid_result<'py>(
     refine: usize,
     metadata: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let metadata = validated_metadata(metadata)?;
     let high = copy_f64_2d(high);
     let low = copy_f64_2d(low);
     let query = copy_f64_2d(query);
@@ -202,7 +249,7 @@ fn project_euclid_result<'py>(
     result.set_item("fun_hd", fun_hd)?;
     result.set_item("fun_ld", fun_ld)?;
     result.set_item("imix", imix)?;
-    result.set_item("metadata", metadata.unwrap_or_else(|| PyDict::new(py)))?;
+    result.set_item("metadata", metadata)?;
     Ok(result)
 }
 
@@ -260,6 +307,7 @@ fn fes_xy_result<'py>(
     pad: f64,
     metadata: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let metadata = validated_metadata(metadata)?;
     let pts = copy_f64_2d(xy);
     let fes = fes_from_points(pts.view(), nx, ny, kt, pad, None)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -273,7 +321,7 @@ fn fes_xy_result<'py>(
     result.set_item("free_energy", to_pyarray2(py, f))?;
     result.set_item("density", to_pyarray2(py, fes.rho))?;
     result.set_item("kt", kt)?;
-    result.set_item("metadata", metadata.unwrap_or_else(|| PyDict::new(py)))?;
+    result.set_item("metadata", metadata)?;
     Ok(result)
 }
 

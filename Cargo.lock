@@ -106,7 +106,7 @@ dependencies = [
  "bitflags 2.13.1",
  "cexpr",
  "clang-sys",
- "itertools",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -400,7 +400,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "is-terminal",
- "itertools",
+ "itertools 0.10.5",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -421,7 +421,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools",
+ "itertools 0.10.5",
 ]
 
 [[package]]
@@ -519,6 +519,7 @@ dependencies = [
 [[package]]
 name = "eindir-core"
 version = "0.6.0"
+source = "git+https://github.com/HaoZeke/eindir.git?rev=f3c4213#f3c42130bb389ba6cd6e4cfdc8b2e182f4a764e9"
 dependencies = [
  "cbindgen",
  "dlpk 0.1.5",
@@ -862,6 +863,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -899,10 +909,10 @@ dependencies = [
  "numpy",
  "plotters",
  "pyo3",
- "quench-core",
  "rayon",
  "readcon-core",
  "thiserror",
+ "xtsci-optimize",
 ]
 
 [[package]]
@@ -1330,17 +1340,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "quench-core"
-version = "0.1.0"
-dependencies = [
- "cbindgen",
- "eindir-core",
- "ndarray",
- "num-traits",
- "thiserror",
 ]
 
 [[package]]
@@ -1993,6 +1992,18 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "xtsci-optimize"
+version = "0.1.0"
+dependencies = [
+ "cbindgen",
+ "dlpk 0.1.5",
+ "eindir-core",
+ "ndarray",
+ "rand",
+ "thiserror",
+]
 
 [[package]]
 name = "yeslogic-fontconfig-sys"

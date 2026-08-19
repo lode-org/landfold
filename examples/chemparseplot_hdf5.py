@@ -7,6 +7,7 @@ flattened coordinate vector per image and returns a versioned result mapping.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -21,11 +22,23 @@ def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
     if images.ndim != 2 or images.shape[1] == 0 or images.shape[1] % 3:
         raise ValueError("ChemGP HDF5 path images must have shape (n_images, 3*n_atoms)")
 
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
     metadata = {
         "source_format": "ChemGP HDF5 NEB",
         "source_path": str(path),
         "frame_indices": list(range(images.shape[0])),
         "n_atoms": images.shape[1] // 3,
+        "provenance": {
+            "run_id": f"chemparseplot:{digest[:16]}",
+            "input_digest": f"sha256:{digest}",
+            "engine_id": "chemparseplot",
+            "protocol_family": "chemparseplot.trajectory",
+            "protocol_major": 1,
+            "protocol_minor": 0,
+            "abi_layout_revision": 1,
+            "dlpack_major": 1,
+            "dlpack_minor": 0,
+        },
     }
     return landfold.embed_euclid_result(
         images,
