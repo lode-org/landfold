@@ -33,6 +33,35 @@ pub struct StressEval {
 }
 
 impl Stress {
+    pub fn try_new(
+        hd: Array2<f64>,
+        fhd: Array2<f64>,
+        tfun_ld: Transfer,
+        imix: f64,
+        weights: Option<Array1<f64>>,
+        pair_weights: Option<Array2<f64>>,
+    ) -> crate::error::Result<Self> {
+        let n = hd.nrows();
+        if hd.ncols() != n || fhd.raw_dim() != hd.raw_dim() {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress distance matrices must be square and matching",
+            ));
+        }
+        if let Some(ref w) = weights {
+            if w.len() != n {
+                return Err(crate::error::LandfoldError::Shape("stress weight length"));
+            }
+        }
+        if let Some(ref w) = pair_weights {
+            if w.raw_dim() != hd.raw_dim() {
+                return Err(crate::error::LandfoldError::Shape(
+                    "stress pair weight shape",
+                ));
+            }
+        }
+        Ok(Self::new(hd, fhd, tfun_ld, imix, weights, pair_weights))
+    }
+
     pub fn new(
         hd: Array2<f64>,
         fhd: Array2<f64>,
@@ -331,6 +360,38 @@ mod tests {
         for g in ev.grad.iter() {
             assert_relative_eq!(*g, 0.0, epsilon = 1e-12);
         }
+    }
+
+    #[test]
+    fn try_new_rejects_incompatible_shapes() {
+        let square = Array2::zeros((2, 2));
+        assert!(Stress::try_new(
+            square.clone(),
+            Array2::zeros((2, 3)),
+            Transfer::identity(),
+            0.0,
+            None,
+            None,
+        )
+        .is_err());
+        assert!(Stress::try_new(
+            square.clone(),
+            square.clone(),
+            Transfer::identity(),
+            0.0,
+            Some(array![1.0]),
+            None,
+        )
+        .is_err());
+        assert!(Stress::try_new(
+            square.clone(),
+            square,
+            Transfer::identity(),
+            0.0,
+            None,
+            Some(Array2::zeros((3, 3))),
+        )
+        .is_err());
     }
 
     #[cfg(feature = "parallel")]

@@ -118,7 +118,14 @@ pub fn embed(
 ) -> Result<(Embedding, CgReport)> {
     let n = points.nrows();
     let hd = match precomputed_dist {
-        Some(d) => d.to_owned(),
+        Some(d) => {
+            if d.nrows() != n || d.ncols() != n {
+                return Err(crate::error::LandfoldError::Shape(
+                    "precomputed distance matrix must be n x n",
+                ));
+            }
+            d.to_owned()
+        }
         None if metric.is_euclid() => pairwise_euclid(points)?,
         None => pairwise(points, metric)?,
     };
@@ -140,14 +147,14 @@ pub fn embed(
     }
 
     let w1 = weights.map(|w| w.to_owned());
-    let stress = Stress::new(
+    let stress = Stress::try_new(
         hd.clone(),
         fhd.clone(),
         opts.tfun_ld.clone(),
         opts.imix,
         w1.clone(),
         None,
-    );
+    )?;
     let packed = Array1::from_iter(low.iter().copied());
     let report = match &opts.solver {
         Solver::Standard => minimize(&stress, packed.view(), opts.lowdim, &opts.cg)?,
