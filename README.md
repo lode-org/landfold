@@ -48,7 +48,9 @@ tree (`SKMAP_SRC`). `cargo test --release --test cpp_parity` loads that file.
 ## Python
 
 `--features python` binds `embed_euclid`, `project_euclid`,
-`farthest_euclid`, and `fes_xy`. pyo3/numpy stay on 0.29 so the graph
+`farthest_euclid`, and `fes_xy`. The corresponding `*_result` functions
+return dictionaries tagged with `landfold.*.v1` schemas and retain stress,
+density, χ, and nearest-landmark diagnostics for plotting adapters. pyo3/numpy stay on 0.29 so the graph
 shares one major with dlpk 0.4.1. dlpk's `pyo3` feature stays off
 (`pyo3-ffi` is `links = "python"`). Check on the remote builder:
 
