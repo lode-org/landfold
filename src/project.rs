@@ -141,7 +141,7 @@ pub fn project_report(
     }
     let mut fhd_row = Array1::<f64>::zeros(n);
     for i in 0..n {
-        fhd_row[i] = emb.tfun_hd.f(hd_row[i]);
+        fhd_row[i] = emb.tfun_hd.try_fdf(hd_row[i])?.0;
     }
     let d = emb.low.ncols();
     let mut best = emb.low.row(nearest_idx).to_owned();
