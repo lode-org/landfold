@@ -168,7 +168,7 @@ mod tests {
         let t = Transfer::xsigmoid(1.0, 4.0, 2.0).unwrap();
         let mut fhd = hd.clone();
         apply_transfer(&mut fhd, &t).unwrap();
-        let s = Stress::new(hd, fhd, t, 0.0, None, None);
+        let s = Stress::new(hd, fhd, t, 0.0, None, None).unwrap();
         let init = Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2]);
         let ev0 = s.eval(init.view(), 2);
         let ho = HighsOpts {
@@ -191,7 +191,7 @@ mod tests {
         let t = Transfer::identity();
         let mut fhd = hd.clone();
         apply_transfer(&mut fhd, &t).unwrap();
-        let s = Stress::new(hd, fhd, t, 0.0, None, None);
+        let s = Stress::new(hd, fhd, t, 0.0, None, None).unwrap();
         let init = Array::from_iter([5.0, -5.0, 4.0, 4.0, -3.0, 3.0, 2.0, -2.0]);
         let ho = HighsOpts {
             maxiter: 15,

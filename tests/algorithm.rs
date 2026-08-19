@@ -47,7 +47,8 @@ fn embed_lowers_chi_below_mds() {
         0.0,
         None,
         None,
-    );
+    )
+    .unwrap();
     let chi_mds = stress.eval(ndarray::Array1::from_iter(mds.iter().copied()).view(), 2);
     assert!(
         emb.stress <= chi_mds.value + 1e-10,

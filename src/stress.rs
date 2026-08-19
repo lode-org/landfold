@@ -104,10 +104,28 @@ impl Stress {
                 "stress pair weight shape",
             ));
         }
-        Ok(Self::new(hd, fhd, tfun_ld, imix, weights, pair_weights))
+        Ok(Self::from_parts(
+            hd,
+            fhd,
+            tfun_ld,
+            imix,
+            weights,
+            pair_weights,
+        ))
     }
 
     pub fn new(
+        hd: Array2<f64>,
+        fhd: Array2<f64>,
+        tfun_ld: Transfer,
+        imix: f64,
+        weights: Option<Array1<f64>>,
+        pair_weights: Option<Array2<f64>>,
+    ) -> crate::error::Result<Self> {
+        Self::try_new(hd, fhd, tfun_ld, imix, weights, pair_weights)
+    }
+
+    fn from_parts(
         hd: Array2<f64>,
         fhd: Array2<f64>,
         tfun_ld: Transfer,
@@ -435,7 +453,7 @@ mod tests {
         let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
         let hd = pairwise_euclid(pts.view()).unwrap();
         let fhd = hd.clone();
-        let s = Stress::new(hd, fhd, Transfer::identity(), 0.0, None, None);
+        let s = Stress::new(hd, fhd, Transfer::identity(), 0.0, None, None).unwrap();
         let coords = Array::from_iter(pts.iter().copied());
         let ev = s.eval(coords.view(), 2);
         assert_relative_eq!(ev.value, 0.0, epsilon = 1e-14);
@@ -533,7 +551,8 @@ mod tests {
             0.0,
             None,
             None,
-        );
+        )
+        .unwrap();
         let x = array![0.0, 0.0];
         let landmarks = array![[0.0, 0.0]];
         let (value, grad) = query_chi(
@@ -557,7 +576,7 @@ mod tests {
         let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
         let mut fhd = hd.clone();
         crate::pairwise::apply_transfer(&mut fhd, &t).unwrap();
-        let s = Stress::new(hd, fhd, t, 0.1, None, None);
+        let s = Stress::new(hd, fhd, t, 0.1, None, None).unwrap();
         let coords = array![0.0, 0.0, 0.8, 0.1, -0.2, 0.7];
         let a = s.eval_serial(coords.view(), 2);
         let b = s.eval(coords.view(), 2);
@@ -573,7 +592,7 @@ mod tests {
         let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
         let mut fhd = hd.clone();
         crate::pairwise::apply_transfer(&mut fhd, &t).unwrap();
-        let s = Stress::new(hd, fhd, t, 0.1, None, None);
+        let s = Stress::new(hd, fhd, t, 0.1, None, None).unwrap();
         let coords = array![0.0, 0.0, 0.8, 0.1, -0.2, 0.7];
         let ev = s.eval(coords.view(), 2);
         let h = 1e-7;
@@ -590,7 +609,7 @@ mod tests {
     #[test]
     fn checked_eval_rejects_malformed_coordinates() {
         let hd = array![[0.0, 1.0], [1.0, 0.0]];
-        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None);
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         assert!(stress.try_eval(array![0.0].view(), 1).is_err());
         assert!(stress.try_eval(array![0.0, f64::NAN].view(), 1).is_err());
         assert!(stress.try_eval(array![0.0, 0.0].view(), 0).is_err());

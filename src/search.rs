@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn reports_objective_at_returned_coordinates() {
         let hd = Array2::from_shape_vec((2, 2), vec![0.0, 2.0, 2.0, 0.0]).unwrap();
-        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None);
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None).unwrap();
         let opts = StochOpts {
             steps: 1,
             batch: 1,
@@ -164,7 +164,8 @@ mod tests {
         for n in [0, 1] {
             let hd = Array2::zeros((n, n));
             let init = ndarray::Array1::zeros(n);
-            let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None);
+            let stress =
+                Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
             let report =
                 minimize_stochastic(&stress, init.view(), 1, &StochOpts::default()).unwrap();
             assert_eq!(report.steps, 0);
@@ -176,7 +177,7 @@ mod tests {
     #[test]
     fn rejects_invalid_options() {
         let hd = Array2::zeros((2, 2));
-        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None);
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         let init = array![0.0, 0.0];
         assert!(
             minimize_stochastic(

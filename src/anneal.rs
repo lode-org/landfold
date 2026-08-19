@@ -152,7 +152,7 @@ mod tests {
         let t = Transfer::xsigmoid(1.0, 4.0, 2.0).unwrap();
         let mut fhd = hd.clone();
         apply_transfer(&mut fhd, &t).unwrap();
-        let s = Stress::new(hd, fhd, t, 0.0, None, None);
+        let s = Stress::new(hd, fhd, t, 0.0, None, None).unwrap();
         let init = Array::from_iter([0.0, 0.0, 0.2, 0.1, -0.1, 0.3, 0.4, -0.2, 1.0, 1.1, 1.2, 0.8]);
         let ev0 = s.eval(init.view(), 2);
         let ao = AnnealOpts {

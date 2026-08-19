@@ -210,7 +210,9 @@ fn cpp_oracle_goldens_exist_and_match() {
         };
         let mut f = hd.clone();
         apply_transfer(&mut f, &tfun).unwrap();
-        let ev = Stress::new(hd.clone(), f, tfun, imix, None, None).eval(coords.view(), 2);
+        let ev = Stress::new(hd.clone(), f, tfun, imix, None, None)
+            .unwrap()
+            .eval(coords.view(), 2);
         assert_relative_eq!(
             ev.value,
             rows[0][0],
@@ -312,7 +314,9 @@ fn one_e8_perturbation_of_a_golden_is_rejected() {
     let tfun = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
     let mut f = hd.clone();
     apply_transfer(&mut f, &tfun).unwrap();
-    let ev = Stress::new(hd, f, tfun, 0.1, None, None).eval(coords.view(), 2);
+    let ev = Stress::new(hd, f, tfun, 0.1, None, None)
+        .unwrap()
+        .eval(coords.view(), 2);
     assert!(match_abs_rel(ev.value, chi_gold, CHI_ABS, CHI_REL));
     assert!(
         !match_abs_rel(ev.value, chi_gold + 1e-8, CHI_ABS, CHI_REL),

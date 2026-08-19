@@ -102,7 +102,7 @@ mod tests {
         let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let hd = pairwise_euclid(pts.view()).unwrap();
         let fhd = hd.clone();
-        let s = Stress::new(hd, fhd, Transfer::identity(), 0.0, None, None);
+        let s = Stress::new(hd, fhd, Transfer::identity(), 0.0, None, None).unwrap();
         let coords = Array::from_iter(pts.iter().copied());
         (s, coords)
     }
