@@ -194,6 +194,7 @@ impl Histogram2d {
     }
 
     pub fn add(&mut self, x: f64, y: f64, w: f64) -> Result<()> {
+        self.validate_state()?;
         if !x.is_finite() || !y.is_finite() || !w.is_finite() || w < 0.0 {
             return Err(LandfoldError::Msg(
                 "histogram samples and weights must be finite; weights must be nonnegative".into(),
@@ -210,8 +211,15 @@ impl Histogram2d {
         }
         let ix = (((x - xlo) / (xhi - xlo) * nx as f64) as usize).min(nx - 1);
         let iy = (((y - ylo) / (yhi - ylo) * ny as f64) as usize).min(ny - 1);
-        self.counts[(iy, ix)] += w;
-        self.samples += w;
+        let count = self.counts[(iy, ix)] + w;
+        let samples = self.samples + w;
+        if !count.is_finite() || !samples.is_finite() {
+            return Err(LandfoldError::Msg(
+                "2d histogram accumulation overflowed".into(),
+            ));
+        }
+        self.counts[(iy, ix)] = count;
+        self.samples = samples;
         Ok(())
     }
 
@@ -222,10 +230,12 @@ impl Histogram2d {
         if w.is_some_and(|weights| weights.len() != xy.nrows()) {
             return Err(LandfoldError::Shape("histogram weight length"));
         }
+        let mut next = self.clone();
         for i in 0..xy.nrows() {
             let ww = w.map(|ww| ww[i]).unwrap_or(1.0);
-            self.add(xy[(i, 0)], xy[(i, 1)], ww)?;
+            next.add(xy[(i, 0)], xy[(i, 1)], ww)?;
         }
+        *self = next;
         Ok(())
     }
 
