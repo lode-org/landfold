@@ -56,12 +56,10 @@ pub fn minimize_stochastic(
     let mut rng = opts.seed | 1;
     let metric = Euclid;
     let omix = 1.0 - stress.imix;
-    let mut last = 0.0;
 
     for t in 0..opts.steps {
         let mut grad = vec![0.0; n * d];
         let mut tw = 0.0;
-        let mut pval = 0.0;
         let b = opts.batch.max(1);
         for _ in 0..b {
             let i = rand_index(&mut rng, n);
@@ -78,7 +76,6 @@ pub fn minimize_stochastic(
             tw += wij;
             let df = stress.fhd[(lo, hi)] - fld;
             let dd = stress.hd[(lo, hi)] - ld;
-            pval += (df * df * omix + stress.imix * dd * dd) * wij;
             let dld = if ld < OVERLAP { OVERLAP } else { ld };
             let gij = (df * dfld * omix + stress.imix * dd) / dld * wij;
             for h in 0..d {
@@ -90,16 +87,46 @@ pub fn minimize_stochastic(
         if tw <= 0.0 {
             tw = 1.0;
         }
-        last = pval / tw;
         let eta = opts.step0 / (1.0 + t as f64).sqrt();
         let scale = -2.0 * eta / tw;
         for k in 0..pos.len() {
             pos[k] += scale * grad[k];
         }
     }
+    let value = stress.eval(pos.view(), d).value;
     CgReport {
-        value: last,
+        value,
         coords: pos,
         steps: opts.steps,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stress::Stress;
+    use crate::transfer::Transfer;
+    use ndarray::{array, Array2};
+
+    #[test]
+    fn reports_objective_at_returned_coordinates() {
+        let hd = Array2::from_shape_vec((2, 2), vec![0.0, 2.0, 2.0, 0.0]).unwrap();
+        let stress = Stress::new(
+            hd.clone(),
+            hd,
+            Transfer::identity(),
+            1.0,
+            None,
+            None,
+        );
+        let opts = StochOpts {
+            steps: 1,
+            batch: 1,
+            seed: 1,
+            step0: 0.1,
+        };
+        let report = minimize_stochastic(&stress, array![0.0, 1.0].view(), 1, &opts);
+        let expected = stress.eval(report.coords.view(), 1).value;
+        assert_eq!(report.value, expected);
     }
 }

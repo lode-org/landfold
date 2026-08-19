@@ -29,14 +29,19 @@ pub fn farthest_point(
     }
     let d = points.ncols();
     let mut min_d = vec![f64::INFINITY; n];
+    let mut selected = vec![false; n];
     let mut chosen = Vec::with_capacity(k);
     let start = seed % n;
     chosen.push(start);
+    selected[start] = true;
     update_min_d(points, metric, start, &mut min_d);
     while chosen.len() < k {
         let mut best = 0usize;
         let mut best_s = -1.0;
         for i in 0..n {
+            if selected[i] {
+                continue;
+            }
             let w = weights.map(|ww| ww[i]).unwrap_or(1.0);
             let score = min_d[i] * w;
             if score > best_s {
@@ -45,6 +50,7 @@ pub fn farthest_point(
             }
         }
         chosen.push(best);
+        selected[best] = true;
         update_min_d(points, metric, best, &mut min_d);
     }
     let mut lp = Array2::<f64>::zeros((k, d));
@@ -163,6 +169,16 @@ mod tests {
         s.sort();
         s.dedup();
         assert_eq!(s.len(), 3);
+    }
+
+    #[test]
+    fn picks_distinct_landmarks_when_all_scores_tie() {
+        let pts = array![[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];
+        let lm = farthest_point(pts.view(), &Euclid, 3, None, 0).unwrap();
+        let mut indices = lm.index;
+        indices.sort();
+        indices.dedup();
+        assert_eq!(indices, vec![0, 1, 2]);
     }
 
     #[test]

@@ -81,7 +81,7 @@ impl Transfer {
 
     /// Regularised incomplete-gamma sigmoid. Arguments `(sigma, n)`.
     ///
-    /// `Q(n/2, (x/(sigma sqrt(2)))^2)` via a series / continued-fraction Q.
+    /// `P(n/2, (x/(sigma sqrt(2)))^2)` via a series / continued-fraction Q.
     pub fn gamma(sigma: f64, n: f64) -> Result<Self> {
         if !(sigma > 0.0) || !(n > 0.0) {
             return Err(LandfoldError::TransferParams(
@@ -223,11 +223,11 @@ fn warp_dg(pars: &[f64], y: f64) -> f64 {
 
 fn gamma_fdf(pars: &[f64], x: f64) -> (f64, f64) {
     let sx = x * pars[0];
-    let rf = regularised_gamma_q(pars[1] * 0.5, sx * sx);
+    let rf = 1.0 - regularised_gamma_q(pars[1] * 0.5, sx * sx);
     let rdf = if x == 0.0 {
         0.0
     } else {
-        -pars[2] * sx.powf(pars[1] - 1.0) * (-sx * sx).exp() * pars[0]
+        pars[2] * sx.powf(pars[1] - 1.0) * (-sx * sx).exp() * pars[0]
     };
     (rf, rdf)
 }
@@ -365,5 +365,14 @@ mod tests {
         assert_eq!(ld.mode(), TransferMode::XSigmoid);
         assert_relative_eq!(hd.f(6.0), 0.5, epsilon = 1e-14);
         assert_relative_eq!(ld.f(6.0), 0.5, epsilon = 1e-14);
+    }
+
+    #[test]
+    fn gamma_is_an_increasing_distance_transfer() {
+        let t = Transfer::gamma(2.0, 2.0).unwrap();
+        assert_relative_eq!(t.f(0.0), 0.0, epsilon = 1e-15);
+        assert!(t.f(1.0) > 0.0);
+        assert!(t.f(2.0) > t.f(1.0));
+        assert!(t.df(1.0) > 0.0);
     }
 }
