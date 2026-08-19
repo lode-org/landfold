@@ -90,6 +90,11 @@ impl Stress {
                 "stress distance matrices must be square and matching",
             ));
         }
+        if hd.iter().chain(fhd.iter()).any(|&value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress distance matrices must be finite".into(),
+            ));
+        }
         validate_weights(weights.as_ref().map(|w| w.view()), n)?;
         if pair_weights
             .as_ref()
@@ -485,6 +490,12 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn try_new_rejects_nonfinite_distances() {
+        let hd = array![[0.0, f64::NAN], [f64::NAN, 0.0]];
+        assert!(Stress::try_new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).is_err());
     }
 
     #[cfg(feature = "parallel")]

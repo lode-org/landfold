@@ -12,7 +12,7 @@
 
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
-use crate::cg::{try_minimize_oracle, CgOpts};
+use crate::cg::{CgOpts, try_minimize_oracle};
 use crate::error::{LandfoldError, Result};
 use crate::iter::Embedding;
 use crate::metric::Metric;
@@ -38,6 +38,20 @@ impl Default for ProjOpts {
 }
 
 impl ProjOpts {
+    fn validate(&self) -> Result<()> {
+        if !self.gridw.is_finite() || self.gridw <= 0.0 {
+            return Err(LandfoldError::Msg(
+                "projection grid width must be finite and > 0".into(),
+            ));
+        }
+        if self.grid_coarse == 0 || self.grid_fine == 0 {
+            return Err(LandfoldError::Msg(
+                "projection grid sizes must be > 0".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn from_cli(spec: &str) -> Result<Self> {
         let parts: Vec<f64> = spec
             .split(',')
@@ -96,6 +110,7 @@ pub fn project_report(
     metric: &dyn Metric,
     opts: &ProjOpts,
 ) -> Result<ProjReport> {
+    opts.validate()?;
     let n = emb.high.nrows();
     let d_hi = emb.high.ncols();
     if query.len() != d_hi {
@@ -287,6 +302,20 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_direct_projection_options() {
+        let opts = ProjOpts {
+            gridw: f64::NAN,
+            ..ProjOpts::default()
+        };
+        assert!(opts.validate().is_err());
+        let opts = ProjOpts {
+            grid_coarse: 0,
+            ..ProjOpts::default()
+        };
+        assert!(opts.validate().is_err());
+    }
+
+    #[test]
     fn nearest_seed_when_grid_off() {
         let high = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let low = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
@@ -316,15 +345,17 @@ mod tests {
     fn rejects_invalid_imix_in_landmark_embeddings() {
         let high = array![[0.0, 0.0], [1.0, 0.0]];
         let low = high.clone();
-        assert!(Embedding::from_landmarks(
-            high,
-            low,
-            &Euclid,
-            Transfer::identity(),
-            Transfer::identity(),
-            f64::NAN,
-            None,
-        )
-        .is_err());
+        assert!(
+            Embedding::from_landmarks(
+                high,
+                low,
+                &Euclid,
+                Transfer::identity(),
+                Transfer::identity(),
+                f64::NAN,
+                None,
+            )
+            .is_err()
+        );
     }
 }

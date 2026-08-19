@@ -21,6 +21,15 @@ fn validate_metric_dim(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<(
     }
 }
 
+fn validate_finite_points(points: ArrayView2<f64>) -> Result<()> {
+    if points.iter().any(|&value| !value.is_finite()) {
+        return Err(crate::error::LandfoldError::Msg(
+            "point coordinates must be finite".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Symmetric `n x n` distance matrix. Diagonal is zero.
 pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f64>> {
     let n = points.nrows();
@@ -28,6 +37,7 @@ pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f
     if n == 0 {
         return Err(crate::error::LandfoldError::Empty);
     }
+    validate_finite_points(points)?;
     validate_metric_dim(points, metric)?;
     let mut out = Array2::<f64>::zeros((n, n));
 
@@ -84,6 +94,7 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
     if n == 0 {
         return Err(crate::error::LandfoldError::Empty);
     }
+    validate_finite_points(points)?;
     let norms: Array1<f64> = points
         .rows()
         .into_iter()
@@ -168,5 +179,12 @@ mod tests {
         let points = array![[0.0, 0.0], [1.0, 0.0]];
         let metric = Periodic::isotropic(1, 1.0).unwrap();
         assert!(pairwise(points.view(), &metric).is_err());
+    }
+
+    #[test]
+    fn rejects_nonfinite_points() {
+        let points = array![[0.0, f64::NAN], [1.0, 0.0]];
+        assert!(pairwise(points.view(), &Euclid).is_err());
+        assert!(pairwise_euclid(points.view()).is_err());
     }
 }

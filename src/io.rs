@@ -29,6 +29,12 @@ pub fn read_points<R: BufRead>(r: R, dim: usize, weighted: bool) -> Result<Point
                     .map_err(|e| LandfoldError::Parse(format!("line {}: {e}", lineno + 1)))
             })
             .collect::<Result<Vec<_>>>()?;
+        if nums.iter().any(|&value| !value.is_finite()) {
+            return Err(LandfoldError::Parse(format!(
+                "line {}: values must be finite",
+                lineno + 1
+            )));
+        }
         let need = dim + usize::from(weighted);
         if nums.len() < need {
             return Err(LandfoldError::Parse(format!(
@@ -85,4 +91,15 @@ pub fn write_points<W: Write>(
         writeln!(w)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn rejects_nonfinite_input_values() {
+        assert!(read_points(Cursor::new("0 NaN\n"), 2, false).is_err());
+    }
 }

@@ -89,6 +89,17 @@ impl Embedding {
         if high.nrows() == 0 {
             return Err(crate::error::LandfoldError::Empty);
         }
+        if low.ncols() == 0 {
+            return Err(crate::error::LandfoldError::LowDim {
+                low: 0,
+                high: high.nrows(),
+            });
+        }
+        if low.iter().any(|&value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "landmark low-D coordinates must be finite".into(),
+            ));
+        }
         let n = high.nrows();
         validate_weights(weights.as_ref().map(|w| w.view()), n)?;
         let hd = if metric.is_euclid() {
@@ -121,6 +132,9 @@ pub fn embed(
     precomputed_dist: Option<ArrayView2<f64>>,
 ) -> Result<(Embedding, CgReport)> {
     let n = points.nrows();
+    if opts.lowdim == 0 {
+        return Err(crate::error::LandfoldError::LowDim { low: 0, high: n });
+    }
     validate_weights(weights, n)?;
     let hd = match precomputed_dist {
         Some(d) => {
