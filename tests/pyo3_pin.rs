@@ -51,10 +51,9 @@ fn lock_packages(text: &str) -> Vec<(String, String, Vec<String>)> {
                 .trim_start_matches('"')
                 .split(|c: char| c == '"' || c.is_whitespace())
                 .next()
+                .filter(|dep| !dep.is_empty())
             {
-                if !dep.is_empty() {
-                    deps.push(dep.to_string());
-                }
+                deps.push(dep.to_string());
             }
             continue;
         }
