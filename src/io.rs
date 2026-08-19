@@ -48,6 +48,12 @@ pub fn read_points<R: BufRead>(r: R, dim: usize, weighted: bool) -> Result<Point
         }
         rows.push(nums[..dim].to_vec());
         if weighted {
+            if nums[dim] < 0.0 {
+                return Err(LandfoldError::Parse(format!(
+                    "line {}: weight must be nonnegative",
+                    lineno + 1
+                )));
+            }
             weights.push(nums[dim]);
         }
     }
@@ -85,8 +91,13 @@ pub fn write_points<W: Write>(
         if weights.len() != pts.nrows() {
             return Err(LandfoldError::Shape("point weight length"));
         }
-        if weights.iter().any(|&value| !value.is_finite()) {
-            return Err(LandfoldError::Msg("point weights must be finite".into()));
+        if weights
+            .iter()
+            .any(|&value| !value.is_finite() || value < 0.0)
+        {
+            return Err(LandfoldError::Msg(
+                "point weights must be finite and nonnegative".into(),
+            ));
         }
     }
     if pts.iter().any(|&value| !value.is_finite()) {
@@ -119,5 +130,13 @@ mod tests {
         assert!(read_points(Cursor::new("0 NaN\n"), 2, false).is_err());
         assert!(read_points(Cursor::new("0 1 2\n"), 0, false).is_err());
         assert!(read_points(Cursor::new("0 1 2\n"), 2, false).is_err());
+    }
+
+    #[test]
+    fn rejects_negative_weights() {
+        assert!(read_points(Cursor::new("0 1 -1\n"), 2, true).is_err());
+        let points = Array2::zeros((1, 2));
+        let mut output = Vec::new();
+        assert!(write_points(&mut output, &points, Some(&Array1::from(vec![-1.0]))).is_err());
     }
 }
