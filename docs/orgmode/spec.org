@@ -33,8 +33,9 @@ are only kept after the C++ oracle match.
 Goldens live in =tests/goldens/cpp_oracle.txt=, produced by
 =scripts/gen_cpp_goldens.sh= against the HaoZeke =addLocks= C++ tree
 (transfer f/df, pairwise Euclid/PBC, Torgerson MDS pairwise
-distances, χ/∇χ). The C++ embedding coordinates are private, so the
-MDS block is the i<j Euclidean distances of that embedding, not the
+distances, χ/∇χ, one-point χ of a query, Gonzalez farthest-point
+indices). The C++ embedding coordinates are private, so the MDS
+block is the i<j Euclidean distances of that embedding, not the
 coordinates.
 
 =tests/cpp_parity.rs= loads that file. A missing file is a hard fail.
@@ -46,6 +47,36 @@ Single package, one =landfold= binary. =clap= is a package dependency
 because Cargo cannot mark a dep bin-only without a workspace split
 (=landfold-w1p0=). The library API does not use clap.
 
+* Landmarks
+
+Gonzalez farthest-point (2-approximate k-center) traversal. Seed
+index = seed rem N. Optional per-point weights multiply the
+min-distance score. =--voronoi= replaces those scores with Voronoi
+masses raised to =wgamma=. Citation: Gonzalez, *Theor. Comput. Sci.*
+**38**, 293 (1985), DOI 10.1016/0304-3975(85)90224-5.
+
+* Project
+
+Out-of-sample placement minimises χ of the query against the
+landmarks (Ceriotti, Tribello, Parrinello, *J. Chem. Theory Comput.*
+**9**, 1521 (2013), DOI 10.1021/ct3010563). For 1-D and 2-D embeddings
+the search is a coarse grid of =g1= points on =[-gw, gw]^d= then a
+fine grid of =g2= points in the winning cell, then =--refine=
+Polak-Ribiere + Brent steps on the one-point χ. =grid_coarse < 2=
+falls back to the nearest landmark. =--print-error= appends χ and
+the nearest-landmark HD distance. Default solver for the parent
+embedding remains =Solver::Standard= (full-pair CG).
+
 * FES
 
-=F/kT = -ln(ρ/ρ_max)= on a 2-D histogram of the embedding.
+=F/kT = -ln(ρ/ρ_max)= on a 2-D histogram of the embedding
+(Ferrenberg and Swendsen, *Phys. Rev. Lett.* **63**, 1195 (1989),
+DOI 10.1103/PhysRevLett.63.1195). Empty bins stay empty (=None= /
+=nan=). CSV columns are =x y F rho=. SVG is a cell heatmap with an
+=F/kT= bar, darker at low F. Optional Gaussian blur of the counts,
+=floor= of ρ_max to keep one connected body, and clip to =fmax=
+match the JCTC 2013 panel class.
+
+Coordination numbers of Cartesian frames (neighbours inside a cutoff)
+are the extra panel of that figure class. =landfold fes --frames
+--cn-csv= writes integer bins =0..=cn-max=.

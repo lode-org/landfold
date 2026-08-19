@@ -35,6 +35,14 @@ Exercise 5 parameters (verbatim):
 - =kT* = 0.168=
 - FES grid about =[-15,15]^2=
 
+=run.sh= auto-pads the TSE embedding. To force the course box:
+
+#+begin_src sh
+landfold fes --input out/ts.proj --nx 80 --ny 80 --kt 0.168 \
+    --xmin -15 --xmax 15 --ymin -15 --ymax 15 \
+    --csv out/fes.csv --svg out/fes.svg
+#+end_src
+
 * Run
 
 #+begin_src sh

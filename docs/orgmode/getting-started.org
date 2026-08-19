@@ -27,8 +27,9 @@ cargo test --release --test cpp_parity
 
 The oracle links =libdimred.o= + =libtoolbox= and dumps f/df, pairwise
 Euclid/PBC, Torgerson MDS pairwise distances of the private embedding
-=p=, and =NLDRITERChi= χ/∇χ. =landfold mds --distances= prints the
-same invariant (full matrix) from the Rust Torgerson path.
+=p=, =NLDRITERChi= χ/∇χ, one-point query χ, and Gonzalez
+farthest-point indices. =landfold mds --distances= prints the same
+invariant (full matrix) from the Rust Torgerson path.
 
 * Torgerson MDS
 
@@ -43,7 +44,26 @@ landfold embed -D 30 -d 2 --fun-hd 6,8,8 --fun-ld 6,2,8 --steps 50 \
     --pi 6.283185 -w < landmarks.dat > landmarks.ld
 #+end_src
 
+* Landmarks
+
+Gonzalez farthest-point sampling (Gonzalez 1985,
+DOI [[https://doi.org/10.1016/0304-3975(85)90224-5][10.1016/0304-3975(85)90224-5]]). =--seed= picks the first
+index modulo N. =--indices= writes a =# indices ...= comment so the
+point table stays readable by =read_points=. =--voronoi= replaces
+the FPS scores with Voronoi masses (=--wgamma=).
+
+#+begin_src sh
+landfold landmarks -D 30 -n 200 --seed 1 --indices --voronoi \
+    < hd.dat > landmarks.dat
+#+end_src
+
 * Project
+
+A new high-D row is dropped onto the landmark map by a coarse then
+fine χ grid on =[-gw, gw]^2=, optionally polished by =--refine=
+Polak-Ribiere + Brent steps (Ceriotti, Tribello, Parrinello, JCTC 2013,
+DOI [[https://doi.org/10.1021/ct3010563][10.1021/ct3010563]]). =--grid= is =gw,g1,g2=. =--print-error=
+appends χ and the nearest-landmark HD distance.
 
 #+begin_src sh
 landfold project -D 30 -d 2 --high-file landmarks.dat --low-file landmarks.ld \
@@ -53,6 +73,20 @@ landfold project -D 30 -d 2 --high-file landmarks.dat --low-file landmarks.ld \
 
 * Free-energy surface
 
+=F/kT = -ln(ρ/ρ_max)= on a 2-D histogram (Ferrenberg and Swendsen,
+PRL 1989, DOI [[https://doi.org/10.1103/PhysRevLett.63.1195][10.1103/PhysRevLett.63.1195]]). Empty bins are
+=nan=. =--svg= is the heatmap; =--csv= is =x y F rho=. Optional
+=--frames= plus =--cn-csv= writes the integer coordination histogram
+used by the cluster-FES figure class. Bounds default to a 5% pad of
+the data; pass =--xmin --xmax --ymin --ymax= to fix the box
+(course LJ38 map: about =[-15,15]^2=). =--blur= is a separable
+Gaussian of the counts; =--floor= keeps the largest connected body;
+=--fmax= is the colour-scale clip (JCTC 2013 panel uses 2).
+
 #+begin_src sh
-landfold fes --input colvar.ld --nx 80 --ny 80 --svg fes.svg --csv fes.csv
+landfold fes --input colvar.ld --nx 80 --ny 80 --kt 0.168 \
+    --xmin -15 --xmax 15 --ymin -15 --ymax 15 \
+    --blur 7 --floor 0.006 --fmax 2 \
+    --svg fes.svg --csv fes.csv \
+    --frames frames.xyz --cn-csv cn.csv --cn-cutoff 1.2 --cn-max 12
 #+end_src
