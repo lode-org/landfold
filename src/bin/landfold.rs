@@ -13,7 +13,7 @@ use landfold::{
 use ndarray::Array1;
 
 #[derive(Parser, Debug)]
-#[command(name = "landfold", about = "Sigmoid-distance nonlinear embedding")]
+#[command(name = "landfold", about = "Landscape And Nonlinear Distance Folding Onto Low Dimensions")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,

@@ -3,6 +3,9 @@
 Same LODE indigo / amber family as linkcell and readcon-core, different
 geometry.
 
+**landfold** is the backronym Landscape And Nonlinear Distance
+Folding Onto Low Dimensions.
+
 ## Concept
 
 - **One sheared sheet** — the landscape, same parallelogram craft as

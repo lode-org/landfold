@@ -1,7 +1,7 @@
 [workspace]
 name = "landfold"
 version = "0.1.0"
-description = "Fast sigmoid-distance nonlinear dimensionality reduction"
+description = "Landscape And Nonlinear Distance Folding Onto Low Dimensions"
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64"]
 

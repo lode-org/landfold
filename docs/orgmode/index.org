@@ -1,7 +1,7 @@
 #+TITLE: landfold
 #+FILETAGS: :landfold:docs:
 #+DATE: <2026-08-19 Wed>
-#+DESCRIPTION: Sigmoid-distance nonlinear embedding
+#+DESCRIPTION: Landscape And Nonlinear Distance Folding Onto Low Dimensions
 #+STATUS: Active
 
 * About

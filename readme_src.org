@@ -1,6 +1,7 @@
 * About
 
-~landfold~ embeds high-dimensional molecular descriptors into a low-D
+~landfold~ (Landscape And Nonlinear Distance Folding Onto Low
+Dimensions) embeds high-dimensional molecular descriptors into a low-D
 map by transforming pairwise distances with a generalised sigmoid and
 minimising the mismatch (Ceriotti, Tribello, Parrinello, PNAS 2011,
 DOI [[https://doi.org/10.1073/pnas.1108486108][10.1073/pnas.1108486108]]).

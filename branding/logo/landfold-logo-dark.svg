@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="420" height="112" viewBox="0 0 420 112" fill="none" role="img" aria-labelledby="lfDarkTitle">
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="112" viewBox="0 0 540 112" fill="none" role="img" aria-labelledby="lfDarkTitle">
   <title id="lfDarkTitle">landfold</title>
-  <desc>Sigmoid-distance nonlinear embedding</desc>
+  <desc>Landscape And Nonlinear Distance Folding Onto Low Dimensions</desc>
   <rect x="8" y="16" width="80" height="80" rx="18" fill="#312E81"/>
   <rect x="15" y="23" width="66" height="66" rx="14" fill="none" stroke="#1E1B4B" stroke-width="1.4"/>
   <path d="M24 44 L58 34 L66 66 L32 76 Z" fill="none" stroke="#C7D2FE" stroke-width="1.7" stroke-linejoin="round"/>
@@ -12,8 +12,10 @@
   <circle cx="36" cy="64" r="2.4" fill="#FBBF24"/>
   <circle cx="56" cy="48" r="2.4" fill="#FBBF24"/>
   <circle cx="46" cy="56" r="2.9" fill="#EEF2FF"/>
-  <text x="108" y="58" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+  <text x="108" y="52" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
         font-size="34" font-weight="750" letter-spacing="-1.1" fill="#F8FAFC">landfold</text>
-  <text x="108" y="82" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-        font-size="14" font-weight="600" letter-spacing="0.14em" fill="#A5B4FC">SIGMOID EMBED</text>
+  <text x="108" y="74" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="12" font-weight="600" letter-spacing="0.06em" fill="#A5B4FC">LANDSCAPE AND NONLINEAR DISTANCE</text>
+  <text x="108" y="90" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="12" font-weight="600" letter-spacing="0.06em" fill="#A5B4FC">FOLDING ONTO LOW DIMENSIONS</text>
 </svg>

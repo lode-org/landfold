@@ -1,4 +1,4 @@
-//! Sigmoid-distance nonlinear embedding for high-dimensional molecular data.
+//! landfold: Landscape And Nonlinear Distance Folding Onto Low Dimensions.
 //!
 //! Implements the transfer-function MDS of Ceriotti, Tribello and Parrinello
 //! (PNAS 2011, DOI 10.1073/pnas.1108486108). Pairwise distances are mapped

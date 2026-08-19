@@ -1,7 +1,7 @@
 # landfold
 
-Sigmoid-distance nonlinear embedding of high-dimensional molecular
-data. MIT.
+**landfold**: Landscape And Nonlinear Distance Folding Onto Low
+Dimensions. MIT.
 
 The transfer function and stress follow Ceriotti, Tribello and
 Parrinello, *PNAS* **2011**,
