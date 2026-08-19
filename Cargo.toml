@@ -34,8 +34,8 @@ thiserror = "2"
 clap = { version = "4.5", features = ["derive"] }
 dlpk = { version = "0.1.5", features = ["ndarray"] }
 rayon = { version = "1.10", optional = true }
-pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
-numpy = { version = "0.23", optional = true }
+pyo3 = { version = "0.26", features = ["extension-module"], optional = true }
+numpy = { version = "0.26", optional = true }
 plotters = { version = "0.3", optional = true }
 
 [dev-dependencies]

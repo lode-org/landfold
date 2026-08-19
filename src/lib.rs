@@ -34,6 +34,10 @@ pub use mds::{classical_mds, mds_from_points, randomized_mds, MdsMode, MdsReport
 pub use metric::{Dot, Euclid, Metric, Periodic, Sphere};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use project::{project_many, project_one, ProjOpts};
+pub use stress::{Stress, StressEval};
 pub use transfer::{Transfer, TransferMode};
+
+#[cfg(feature = "python")]
+mod python;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
