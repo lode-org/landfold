@@ -73,7 +73,7 @@ pub fn minimize_stochastic(
     let mut pos = init.to_owned();
     if n < 2 {
         return Ok(CgReport {
-            value: stress.eval(pos.view(), d).value,
+            value: stress.try_eval(pos.view(), d)?.value,
             coords: pos,
             steps: 0,
         });
@@ -101,7 +101,7 @@ pub fn minimize_stochastic(
             let xi = &pos.as_slice().unwrap()[lo * d..(lo + 1) * d];
             let xj = &pos.as_slice().unwrap()[hi * d..(hi + 1) * d];
             let ld = metric.dist(xi, xj)?;
-            let (fld, dfld) = stress.tfun_ld.fdf(ld);
+            let (fld, dfld) = stress.tfun_ld.try_fdf(ld)?;
             let wij = stress.weights.as_ref().map(|w| w[(lo, hi)]).unwrap_or(1.0);
             tw += wij;
             let df = stress.fhd[(lo, hi)] - fld;
@@ -129,7 +129,7 @@ pub fn minimize_stochastic(
             pos[k] -= opts.step0 * mean / (variance + EPSILON);
         }
     }
-    let value = stress.eval(pos.view(), d).value;
+    let value = stress.try_eval(pos.view(), d)?.value;
     Ok(CgReport {
         value,
         coords: pos,
