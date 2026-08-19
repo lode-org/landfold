@@ -1,8 +1,8 @@
 //! End-to-end: three well-separated blobs stay separated after embedding.
 
 use approx::assert_relative_eq;
-use ndarray::Array2;
 use landfold::{embed_points, Euclid, IterOpts, Transfer};
+use ndarray::Array2;
 
 #[test]
 fn three_blobs_stay_separated() {
@@ -13,10 +13,12 @@ fn three_blobs_stay_separated() {
         pts[(i + 20, 0)] = i as f64 * 0.01;
         pts[(i + 20, 1)] = 5.0 + i as f64 * 0.01;
     }
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::xsigmoid(2.0, 4.0, 3.0).unwrap();
-    opts.tfun_ld = Transfer::xsigmoid(2.0, 2.0, 3.0).unwrap();
+    let mut opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::xsigmoid(2.0, 4.0, 3.0).unwrap(),
+        tfun_ld: Transfer::xsigmoid(2.0, 2.0, 3.0).unwrap(),
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = 20;
     let emb = embed_points(pts.view(), &Euclid, &opts).unwrap();
     assert_eq!(emb.low.nrows(), 30);

@@ -5,8 +5,8 @@ use std::process::Command;
 
 use approx::assert_relative_eq;
 use landfold::{
-    Euclid, FreeEnergy, Histogram2d, IterOpts, ProjOpts, Transfer, coordination_histogram,
-    embed_points, farthest_point, project_many, project_one,
+    coordination_histogram, embed_points, farthest_point, project_many, project_one, Euclid,
+    FreeEnergy, Histogram2d, IterOpts, ProjOpts, Transfer,
 };
 use ndarray::array;
 
@@ -55,10 +55,12 @@ fn project_recovers_held_out_corner() {
     // Square in the plane. Embed three corners; project the fourth.
     let all = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
     let train = all.slice(ndarray::s![0..3, ..]);
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::identity();
-    opts.tfun_ld = Transfer::identity();
+    let mut opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::identity(),
+        tfun_ld: Transfer::identity(),
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = 40;
     let emb = embed_points(train, &Euclid, &opts).unwrap();
     let po = ProjOpts {
@@ -96,12 +98,11 @@ fn fes_minimum_sits_on_the_dense_bin() {
     let mut iy = 0usize;
     for y in 0..fes.f.nrows() {
         for x in 0..fes.f.ncols() {
-            if let Some(v) = fes.f[(y, x)] {
-                if v < best {
-                    best = v;
-                    ix = x;
-                    iy = y;
-                }
+            if fes.f[(y, x)].is_some_and(|v| v < best) {
+                let v = fes.f[(y, x)].unwrap();
+                best = v;
+                ix = x;
+                iy = y;
             }
         }
     }
@@ -168,10 +169,12 @@ fn farthest_point_weight_pulls_a_near_point() {
 #[test]
 fn project_many_matches_project_one() {
     let pts = array![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::identity();
-    opts.tfun_ld = Transfer::identity();
+    let mut opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::identity(),
+        tfun_ld: Transfer::identity(),
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = 20;
     let emb = embed_points(pts.view(), &Euclid, &opts).unwrap();
     let po = ProjOpts {
@@ -191,10 +194,12 @@ fn project_many_matches_project_one() {
 #[test]
 fn project_without_grid_uses_nearest_landmark() {
     let pts = array![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::identity();
-    opts.tfun_ld = Transfer::identity();
+    let mut opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::identity(),
+        tfun_ld: Transfer::identity(),
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = 10;
     let emb = embed_points(pts.view(), &Euclid, &opts).unwrap();
     let po = ProjOpts {

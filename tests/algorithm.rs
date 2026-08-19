@@ -1,10 +1,8 @@
 //! Algorithm contracts: closed-form transfer, χ descent, two-well separation.
 
 use approx::assert_relative_eq;
+use landfold::{classical_mds, embed, pairwise_euclid, Euclid, IterOpts, Transfer};
 use ndarray::Array2;
-use landfold::{
-    classical_mds, embed, pairwise_euclid, Euclid, IterOpts, Transfer,
-};
 
 fn xsigmoid_closed(x: f64, sigma: f64, a: f64, b: f64) -> f64 {
     let u = (2.0_f64.powf(a / b) - 1.0) * (x / sigma).powf(a);
@@ -30,10 +28,12 @@ fn embed_lowers_chi_below_mds() {
     }
     let hd = pairwise_euclid(pts.view()).unwrap();
     let mds = classical_mds(hd.view(), 2).unwrap().0;
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::xsigmoid(2.0, 4.0, 3.0).unwrap();
-    opts.tfun_ld = Transfer::xsigmoid(2.0, 2.0, 3.0).unwrap();
+    let mut opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::xsigmoid(2.0, 4.0, 3.0).unwrap(),
+        tfun_ld: Transfer::xsigmoid(2.0, 2.0, 3.0).unwrap(),
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = 25;
     let (emb, _) = embed(pts.view(), &Euclid, &opts, None, None, None).unwrap();
     let stress = landfold::stress::Stress::new(
@@ -48,10 +48,7 @@ fn embed_lowers_chi_below_mds() {
         None,
         None,
     );
-    let chi_mds = stress.eval(
-        ndarray::Array1::from_iter(mds.iter().copied()).view(),
-        2,
-    );
+    let chi_mds = stress.eval(ndarray::Array1::from_iter(mds.iter().copied()).view(), 2);
     assert!(
         emb.stress <= chi_mds.value + 1e-10,
         "embed χ {} must not exceed MDS χ {}",
@@ -69,10 +66,12 @@ fn two_wells_separate_in_2d() {
         pts[(i + 8, 0)] = 6.0 + 0.01 * i as f64;
         pts[(i + 8, 2)] = 0.5;
     }
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap();
-    opts.tfun_ld = Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap();
+    let mut opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap(),
+        tfun_ld: Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap(),
+        ..IterOpts::default()
+    };
     opts.cg.maxiter = 30;
     let (emb, _) = embed(pts.view(), &Euclid, &opts, None, None, None).unwrap();
     let mut intra = 0.0;
@@ -119,11 +118,13 @@ fn stochastic_solver_reaches_low_chi_from_scrambled_start() {
             init[(i, h)] = ((state >> 11) as f64) * (1.0 / ((1u64 << 53) as f64)) * 4.0 - 2.0;
         }
     }
-    let mut opts = IterOpts::default();
-    opts.lowdim = 2;
-    opts.tfun_hd = Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap();
-    opts.tfun_ld = Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap();
-    opts.solver = landfold::Solver::Stochastic(landfold::StochOpts::default());
+    let opts = IterOpts {
+        lowdim: 2,
+        tfun_hd: Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap(),
+        tfun_ld: Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap(),
+        solver: landfold::Solver::Stochastic(landfold::StochOpts::default()),
+        ..IterOpts::default()
+    };
     let (emb, _) = embed(pts.view(), &Euclid, &opts, Some(init.view()), None, None).unwrap();
     assert!(emb.stress < 1e-2, "stochastic chi {}", emb.stress);
 }
