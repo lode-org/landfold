@@ -394,4 +394,15 @@ mod tests {
         assert!(classical_mds(array![[0.0, -1.0], [-1.0, 0.0]].view(), 1).is_err());
         assert!(randomized_mds(array![[0.0, 1.0e200], [1.0e200, 0.0]].view(), 1, 2, 0).is_err());
     }
+
+    #[test]
+    fn rejects_mds_centering_overflow() {
+        let dist = array![
+            [0.0, 1.0e154, 1.0e154],
+            [1.0e154, 0.0, 1.0e154],
+            [1.0e154, 1.0e154, 0.0],
+        ];
+        assert!(classical_mds(dist.view(), 1).is_err());
+        assert!(randomized_mds(dist.view(), 1, 2, 0).is_err());
+    }
 }
