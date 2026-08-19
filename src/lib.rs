@@ -7,6 +7,8 @@
 //!
 //! Hot path: Rayon pairwise distances, GEMM Euclidean Gram matrix, analytic
 //! χ gradient, Polak-Ribiere CG. Embeddings export as DLPack via `dlpk`.
+//! Optional `--features python` binds CPython on pyo3/numpy 0.29 so the
+//! graph shares one major with dlpk 0.4.1; dlpk's `pyo3` feature stays off.
 
 pub mod anneal;
 pub mod array;

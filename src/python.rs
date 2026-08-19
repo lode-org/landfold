@@ -1,10 +1,10 @@
 //! Optional CPython module (`--features python`).
 //!
-//! pyo3/numpy stay on 0.26 so they share one major with dlpk 0.1.5.
-//! dlpk's `pyo3` feature is left off: the crate exports DLPack from Rust
-//! and does not need a second pyo3-ffi `links = "python"` edge.
+//! pyo3/numpy track dlpk 0.4.1's optional pyo3 0.29 so `--features python`
+//! has one pyo3 major. dlpk's `pyo3` feature stays off: DLPack export is
+//! `array::to_dlpack` and does not add a second pyo3-ffi `links = "python"` edge.
 
-use numpy::{PyArray2, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -13,6 +13,14 @@ use crate::{
     project_one,
 };
 use ndarray::Array2;
+
+fn copy_f64_2d(points: PyReadonlyArray2<'_, f64>) -> Array2<f64> {
+    points.as_array().to_owned()
+}
+
+fn to_pyarray2<'py>(py: Python<'py>, mat: Array2<f64>) -> Bound<'py, PyArray2<f64>> {
+    PyArray2::from_owned_array(py, mat)
+}
 
 #[pyfunction]
 #[pyo3(signature = (points, lowdim=2, fun_hd="identity", fun_ld="identity", imix=0.0, steps=100))]
@@ -25,18 +33,7 @@ fn embed_euclid<'py>(
     imix: f64,
     steps: usize,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-    // numpy 0.26 ships ndarray 0.16; landfold is on 0.17. Copy through slices.
-    let shape = points.shape();
-    let (n, d) = (shape[0], shape[1]);
-    let sl = points
-        .as_slice()
-        .map_err(|_| PyValueError::new_err("points must be a contiguous C-order float64 array"))?;
-    let mut pts = Array2::<f64>::zeros((n, d));
-    for i in 0..n {
-        for h in 0..d {
-            pts[(i, h)] = sl[i * d + h];
-        }
-    }
+    let pts = copy_f64_2d(points);
     let mut opts = IterOpts::default();
     opts.lowdim = lowdim;
     opts.imix = imix;
@@ -45,30 +42,7 @@ fn embed_euclid<'py>(
     opts.tfun_ld = Transfer::from_cli(fun_ld).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let emb = embed_points(pts.view(), &Euclid, &opts)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let mut rows = Vec::with_capacity(emb.low.nrows());
-    for i in 0..emb.low.nrows() {
-        let mut row = Vec::with_capacity(emb.low.ncols());
-        for h in 0..emb.low.ncols() {
-            row.push(emb.low[(i, h)]);
-        }
-        rows.push(row);
-    }
-    PyArray2::from_vec2(py, &rows).map_err(|e| PyValueError::new_err(e.to_string()))
-}
-
-fn copy_f64_2d(points: PyReadonlyArray2<'_, f64>) -> PyResult<Array2<f64>> {
-    let shape = points.shape();
-    let (n, d) = (shape[0], shape[1]);
-    let sl = points
-        .as_slice()
-        .map_err(|_| PyValueError::new_err("points must be a contiguous C-order float64 array"))?;
-    let mut pts = Array2::<f64>::zeros((n, d));
-    for i in 0..n {
-        for h in 0..d {
-            pts[(i, h)] = sl[i * d + h];
-        }
-    }
-    Ok(pts)
+    Ok(to_pyarray2(py, emb.low))
 }
 
 #[pyfunction]
@@ -86,9 +60,9 @@ fn project_euclid<'py>(
     grid_fine: usize,
     refine: usize,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-    let high = copy_f64_2d(high)?;
-    let low = copy_f64_2d(low)?;
-    let query = copy_f64_2d(query)?;
+    let high = copy_f64_2d(high);
+    let low = copy_f64_2d(low);
+    let query = copy_f64_2d(query);
     let emb = crate::Embedding::from_landmarks(
         high,
         low,
@@ -107,17 +81,15 @@ fn project_euclid<'py>(
     };
     let nq = query.nrows();
     let d = emb.low.ncols();
-    let mut rows = Vec::with_capacity(nq);
+    let mut out = Array2::<f64>::zeros((nq, d));
     for i in 0..nq {
         let p = project_one(&emb, query.row(i), &Euclid, &opts)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut row = Vec::with_capacity(d);
         for h in 0..d {
-            row.push(p[h]);
+            out[(i, h)] = p[h];
         }
-        rows.push(row);
     }
-    PyArray2::from_vec2(py, &rows).map_err(|e| PyValueError::new_err(e.to_string()))
+    Ok(to_pyarray2(py, out))
 }
 
 #[pyfunction]
@@ -128,19 +100,10 @@ fn farthest_euclid<'py>(
     k: usize,
     seed: usize,
 ) -> PyResult<(Vec<usize>, Bound<'py, PyArray2<f64>>)> {
-    let pts = copy_f64_2d(points)?;
+    let pts = copy_f64_2d(points);
     let lm = farthest_point(pts.view(), &Euclid, k, None, seed)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let mut rows = Vec::with_capacity(lm.points.nrows());
-    for i in 0..lm.points.nrows() {
-        let mut row = Vec::with_capacity(lm.points.ncols());
-        for h in 0..lm.points.ncols() {
-            row.push(lm.points[(i, h)]);
-        }
-        rows.push(row);
-    }
-    let arr = PyArray2::from_vec2(py, &rows).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok((lm.index, arr))
+    Ok((lm.index, to_pyarray2(py, lm.points)))
 }
 
 #[pyfunction]
@@ -153,22 +116,21 @@ fn fes_xy<'py>(
     kt: f64,
     pad: f64,
 ) -> PyResult<(Vec<f64>, Vec<f64>, Bound<'py, PyArray2<f64>>)> {
-    let pts = copy_f64_2d(xy)?;
+    let pts = copy_f64_2d(xy);
     let fes = fes_from_points(pts.view(), nx, ny, kt, pad, None)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let mut rows = Vec::with_capacity(fes.f.nrows());
+    let mut f = Array2::<f64>::from_elem((fes.f.nrows(), fes.f.ncols()), f64::NAN);
     for iy in 0..fes.f.nrows() {
-        let mut row = Vec::with_capacity(fes.f.ncols());
         for ix in 0..fes.f.ncols() {
-            row.push(fes.f[(iy, ix)].unwrap_or(f64::NAN));
+            if let Some(v) = fes.f[(iy, ix)] {
+                f[(iy, ix)] = v;
+            }
         }
-        rows.push(row);
     }
-    let arr = PyArray2::from_vec2(py, &rows).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok((
         fes.x_centers.iter().copied().collect(),
         fes.y_centers.iter().copied().collect(),
-        arr,
+        to_pyarray2(py, f),
     ))
 }
 

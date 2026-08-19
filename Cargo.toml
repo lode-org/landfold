@@ -33,10 +33,12 @@ nalgebra = "0.33"
 thiserror = "2"
 # clap is used only by the landfold binary in this single package (landfold-w1p0).
 clap = { version = "4.5", features = ["derive"] }
-dlpk = { version = "0.1.5", features = ["ndarray"] }
+# dlpk 0.4.1 optional pyo3 is 0.29. python feature matches that major.
+# dlpk/pyo3 stays off so this crate owns the single pyo3-ffi links=python edge.
+dlpk = { version = "0.4.1", features = ["ndarray"] }
 rayon = { version = "1.10", optional = true }
-pyo3 = { version = "0.26", features = ["extension-module"], optional = true }
-numpy = { version = "0.26", optional = true }
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
+numpy = { version = "0.29", optional = true }
 plotters = { version = "0.3", optional = true }
 
 [dev-dependencies]

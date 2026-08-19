@@ -20,7 +20,9 @@ use landfold::{
 #[derive(Parser, Debug)]
 #[command(
     name = "landfold",
-    about = "Landscape And Nonlinear Distance Folding Onto Low Dimensions"
+    version,
+    about = "Landscape And Nonlinear Distance Folding Onto Low Dimensions",
+    after_help = "Python: cargo build --features python (pyo3/numpy 0.29; one major, dlpk pyo3 off)."
 )]
 struct Cli {
     #[command(subcommand)]
