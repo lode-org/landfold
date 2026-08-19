@@ -53,6 +53,13 @@ pub fn minimize_stochastic(
 ) -> CgReport {
     let n = stress.n;
     let mut pos = init.to_owned();
+    if n < 2 {
+        return CgReport {
+            value: stress.eval(pos.view(), d).value,
+            coords: pos,
+            steps: 0,
+        };
+    }
     let mut rng = opts.seed | 1;
     let metric = Euclid;
     let omix = 1.0 - stress.imix;
@@ -128,5 +135,30 @@ mod tests {
         let report = minimize_stochastic(&stress, array![0.0, 1.0].view(), 1, &opts);
         let expected = stress.eval(report.coords.view(), 1).value;
         assert_eq!(report.value, expected);
+    }
+
+    #[test]
+    fn handles_empty_and_singleton_point_sets() {
+        for n in [0, 1] {
+            let hd = Array2::zeros((n, n));
+            let init = ndarray::Array1::zeros(n);
+            let stress = Stress::new(
+                hd.clone(),
+                hd,
+                Transfer::identity(),
+                0.0,
+                None,
+                None,
+            );
+            let report = minimize_stochastic(
+                &stress,
+                init.view(),
+                1,
+                &StochOpts::default(),
+            );
+            assert_eq!(report.steps, 0);
+            assert_eq!(report.coords, init);
+            assert_eq!(report.value, 0.0);
+        }
     }
 }
