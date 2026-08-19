@@ -90,9 +90,13 @@ impl Stress {
                 "stress distance matrices must be square and matching",
             ));
         }
-        if hd.iter().chain(fhd.iter()).any(|&value| !value.is_finite()) {
+        if hd
+            .iter()
+            .chain(fhd.iter())
+            .any(|&value| !value.is_finite() || value < 0.0)
+        {
             return Err(crate::error::LandfoldError::Msg(
-                "stress distance matrices must be finite".into(),
+                "stress distance matrices must be finite and nonnegative".into(),
             ));
         }
         validate_weights(weights.as_ref().map(|w| w.view()), n)?;
