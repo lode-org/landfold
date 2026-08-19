@@ -65,28 +65,50 @@ impl Stress {
 
     /// Evaluate χ and ∇χ on packed low-D coordinates (`n * d`).
     pub fn eval(&self, coords: ArrayView1<f64>, d: usize) -> StressEval {
-        let n = self.n;
-        debug_assert_eq!(coords.len(), n * d);
-        let mut pval = 0.0;
-        let mut pgrad = vec![0.0; n * d];
-        let mut tw = 0.0;
-        let metric = Euclid;
-        let imix = self.imix;
-        let omix = 1.0 - imix;
+        #[cfg(feature = "parallel")]
+        {
+            self.eval_parallel(coords, d)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            self.eval_serial(coords, d)
+        }
+    }
 
-        for i in 0..n {
-            let xi = &coords.as_slice().unwrap()[i * d..(i + 1) * d];
-            for j in 0..i {
-                let xj = &coords.as_slice().unwrap()[j * d..(j + 1) * d];
-                let ld = metric.dist_unchecked(xi, xj);
-                let (fld, dfld) = self.tfun_ld.fdf(ld);
-                let wij = self.weights.as_ref().map(|w| w[(i, j)]).unwrap_or(1.0);
-                tw += wij;
-                let df = self.fhd[(i, j)] - fld;
-                let dd = self.hd[(i, j)] - ld;
-                pval += (df * df * omix + imix * dd * dd) * wij;
-                let dld = if ld < OVERLAP { OVERLAP } else { ld };
-                let gij = (df * dfld * omix + imix * dd) / dld * wij;
+    fn pair_kernel(
+        &self,
+        i: usize,
+        n: usize,
+        d: usize,
+        coords: &[f64],
+        hd: &[f64],
+        fhd: &[f64],
+        weights: Option<&[f64]>,
+        omix: f64,
+        pval: &mut f64,
+        tw: &mut f64,
+        pgrad: &mut [f64],
+    ) {
+        let xi = &coords[i * d..(i + 1) * d];
+        for j in 0..i {
+            let xj = &coords[j * d..(j + 1) * d];
+            let ld = Euclid.dist_unchecked(xi, xj);
+            let (fld, dfld) = self.tfun_ld.fdf(ld);
+            let wij = weights.map(|w| w[i * n + j]).unwrap_or(1.0);
+            *tw += wij;
+            let df = fhd[i * n + j] - fld;
+            let dd = hd[i * n + j] - ld;
+            *pval += (df * df * omix + self.imix * dd * dd) * wij;
+            let dld = if ld < OVERLAP { OVERLAP } else { ld };
+            let gij = (df * dfld * omix + self.imix * dd) / dld * wij;
+            if d == 2 {
+                let dx = xi[0] - xj[0];
+                let dy = xi[1] - xj[1];
+                pgrad[i * 2] += gij * dx;
+                pgrad[i * 2 + 1] += gij * dy;
+                pgrad[j * 2] -= gij * dx;
+                pgrad[j * 2 + 1] -= gij * dy;
+            } else {
                 for h in 0..d {
                     let delta = xi[h] - xj[h];
                     pgrad[i * d + h] += gij * delta;
@@ -94,17 +116,76 @@ impl Stress {
                 }
             }
         }
+    }
+
+    fn finish(mut pval: f64, mut tw: f64, mut pgrad: Vec<f64>) -> StressEval {
         if tw <= 0.0 {
             tw = 1.0;
         }
         pval /= tw;
+        let scale = -2.0 / tw;
         for g in &mut pgrad {
-            *g *= -2.0 / tw;
+            *g *= scale;
         }
         StressEval {
             value: pval,
             grad: Array1::from(pgrad),
         }
+    }
+
+    pub(crate) fn eval_serial(&self, coords: ArrayView1<f64>, d: usize) -> StressEval {
+        let n = self.n;
+        debug_assert_eq!(coords.len(), n * d);
+        let coords = coords.as_slice().expect("packed coords contiguous");
+        let hd = self.hd.as_slice().expect("hd contiguous");
+        let fhd = self.fhd.as_slice().expect("fhd contiguous");
+        let weights = self.weights.as_ref().map(|w| w.as_slice().expect("w contiguous"));
+        let omix = 1.0 - self.imix;
+        let mut pval = 0.0;
+        let mut tw = 0.0;
+        let mut pgrad = vec![0.0; n * d];
+        for i in 0..n {
+            self.pair_kernel(i, n, d, coords, hd, fhd, weights, omix, &mut pval, &mut tw, &mut pgrad);
+        }
+        Self::finish(pval, tw, pgrad)
+    }
+
+    #[cfg(feature = "parallel")]
+    fn eval_parallel(&self, coords: ArrayView1<f64>, d: usize) -> StressEval {
+        use rayon::prelude::*;
+        let n = self.n;
+        debug_assert_eq!(coords.len(), n * d);
+        let coords = coords.as_slice().expect("packed coords contiguous");
+        let hd = self.hd.as_slice().expect("hd contiguous");
+        let fhd = self.fhd.as_slice().expect("fhd contiguous");
+        let weights = self
+            .weights
+            .as_ref()
+            .map(|w| w.as_slice().expect("w contiguous"));
+        let omix = 1.0 - self.imix;
+        let (pval, tw, pgrad) = (0..n)
+            .into_par_iter()
+            .fold(
+                || (0.0, 0.0, vec![0.0; n * d]),
+                |mut acc, i| {
+                    self.pair_kernel(
+                        i, n, d, coords, hd, fhd, weights, omix, &mut acc.0, &mut acc.1, &mut acc.2,
+                    );
+                    acc
+                },
+            )
+            .reduce(
+                || (0.0, 0.0, vec![0.0; n * d]),
+                |mut a, b| {
+                    a.0 += b.0;
+                    a.1 += b.1;
+                    for (x, y) in a.2.iter_mut().zip(b.2) {
+                        *x += y;
+                    }
+                    a
+                },
+            );
+        Self::finish(pval, tw, pgrad)
     }
 
     /// Pointwise χ for out-of-sample / grid projection of point `skip`.
@@ -220,6 +301,27 @@ mod tests {
         assert_relative_eq!(ev.value, 0.0, epsilon = 1e-14);
         for g in ev.grad.iter() {
             assert_relative_eq!(*g, 0.0, epsilon = 1e-12);
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_matches_serial() {
+        let hd = array![
+            [0.0, 1.0, 2.0],
+            [1.0, 0.0, 1.5],
+            [2.0, 1.5, 0.0]
+        ];
+        let t = Transfer::xsigmoid(1.0, 4.0, 3.0).unwrap();
+        let mut fhd = hd.clone();
+        crate::pairwise::apply_transfer(&mut fhd, &t);
+        let s = Stress::new(hd, fhd, t, 0.1, None, None);
+        let coords = array![0.0, 0.0, 0.8, 0.1, -0.2, 0.7];
+        let a = s.eval_serial(coords.view(), 2);
+        let b = s.eval(coords.view(), 2);
+        assert_relative_eq!(a.value, b.value, epsilon = 1e-14);
+        for k in 0..6 {
+            assert_relative_eq!(a.grad[k], b.grad[k], epsilon = 1e-14);
         }
     }
 

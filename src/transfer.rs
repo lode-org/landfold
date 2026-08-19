@@ -189,13 +189,28 @@ impl Transfer {
     }
 }
 
+fn pow_exp(base: f64, exp: f64) -> f64 {
+    let n = exp.round();
+    if (exp - n).abs() <= 1e-12 && n.abs() <= 32.0 {
+        if n >= 0.0 {
+            base.powi(n as i32)
+        } else if base != 0.0 {
+            1.0 / base.powi((-n) as i32)
+        } else {
+            f64::INFINITY
+        }
+    } else {
+        base.powf(exp)
+    }
+}
+
 fn xsigmoid_fdf(pars: &[f64], x: f64) -> (f64, f64) {
     if x == 0.0 {
         return (0.0, 0.0);
     }
     let sx = x * pars[0];
-    let sx = pars[1] * sx.powf(pars[2]);
-    let rf = (1.0 + sx).powf(pars[4]);
+    let sx = pars[1] * pow_exp(sx, pars[2]);
+    let rf = pow_exp(1.0 + sx, pars[4]);
     let rdf = pars[3] * sx / x * rf / (1.0 + sx);
     (1.0 - rf, rdf)
 }

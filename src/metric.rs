@@ -25,6 +25,11 @@ pub trait Metric: Send + Sync {
 
     fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64;
 
+    /// True for plain Euclidean so embed can use the Gram GEMM.
+    fn is_euclid(&self) -> bool {
+        false
+    }
+
     /// `c = a - b` in the metric's tangent sense (PBC-wrapped when needed).
     fn diff(&self, a: &[f64], b: &[f64], c: &mut [f64]) {
         for i in 0..a.len() {
@@ -37,6 +42,10 @@ pub trait Metric: Send + Sync {
 pub struct Euclid;
 
 impl Metric for Euclid {
+    fn is_euclid(&self) -> bool {
+        true
+    }
+
     fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
         let mut acc = 0.0;
         for i in 0..a.len() {

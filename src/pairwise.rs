@@ -78,14 +78,43 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
         .collect();
     let gram = points.dot(&points.t());
     let mut out = Array2::<f64>::zeros((n, n));
-    for i in 0..n {
-        for j in 0..i {
-            let v = (norms[i] + norms[j] - 2.0 * gram[(i, j)]).max(0.0).sqrt();
-            out[(i, j)] = v;
-            out[(j, i)] = v;
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        let gram_s = gram.as_slice().expect("gram contiguous");
+        let norms_s = norms.as_slice().expect("norms contiguous");
+        let rows: Vec<Vec<f64>> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let mut row = vec![0.0; i];
+                for j in 0..i {
+                    row[j] = (norms_s[i] + norms_s[j] - 2.0 * gram_s[i * n + j])
+                        .max(0.0)
+                        .sqrt();
+                }
+                row
+            })
+            .collect();
+        for i in 0..n {
+            for j in 0..i {
+                let v = rows[i][j];
+                out[(i, j)] = v;
+                out[(j, i)] = v;
+            }
         }
+        return Ok(out);
     }
-    Ok(out)
+    #[cfg(not(feature = "parallel"))]
+    {
+        for i in 0..n {
+            for j in 0..i {
+                let v = (norms[i] + norms[j] - 2.0 * gram[(i, j)]).max(0.0).sqrt();
+                out[(i, j)] = v;
+                out[(j, i)] = v;
+            }
+        }
+        Ok(out)
+    }
 }
 
 /// Apply a transfer function to a precomputed distance matrix (in place).

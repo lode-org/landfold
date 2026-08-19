@@ -6,7 +6,7 @@ use crate::cg::{minimize, CgOpts, CgReport};
 use crate::error::Result;
 use crate::mds::classical_mds;
 use crate::metric::Metric;
-use crate::pairwise::{apply_transfer, pairwise};
+use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
 use crate::search::{minimize_stochastic, StochOpts};
 use crate::stress::Stress;
 use crate::transfer::Transfer;
@@ -73,6 +73,7 @@ pub fn embed(
     let n = points.nrows();
     let hd = match precomputed_dist {
         Some(d) => d.to_owned(),
+        None if metric.is_euclid() => pairwise_euclid(points)?,
         None => pairwise(points, metric)?,
     };
     let mut fhd = hd.clone();
