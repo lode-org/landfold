@@ -30,7 +30,7 @@ fn validate_finite_points(points: ArrayView2<f64>) -> Result<()> {
     Ok(())
 }
 
-fn stable_euclid(a: &[f64], b: &[f64]) -> f64 {
+fn stable_euclid(a: impl Iterator<Item = &f64>, b: impl Iterator<Item = &f64>) -> f64 {
     let mut scale = 0.0;
     let mut sum = 0.0;
     for (&ai, &bi) in a.iter().zip(b) {
@@ -147,9 +147,9 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
                     let b = &packed[j * points.ncols()..(j + 1) * points.ncols()];
                     let distance = if gemm_valid {
                         gemm_euclid(norms_s[i], norms_s[j], gram_s[i * n + j])
-                            .unwrap_or_else(|| stable_euclid(a, b))
+                            .unwrap_or_else(|| stable_euclid(a.iter(), b.iter()))
                     } else {
-                        stable_euclid(a, b)
+                        stable_euclid(a.iter(), b.iter())
                     };
                     validate_distance(distance)?;
                     row[j] = distance;
@@ -173,11 +173,10 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
                 let a = points.row(i);
                 let b = points.row(j);
                 let v = if gemm_valid {
-                    gemm_euclid(norms[i], norms[j], gram[(i, j)]).unwrap_or_else(|| {
-                        stable_euclid(a.as_slice().unwrap(), b.as_slice().unwrap())
-                    })
+                    gemm_euclid(norms[i], norms[j], gram[(i, j)])
+                        .unwrap_or_else(|| stable_euclid(a.iter(), b.iter()))
                 } else {
-                    stable_euclid(a.as_slice().unwrap(), b.as_slice().unwrap())
+                    stable_euclid(a.iter(), b.iter())
                 };
                 validate_distance(v)?;
                 out[(i, j)] = v;
