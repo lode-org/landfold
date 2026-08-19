@@ -8,7 +8,9 @@ Parrinello, *PNAS* **2011**,
 [10.1073/pnas.1108486108](https://doi.org/10.1073/pnas.1108486108).
 Each published kernel cites its paper in rustdoc.
 
-![landfold logo](branding/logo/landfold_logo.png)
+<p align="center">
+  <img src="branding/logo/landfold-logo-light.svg" width="360" alt="landfold">
+</p>
 
 ## CLI
 
