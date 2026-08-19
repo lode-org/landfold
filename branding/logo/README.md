@@ -5,12 +5,13 @@ geometry.
 
 ## Concept
 
-- **Back sheet** — the high-D landscape, a sheared mesh.
-- **Front fold** — the 2-D map after the distances have been folded.
-- **Two wells** — the two-basin free-energy surface.
-- **Amber sigmoid** — the transfer F(x); that is the crease.
-- **Amber landmarks** — points already on the map.
-- **Pale query** — a high-D point waiting to be projected.
+- **One sheared sheet** — the landscape, same parallelogram craft as
+  the linkcell cell.
+- **Amber sigmoid** — the crease: F(x) folds high-D distances onto
+  the map.
+- **Two nested wells** — the two-basin surface.
+- **Pale query** — sits on the crease.
+- **Amber landmarks** — one in each well.
 - **Palette** — indigo / violet (`#1E1B4B`, `#312E81`, `#4F46E5`) +
   amber (`#FBBF24`).
 

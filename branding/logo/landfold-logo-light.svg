@@ -2,18 +2,16 @@
   <title id="lfLightTitle">landfold</title>
   <desc>Sigmoid-distance nonlinear embedding</desc>
   <rect x="8" y="16" width="80" height="80" rx="18" fill="#1E1B4B"/>
-  <path d="M20 36 L52 30 L60 50 L28 56 Z" fill="#312E81" stroke="#A5B4FC" stroke-width="1.7" stroke-linejoin="round"/>
-  <path d="M30 34 L36 52" stroke="#6366F1" stroke-width="1.35"/>
-  <path d="M42 32 L48 50" stroke="#6366F1" stroke-width="1.35"/>
-  <path d="M23 44 L55 38" stroke="#6366F1" stroke-width="1.35"/>
-  <path d="M22 52 L56 48 L52 72 L20 74 Z" fill="#1E1B4B" stroke="#C7D2FE" stroke-width="1.8" stroke-linejoin="round"/>
-  <ellipse cx="33" cy="60" rx="7.4" ry="5.2" fill="none" stroke="#818CF8" stroke-width="1.45"/>
-  <ellipse cx="49" cy="64" rx="7.4" ry="5.2" fill="none" stroke="#818CF8" stroke-width="1.45"/>
-  <path d="M25 50 C35 46 42 70 58 58" fill="none" stroke="#FBBF24" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="33" cy="60" r="2.5" fill="#FBBF24"/>
-  <circle cx="49" cy="64" r="2.5" fill="#FBBF24"/>
-  <circle cx="42" cy="56" r="2.5" fill="#FBBF24"/>
-  <circle cx="40" cy="44" r="3.1" fill="#EEF2FF"/>
+  <rect x="15" y="23" width="66" height="66" rx="14" fill="none" stroke="#312E81" stroke-width="1.4"/>
+  <path d="M24 44 L58 34 L66 66 L32 76 Z" fill="none" stroke="#A5B4FC" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M28 52 C36 42 40 58 46 56 C52 54 56 70 66 64" fill="none" stroke="#FBBF24" stroke-width="1.9" stroke-linecap="round"/>
+  <ellipse cx="36" cy="64" rx="7.6" ry="5.0" fill="none" stroke="#C7D2FE" stroke-width="1.35"/>
+  <ellipse cx="36" cy="64" rx="4.2" ry="2.7" fill="none" stroke="#C7D2FE" stroke-width="1.2"/>
+  <ellipse cx="56" cy="48" rx="7.6" ry="5.0" fill="none" stroke="#C7D2FE" stroke-width="1.35"/>
+  <ellipse cx="56" cy="48" rx="4.2" ry="2.7" fill="none" stroke="#C7D2FE" stroke-width="1.2"/>
+  <circle cx="36" cy="64" r="2.4" fill="#FBBF24"/>
+  <circle cx="56" cy="48" r="2.4" fill="#FBBF24"/>
+  <circle cx="46" cy="56" r="2.9" fill="#EEF2FF"/>
   <text x="108" y="58" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
         font-size="34" font-weight="750" letter-spacing="-1.1" fill="#1E1B4B">landfold</text>
   <text x="108" y="82" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
