@@ -1,0 +1,34 @@
+#+TITLE: LJ38 teaching example
+#+FILETAGS: :landfold:example:
+#+DATE: <2026-08-19 Wed>
+#+DESCRIPTION: Ceriotti COSMO course LJ38 map, CC-BY-SA 4.0
+#+STATUS: Active
+
+* Source
+
+Course: Statistical methods in atomistic computer simulations
+(Ceriotti, EPFL COSMO).
+https://www.epfl.ch/labs/cosmo/index-html/teaching/page-110059-en-html/
+
+Materials: =sampling_atomistic_simulations-exercises.zip= (2019-11).
+License: Creative Commons Attribution-ShareAlike 4.0.
+
+=ts.all= is the 10-D coordination-count trajectory from exercise 5
+(counts n4..n13, columns 3-12). =lj38.xyz= is the fcc truncated
+octahedron start. =lj38.17.xyz= / =lj38.19.xyz= are metadynamics
+snapshots. =lj38_fcc.xyz= / =lj38_ico.xyz= are the two competing
+minima.
+
+Exercise 5 parameters (verbatim):
+
+- high-D sigmoid =5,8,1=
+- low-D sigmoid =5,2,2=
+- =kT* = 0.168=
+- FES grid about =[-15,15]^2=
+
+* Run
+
+#+begin_src sh
+# remote builder, release landfold on PATH
+./run.sh
+#+end_src
