@@ -7,6 +7,7 @@
 use eindir_core::{Bounds, DifferentiableObjective, Gradient, Objective};
 use ndarray::{Array1, ArrayView1};
 
+use crate::error::{LandfoldError, Result};
 use crate::stress::{Stress, StressEval};
 
 /// Wide box used when χ is treated as unconstrained.
@@ -23,16 +24,28 @@ impl<'a> ChiObjective<'a> {
     /// Unconstrained χ on packed coordinates of length `stress.n * d`.
     pub fn new(stress: &'a Stress, d: usize) -> Self {
         Self::with_box(stress, d, -UNBOUNDED, UNBOUNDED)
+            .expect("unbounded ChiObjective bounds are valid")
     }
 
     /// Axis-aligned box on every packed coordinate (HiGHS-style clip).
-    pub fn with_box(stress: &'a Stress, d: usize, lo: f64, hi: f64) -> Self {
+    pub fn with_box(stress: &'a Stress, d: usize, lo: f64, hi: f64) -> Result<Self> {
+        if d == 0 {
+            return Err(LandfoldError::LowDim {
+                low: 0,
+                high: stress.n,
+            });
+        }
+        if !lo.is_finite() || !hi.is_finite() || lo > hi {
+            return Err(LandfoldError::Msg(
+                "objective bounds must be finite with lo <= hi".into(),
+            ));
+        }
         let dim = stress.n * d;
-        Self {
+        Ok(Self {
             stress,
             d,
             bounds: Bounds::new(Array1::from_elem(dim, lo), Array1::from_elem(dim, hi), 0.0),
-        }
+        })
     }
 
     /// Embedding dimension baked into this objective.
@@ -108,6 +121,15 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_bounds_without_panicking() {
+        let (s, _) = toy();
+        assert!(ChiObjective::with_box(&s, 0, -1.0, 1.0).is_err());
+        assert!(ChiObjective::with_box(&s, 2, 1.0, -1.0).is_err());
+        assert!(ChiObjective::with_box(&s, 2, f64::NAN, 1.0).is_err());
+        assert!(ChiObjective::with_box(&s, 2, -1.0, f64::INFINITY).is_err());
+    }
+
+    #[test]
     fn lbfgs_uses_the_same_chi_objective() {
         let (s, coords) = toy();
         let obj = ChiObjective::new(&s, 2);
@@ -139,7 +161,7 @@ mod tests {
     #[test]
     fn box_bounds_clip_domain() {
         let (s, _) = toy();
-        let obj = ChiObjective::with_box(&s, 2, -0.3, 0.3);
+        let obj = ChiObjective::with_box(&s, 2, -0.3, 0.3).unwrap();
         let x = array![0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         assert!(obj.bounds().contains(x.view()));
         let out = array![1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
