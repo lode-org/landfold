@@ -893,4 +893,21 @@ mod tests {
         assert!(fes.connected_body(-1.0).is_err());
         assert!(fes.connected_body(f64::NAN).is_err());
     }
+
+    #[test]
+    fn rejects_mutated_free_energy_state() {
+        let h = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+
+        let mut malformed = FreeEnergy::from_histogram(&h, 1.0).unwrap();
+        malformed.f = Array2::from_elem((1, 1), Some(0.0));
+        assert!(malformed.clip(1.0).is_err());
+        assert!(malformed.connected_body(0.5).is_err());
+
+        let mut nonfinite = FreeEnergy::from_histogram(&h, 1.0).unwrap();
+        nonfinite.rho[(0, 0)] = f64::NAN;
+        let mut csv = Vec::new();
+        assert!(nonfinite.write_csv(&mut csv).is_err());
+        let mut svg = Vec::new();
+        assert!(nonfinite.write_svg_scaled(&mut svg, 100, 100, 2.0).is_err());
+    }
 }
