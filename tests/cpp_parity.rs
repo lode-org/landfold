@@ -1,7 +1,7 @@
-//! Compare landfold kernels to goldens dumped from sketchmap (`interpol=false`).
+//! Compare landfold kernels to goldens dumped from the C++ oracle (`interpol=false`).
 //!
 //! Goldens are produced by `scripts/gen_cpp_goldens.sh` on the remote builder
-//! against HaoZeke/sketchmap addLocks. Missing file is a hard fail: no
+//! against the HaoZeke addLocks tree. Missing file is a hard fail: no
 //! paper-only stand-in. MDS coordinates are not compared; `NLDRProjection.p`
 //! is private, so the oracle dumps i<j Euclidean distances of `p`.
 
