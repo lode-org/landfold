@@ -158,6 +158,8 @@ fields; Chemparseplot’s flattened nine-element cell representation is normaliz
 to that same 3x3 field. Per-image gradients are retained as
 `FrameBatch::gradients` with shape `(n_frames, 3 * n_atoms)`.
 `/metadata/length_unit` is retained as `FrameBatch::length_unit` when present;
+string metadata accepts variable-length Unicode/ASCII and fixed-width ASCII
+datasets.
 per-image path observables are available through
 `FrameBatch::frame_metadata` when present:
 

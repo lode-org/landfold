@@ -7,13 +7,14 @@
 
 use std::{collections::BTreeMap, path::Path};
 
-use hdf5::types::{FixedAscii, TypeDescriptor, VarLenAscii, VarLenUnicode};
+use hdf5::types::{FixedAscii, VarLenAscii, VarLenUnicode};
 use ndarray::Array2;
 
 use crate::trajectory::FrameBatch;
 use crate::{LandfoldError, Result};
 
 const IMAGES_DATASET: &str = "/path/images";
+const MAX_FIXED_ASCII_WIDTH: usize = 1024;
 
 /// Read chemparseplot-compatible flattened images into a validated batch.
 pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
@@ -230,47 +231,15 @@ fn read_ascii_strings(dataset: &hdf5::Dataset) -> Result<Vec<String>> {
             .map(|value| value.as_str().to_owned())
             .collect());
     }
-    if let Ok(values) = dataset.read_raw::<FixedAscii<1024>>() {
+    if let Ok(values) = dataset.read_raw::<FixedAscii<MAX_FIXED_ASCII_WIDTH>>() {
         return Ok(values
             .into_iter()
             .map(|value| value.as_str().to_owned())
             .collect());
     }
-    let width = match dataset
-        .dtype()
-        .map_err(|error| LandfoldError::Parse(error.to_string()))?
-        .to_descriptor()
-        .map_err(|error| LandfoldError::Parse(error.to_string()))?
-    {
-        TypeDescriptor::FixedAscii(width) if width > 0 => width,
-        _ => {
-            return Err(LandfoldError::Parse(
-                "HDF5 string dataset must be ASCII or Unicode".into(),
-            ));
-        }
-    };
-    let bytes = dataset
-        .read_raw::<u8>()
-        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
-    let expected_bytes = dataset
-        .size()
-        .checked_mul(width)
-        .ok_or(LandfoldError::Shape("HDF5 fixed ASCII string data"))?;
-    if bytes.len() != expected_bytes {
-        return Err(LandfoldError::Shape("HDF5 fixed ASCII string data"));
-    }
-    bytes
-        .chunks_exact(width)
-        .map(|chunk| {
-            let end = chunk
-                .iter()
-                .position(|&byte| byte == 0)
-                .unwrap_or(chunk.len());
-            std::str::from_utf8(&chunk[..end])
-                .map(str::to_owned)
-                .map_err(|error| LandfoldError::Parse(error.to_string()))
-        })
-        .collect()
+    Err(LandfoldError::Parse(
+        "HDF5 string dataset must be variable-length or fixed-width ASCII/Unicode".into(),
+    ))
 }
 
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
