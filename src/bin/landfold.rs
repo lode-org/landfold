@@ -136,6 +136,10 @@ enum Cmd {
         dot: bool,
         #[arg(long)]
         similarity: bool,
+        #[arg(long = "stretch")]
+        stretch: Option<PathBuf>,
+        #[arg(long = "alpha", default_value_t = 3.0)]
+        alpha: f64,
         #[arg(long = "fun-hd", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_hd: String,
         #[arg(long = "fun-ld", default_value = "identity", help = FUN_SPEC_HELP)]
@@ -477,6 +481,8 @@ fn main() -> landfold::Result<()> {
             weighted,
             dot,
             similarity,
+            stretch,
+            alpha,
             fun_hd,
             fun_ld,
             imix,
@@ -498,7 +504,21 @@ fn main() -> landfold::Result<()> {
             )?;
             let t_hd = Transfer::from_cli(&fun_hd)?;
             let t_ld = Transfer::from_cli(&fun_ld)?;
-            let metric: Box<dyn Metric> = if dot {
+            let metric: Box<dyn Metric> = if let Some(path) = stretch {
+                let refs = read_points(
+                    std::io::BufReader::new(std::fs::File::open(path)?),
+                    high,
+                    false,
+                )?;
+                if refs.points.nrows() != 2 {
+                    return Err(landfold::LandfoldError::Parse(
+                        "--stretch needs exactly two reference rows".into(),
+                    ));
+                }
+                let a: Vec<f64> = refs.points.row(0).iter().copied().collect();
+                let b: Vec<f64> = refs.points.row(1).iter().copied().collect();
+                Box::new(Stretch::from_refs(&a, &b, alpha)?)
+            } else if dot {
                 Box::new(Dot)
             } else if sphere != 0.0 {
                 Box::new(Sphere::new(vec![sphere; high])?)
