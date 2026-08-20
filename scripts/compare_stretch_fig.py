@@ -21,19 +21,20 @@ spec.loader.exec_module(cf)
 
 def main() -> None:
     base = np.loadtxt("/tmp/landfold-cmp-base.proj")
-    stre = np.loadtxt("/tmp/landfold-cmp")
+    stre = np.loadtxt("/tmp/ts_a8.proj")
     gx0, gy0, f0 = cf.kde_fes(base)
     gx1, gy1, f1 = cf.kde_fes(stre)
+    refs = np.loadtxt("/tmp/refs_a8.ld")
     tscv = cf.load_ts_cv(EX / "ts.all")
-    fcc = cf.match_tip(stre, tscv, cf.cn_vector(EX / "lj38_fcc.xyz"))
-    ico = cf.match_tip(stre, tscv, cf.cn_vector(EX / "lj38_ico.xyz"))
     fcc0 = cf.match_tip(base, tscv, cf.cn_vector(EX / "lj38_fcc.xyz"))
     ico0 = cf.match_tip(base, tscv, cf.cn_vector(EX / "lj38_ico.xyz"))
+    fcc = refs[0]
+    ico = refs[1]
 
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.8), dpi=170, facecolor="white")
     for ax, gx, gy, fes, title, fa, ia in (
         (axes[0], gx0, gy0, f0, "Ceriotti $\\chi$", fcc0, ico0),
-        (axes[1], gx1, gy1, f1, r"stretch $\alpha=4$ along fcc--ico", fcc, ico),
+        (axes[1], gx1, gy1, f1, r"stretch $\alpha=8$ along fcc--ico", fcc, ico),
     ):
         mesh = ax.contourf(
             gx, gy, fes, levels=np.linspace(0, 2, 21), cmap=cf.CMAP, extend="max"
@@ -43,6 +44,10 @@ def main() -> None:
         )
         ax.scatter(*fa, s=80, marker="*", c="#f4d35e", edgecolors="k", zorder=5, label="fcc")
         ax.scatter(*ia, s=80, marker="*", c="#e63946", edgecolors="k", zorder=5, label="ico")
+        xs = [gx[0], gx[-1], fa[0], ia[0]]
+        ys = [gy[0], gy[-1], fa[1], ia[1]]
+        ax.set_xlim(min(xs) - 1.0, max(xs) + 1.0)
+        ax.set_ylim(min(ys) - 1.0, max(ys) + 1.0)
         ax.set_title(title)
         ax.set_xlabel(r"$s_1$")
         ax.set_ylabel(r"$s_2$")
