@@ -217,14 +217,14 @@ mod tests {
             .write_scalar(&VarLenUnicode::from_str("angstrom").expect("valid length unit"))
             .expect("write length unit");
         metadata_group
-            .new_dataset::<i64>()
+            .new_dataset::<u64>()
             .shape(2)
             .create("atom_ids")
             .expect("create atom IDs")
             .write_raw(&[7_u64, 8])
             .expect("write atom IDs");
         metadata_group
-            .new_dataset::<u64>()
+            .new_dataset::<i64>()
             .shape(2)
             .create("atomic_numbers")
             .expect("create atomic numbers")
