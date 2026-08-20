@@ -384,6 +384,7 @@ fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fes_xy, m)?)?;
     m.add_function(wrap_pyfunction!(fes_xy_result, m)?)?;
     m.add("version", crate::VERSION)?;
+    m.add("eindir_revision", crate::EINDIR_REVISION)?;
     Ok(())
 }
 

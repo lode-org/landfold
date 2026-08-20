@@ -71,3 +71,6 @@ pub use transfer::{Transfer, TransferMode};
 mod python;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Exact `eindir` revision discovered at build time, or `unknown` when the
+/// dependency source is not a Git checkout and no override is provided.
+pub const EINDIR_REVISION: &str = env!("LANDFOLD_EINDIR_REVISION");

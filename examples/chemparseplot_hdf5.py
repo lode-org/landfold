@@ -37,6 +37,21 @@ def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
     frame_ids = list(range(images.shape[0]))
     atom_ids = list(range(images.shape[1] // 3))
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    provenance = {
+        "schema": "landfold.provenance.v1",
+        "run_id": f"chemparseplot:{digest[:16]}",
+        "input_digest": f"sha256:{digest}",
+        "engine_id": "chemparseplot",
+        "protocol_family": "chemparseplot.trajectory",
+        "protocol_major": 1,
+        "protocol_minor": 0,
+        "abi_layout_revision": 1,
+        "dlpack_major": 1,
+        "dlpack_minor": 0,
+    }
+    eindir_revision = getattr(landfold, "eindir_revision", None)
+    if isinstance(eindir_revision, str) and len(eindir_revision) == 40:
+        provenance["eindir_revision"] = eindir_revision
     metadata = {
         "source_format": "ChemGP HDF5 NEB",
         "source_path": str(path),
@@ -46,18 +61,7 @@ def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
         "length_unit": source_metadata.get("length_unit"),
         "n_atoms": images.shape[1] // 3,
         "source_metadata": source_metadata,
-        "provenance": {
-            "schema": "landfold.provenance.v1",
-            "run_id": f"chemparseplot:{digest[:16]}",
-            "input_digest": f"sha256:{digest}",
-            "engine_id": "chemparseplot",
-            "protocol_family": "chemparseplot.trajectory",
-            "protocol_major": 1,
-            "protocol_minor": 0,
-            "abi_layout_revision": 1,
-            "dlpack_major": 1,
-            "dlpack_minor": 0,
-        },
+        "provenance": provenance,
     }
     return landfold.embed_euclid_result(
         images,

@@ -46,3 +46,4 @@ def test_chemgp_hdf5_path_preserves_shape_and_provenance(tmp_path: Path) -> None
     assert metadata["source_metadata"]["atomic_numbers"] == [1, 8]
     assert metadata["provenance"]["schema"] == "landfold.provenance.v1"
     assert metadata["provenance"]["input_digest"].startswith("sha256:")
+    assert len(metadata["provenance"]["eindir_revision"]) == 40

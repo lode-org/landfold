@@ -73,6 +73,9 @@ cargo tree -e features --features python
 ```
 
 `landfold --help` records the pin. The CLI itself does not link pyo3.
+Python builds expose `landfold.eindir_revision`, discovered from the sibling
+Git checkout or overridden with `LANDFOLD_EINDIR_REVISION`; the HDF5 bridge
+copies it into provenance when the value is an exact commit revision.
 
 ## readcon and chemparseplot
 
