@@ -23,7 +23,8 @@ pub struct Histogram1d {
 impl Histogram1d {
     fn validate_state(&self) -> Result<()> {
         let n = self.counts.len();
-        if n == 0 || self.edges.len() != n + 1 {
+        let edge_len = n.checked_add(1);
+        if n == 0 || edge_len != Some(self.edges.len()) {
             return Err(LandfoldError::Shape("invalid 1d histogram dimensions"));
         }
         if self
@@ -253,7 +254,13 @@ impl Histogram2d {
     fn validate_state(&self) -> Result<()> {
         let nx = self.counts.ncols();
         let ny = self.counts.nrows();
-        if nx == 0 || ny == 0 || self.x_edges.len() != nx + 1 || self.y_edges.len() != ny + 1 {
+        let x_edge_len = nx.checked_add(1);
+        let y_edge_len = ny.checked_add(1);
+        if nx == 0
+            || ny == 0
+            || x_edge_len != Some(self.x_edges.len())
+            || y_edge_len != Some(self.y_edges.len())
+        {
             return Err(LandfoldError::Shape("2d histogram state dimensions"));
         }
         if !self.samples.is_finite() || self.samples < 0.0 {
@@ -292,7 +299,7 @@ impl Histogram2d {
                 "histogram blur sigma must be finite and nonnegative".into(),
             ));
         }
-        Ok(blur_separable(&self.counts, sigma_bins))
+        blur_separable(&self.counts, sigma_bins)
     }
 }
 
@@ -438,7 +445,10 @@ impl FreeEnergy {
         }
         let ny = self.f.nrows();
         let nx = self.f.ncols();
-        let mut mask = vec![false; ny * nx];
+        let cell_count = ny
+            .checked_mul(nx)
+            .ok_or(LandfoldError::Msg("FES grid dimension overflowed".into()))?;
+        let mut mask = vec![false; cell_count];
         let mut rmax = 0.0;
         for r in self.rho.iter() {
             if *r > rmax {
@@ -446,6 +456,11 @@ impl FreeEnergy {
             }
         }
         let thresh = floor * rmax;
+        if !thresh.is_finite() {
+            return Err(LandfoldError::Msg(
+                "FES connected-body threshold overflowed".into(),
+            ));
+        }
         for iy in 0..ny {
             for ix in 0..nx {
                 mask[iy * nx + ix] = self.rho[(iy, ix)] > thresh;
@@ -655,10 +670,22 @@ fn fes_color(t: f64) -> (u8, u8, u8) {
     (220, 235, 250)
 }
 
-fn gauss1d(sigma: f64) -> Vec<f64> {
-    let radius = ((3.0 * sigma).ceil() as usize).max(1);
+fn gauss1d(sigma: f64, extent: usize) -> Result<Vec<f64>> {
+    let raw_radius = (3.0 * sigma).ceil();
+    if !raw_radius.is_finite() {
+        return Err(LandfoldError::Msg(
+            "histogram blur kernel dimension overflowed".into(),
+        ));
+    }
+    let radius = (raw_radius as usize).min(extent.saturating_sub(1).max(1));
+    let kernel_len = radius
+        .checked_mul(2)
+        .and_then(|length| length.checked_add(1))
+        .ok_or(LandfoldError::Msg(
+            "histogram blur kernel dimension overflowed".into(),
+        ))?;
     let s2 = 2.0 * sigma * sigma.max(1e-12);
-    let mut k = Vec::with_capacity(2 * radius + 1);
+    let mut k = Vec::with_capacity(kernel_len);
     let mut sum = 0.0;
     for i in 0..=2 * radius {
         let x = i as f64 - radius as f64;
@@ -671,14 +698,14 @@ fn gauss1d(sigma: f64) -> Vec<f64> {
             *v /= sum;
         }
     }
-    k
+    Ok(k)
 }
 
-fn blur_separable(z: &Array2<f64>, sigma: f64) -> Array2<f64> {
+fn blur_separable(z: &Array2<f64>, sigma: f64) -> Result<Array2<f64>> {
     if !sigma.is_finite() || sigma <= 0.0 {
-        return z.clone();
+        return Ok(z.clone());
     }
-    let k = gauss1d(sigma);
+    let k = gauss1d(sigma, z.nrows().max(z.ncols()))?;
     let radius = k.len() / 2;
     let ny = z.nrows();
     let nx = z.ncols();
@@ -708,7 +735,7 @@ fn blur_separable(z: &Array2<f64>, sigma: f64) -> Array2<f64> {
             out[(iy, ix)] = acc;
         }
     }
-    out
+    Ok(out)
 }
 
 fn fill_holes(mask: &mut [bool], ny: usize, nx: usize) {
@@ -912,6 +939,7 @@ mod tests {
         assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, -1.0).is_err());
         assert!(FreeEnergy::from_histogram_blurred(&h, 1.0, f64::NAN).is_err());
         assert!(h.blur(-1.0).is_err());
+        assert!(h.blur(f64::MAX).is_err());
     }
 
     #[test]
