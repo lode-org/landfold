@@ -117,10 +117,10 @@ pub fn write_points<W: Write>(
             if j > 0 {
                 write!(w, " ")?;
             }
-            write!(w, "{:.12}", pts[(i, j)])?;
+            write!(w, "{}", pts[(i, j)])?;
         }
         if let Some(ww) = weights {
-            write!(w, " {:.12}", ww[i])?;
+            write!(w, " {}", ww[i])?;
         }
         writeln!(w)?;
     }
@@ -130,6 +130,7 @@ pub fn write_points<W: Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ndarray::array;
     use std::io::Cursor;
 
     #[test]
@@ -153,5 +154,16 @@ mod tests {
         let mut output = Vec::new();
         assert!(write_points(&mut output, &Array2::zeros((0, 2)), None).is_err());
         assert!(write_points(&mut output, &Array2::zeros((1, 0)), None).is_err());
+    }
+
+    #[test]
+    fn point_tables_round_trip_f64_values() {
+        let points = array![[0.123_456_789_012_345_67, -9.876_543_210_987_654e123]];
+        let weights = Array1::from_vec(vec![0.333_333_333_333_333_3]);
+        let mut output = Vec::new();
+        write_points(&mut output, &points, Some(&weights)).unwrap();
+        let parsed = read_points(Cursor::new(output), 2, true).unwrap();
+        assert_eq!(parsed.points, points);
+        assert_eq!(parsed.weights.unwrap(), weights);
     }
 }
