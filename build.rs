@@ -7,10 +7,13 @@ fn valid_revision(value: &str) -> bool {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=LANDFOLD_EINDIR_REVISION");
-    let revision = std::env::var("LANDFOLD_EINDIR_REVISION")
-        .ok()
-        .filter(|value| valid_revision(value))
-        .or_else(|| {
+    println!("cargo:rerun-if-changed=../eindir/.git/HEAD");
+    let revision = match std::env::var("LANDFOLD_EINDIR_REVISION") {
+        Ok(value) if valid_revision(&value) => Some(value),
+        Ok(_) => panic!("LANDFOLD_EINDIR_REVISION must be a 40-digit hexadecimal commit"),
+        Err(_) => None,
+    }
+    .or_else(|| {
             let sibling = Path::new(env!("CARGO_MANIFEST_DIR")).join("../eindir");
             sibling.exists().then(|| {
                 Command::new("git")
