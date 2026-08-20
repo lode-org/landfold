@@ -102,7 +102,7 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
         }
         col_mean[j] = s * inv_n;
     }
-    let mut b = vec![0.0; n * n];
+    let mut b = vec![0.0; matrix_len];
     for i in 0..n {
         for j in 0..n {
             let value = -0.5 * (d2[i * n + j] - row_mean[i] - col_mean[j] + grand);
@@ -308,6 +308,16 @@ fn spherical_from_dist(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f
     if n < 2 {
         return Err(LandfoldError::Empty);
     }
+    if dist.ncols() != n {
+        return Err(LandfoldError::Shape(
+            "spherical MDS distance matrix must be square",
+        ));
+    }
+    if dist.iter().any(|&value| !value.is_finite() || value < 0.0) {
+        return Err(LandfoldError::Msg(
+            "spherical MDS distance matrix must be finite and nonnegative".into(),
+        ));
+    }
     if lowdim == 0 || lowdim >= n {
         return Err(LandfoldError::LowDim {
             low: lowdim,
@@ -326,28 +336,40 @@ fn spherical_from_dist(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f
     sr /= std::f64::consts::PI;
     let sr2 = sr * sr;
     if !sr2.is_finite() {
-        return Err(LandfoldError::Msg(
-            "spherical MDS scale overflowed".into(),
-        ));
+        return Err(LandfoldError::Msg("spherical MDS scale overflowed".into()));
     }
-    let mut m = vec![0.0; n * n];
+    let matrix_len = n.checked_mul(n).ok_or(LandfoldError::Msg(
+        "spherical MDS matrix dimension overflowed".into(),
+    ))?;
+    let mut m = vec![0.0; matrix_len];
     for i in 0..n {
         for j in 0..n {
             let value = (dist[(i, j)] / sr).cos() * sr2;
             if !value.is_finite() {
-                return Err(LandfoldError::Msg(
-                    "spherical MDS matrix overflowed".into(),
-                ));
+                return Err(LandfoldError::Msg("spherical MDS matrix overflowed".into()));
             }
             m[i * n + j] = value;
         }
     }
     let dm = DMatrix::<f64>::from_row_slice(n, n, &m);
     let eigen = SymmetricEigen::new(dm);
+    if eigen.eigenvalues.iter().any(|value| !value.is_finite())
+        || eigen.eigenvectors.iter().any(|value| !value.is_finite())
+    {
+        return Err(LandfoldError::Msg(
+            "spherical MDS eigensystem is not finite".into(),
+        ));
+    }
     let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (eigen.eigenvalues[k], k)).collect();
     pairs.sort_by(|a, c| c.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     // Hyperspherical angles from the leading (lowdim+1) components.
-    let mut q = vec![0.0; n * (lowdim + 1)];
+    let dim = lowdim.checked_add(1).ok_or(LandfoldError::Msg(
+        "spherical MDS coordinate dimension overflowed".into(),
+    ))?;
+    let q_len = n.checked_mul(dim).ok_or(LandfoldError::Msg(
+        "spherical MDS coordinate dimension overflowed".into(),
+    ))?;
+    let mut q = vec![0.0; q_len];
     let mut kept = Array1::<f64>::zeros(lowdim);
     for h in 0..=lowdim {
         let (lam, src) = pairs[h];
@@ -357,22 +379,49 @@ fn spherical_from_dist(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f
         }
         let scale = lam.sqrt();
         for i in 0..n {
-            q[i * (lowdim + 1) + h] = eigen.eigenvectors[(i, src)] * scale;
+            let value = eigen.eigenvectors[(i, src)] * scale;
+            if !value.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "spherical MDS coordinate reconstruction overflowed".into(),
+                ));
+            }
+            q[i * dim + h] = value;
         }
     }
     let mut coords = Array2::<f64>::zeros((n, lowdim));
-    let dim = lowdim + 1;
     for i in 0..n {
         let mut tx = 0.0;
         let q0 = q[i * dim];
         let q1 = q[i * dim + 1];
-        coords[(i, 0)] = q1.atan2(q0) / std::f64::consts::PI;
+        let first = q1.atan2(q0) / std::f64::consts::PI;
+        if !first.is_finite() {
+            return Err(LandfoldError::Msg(
+                "spherical MDS angle reconstruction overflowed".into(),
+            ));
+        }
+        coords[(i, 0)] = first;
         tx += q1 * q1;
+        if !tx.is_finite() {
+            return Err(LandfoldError::Msg(
+                "spherical MDS angle accumulation overflowed".into(),
+            ));
+        }
         for h in 1..lowdim {
             let qh = q[i * dim + h];
             tx += qh * qh;
             let qn = q[i * dim + h + 1];
-            coords[(i, h)] = tx.sqrt().atan2(qn) / std::f64::consts::PI;
+            if !tx.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "spherical MDS angle accumulation overflowed".into(),
+                ));
+            }
+            let angle = tx.sqrt().atan2(qn) / std::f64::consts::PI;
+            if !angle.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "spherical MDS angle reconstruction overflowed".into(),
+                ));
+            }
+            coords[(i, h)] = angle;
         }
     }
     Ok((
@@ -401,6 +450,12 @@ fn toroidal_mds(
     // Sequential 1-D spherical MDS of the *current residual* distances.
     let mut dist = pairwise(points, metric)?;
     let n = dist.nrows();
+    if lowdim == 0 || lowdim >= n {
+        return Err(LandfoldError::LowDim {
+            low: lowdim,
+            high: n.saturating_sub(1),
+        });
+    }
     let mut coords = Array2::<f64>::zeros((n, lowdim));
     let mut evals = Array1::<f64>::zeros(lowdim);
     for th in 0..lowdim {
@@ -524,6 +579,10 @@ mod tests {
         assert!(coords_from_eigen(2, 1, &[1.0, 1.0], &DMatrix::identity(1, 1)).is_err());
         let dist = array![[0.0, 1.0], [1.0, 0.0]];
         assert!(randomized_mds(dist.view(), 1, usize::MAX, 0).is_err());
+        assert!(spherical_from_dist(array![[0.0, f64::NAN], [1.0, 0.0]].view(), 1).is_err());
+        assert!(spherical_from_dist(array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.0]].view(), 1).is_err());
+        let points = array![[0.0], [1.0]];
+        assert!(toroidal_mds(points.view(), &Euclid, 0).is_err());
     }
 
     #[test]
