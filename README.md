@@ -111,6 +111,7 @@ headers, units, atom IDs, and optional sections:
 ```
 cargo add landfold --features readcon
 cargo add landfold --features readcon-chemfiles
+cargo add landfold --features hdf5
 ```
 
 `readcon-chemfiles` adds foreign trajectory ingress through readcon's
