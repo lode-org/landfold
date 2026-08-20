@@ -46,7 +46,7 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     if let Some(numbers) = &batch.atomic_numbers {
         if numbers.iter().any(|&number| number == 0 || number > 118) {
             return Err(LandfoldError::Msg(
-                "HDF5 atomic numbers must be in the range 1..=118",
+                "HDF5 atomic numbers must be in the range 1..=118".into(),
             ));
         }
     }
