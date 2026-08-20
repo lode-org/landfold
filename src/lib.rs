@@ -54,13 +54,13 @@ pub use hist::{
     fes_from_points, joint_pairwise_hist,
 };
 pub use io::{PointSet, read_points, read_points_path, write_plumed, write_points};
-pub use iter::{Embedding, IterOpts, Solver, embed, embed_points};
+pub use iter::{Embedding, IterOpts, Solver, embed, embed_points, embed_sigma_schedule};
 pub use landmark::{
     Landmarks, LandmarkMode, farthest_point, farthest_point_ifirst, select_landmarks,
     voronoi_weights,
 };
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
-pub use metric::{Dot, Euclid, L1, Metric, Periodic, Sphere};
+pub use metric::{Dot, Euclid, L1, Metric, Periodic, Sphere, Stretch};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,

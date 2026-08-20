@@ -11,9 +11,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, FreeEnergy, Histogram2d, IterOpts, L1,
+    AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, FreeEnergy, Histogram2d, IterOpts, L1, Stretch,
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
-    Transfer, coordination_histogram, embed, joint_pairwise_hist, mds_from_points, pairwise,
+    Transfer, coordination_histogram, embed, embed_sigma_schedule, joint_pairwise_hist,
+    mds_from_points, pairwise,
     pairwise_euclid, project_many_report, read_points, select_landmarks, suggest_scale,
     write_plumed, write_points,
 };
@@ -75,6 +76,20 @@ enum Cmd {
         /// PLUMED landmark dump (`dimred -plumed`)
         #[arg(long)]
         plumed: bool,
+        /// Pair weights F(D)(1-F(D)): only mid-scale pairs drive χ
+        #[arg(long)]
+        midweight: bool,
+        /// Classical MDS of F(D) rather than raw D
+        #[arg(long = "init-f")]
+        init_transformed: bool,
+        /// Decreasing HD/LD σ, warm-started (last value is the published scale)
+        #[arg(long = "continue-sigma")]
+        continue_sigma: Option<String>,
+        /// Stretch HD along `ref_a - ref_b` (two D-vectors, one per line)
+        #[arg(long = "stretch")]
+        stretch: Option<PathBuf>,
+        #[arg(long = "alpha", default_value_t = 3.0)]
+        alpha: f64,
         #[arg(long = "init")]
         init: Option<PathBuf>,
         /// Random pair mini-batches instead of full-pair CG
@@ -289,6 +304,11 @@ fn main() -> landfold::Result<()> {
             gopt,
             verbose,
             plumed,
+            midweight,
+            init_transformed,
+            continue_sigma,
+            stretch,
+            alpha,
             init,
             stoch,
             batch,
@@ -366,6 +386,8 @@ fn main() -> landfold::Result<()> {
             opts.cg.maxiter = steps;
             opts.preopt = preopt;
             opts.gopt = gopt;
+            opts.midweight = midweight;
+            opts.init_transformed = init_transformed;
             if let Some(spec) = grid {
                 opts.global = Some(ProjOpts::from_cli(&spec)?);
             }
@@ -378,7 +400,21 @@ fn main() -> landfold::Result<()> {
             } else {
                 None
             };
-            let metric: Box<dyn Metric> = if l1 {
+            let metric: Box<dyn Metric> = if let Some(path) = stretch {
+                let refs = read_points(
+                    std::io::BufReader::new(std::fs::File::open(path)?),
+                    high,
+                    false,
+                )?;
+                if refs.points.nrows() != 2 {
+                    return Err(landfold::LandfoldError::Parse(
+                        "--stretch needs exactly two reference rows".into(),
+                    ));
+                }
+                let a: Vec<f64> = refs.points.row(0).iter().copied().collect();
+                let b: Vec<f64> = refs.points.row(1).iter().copied().collect();
+                Box::new(Stretch::from_refs(&a, &b, alpha)?)
+            } else if l1 {
                 Box::new(L1)
             } else if dot {
                 Box::new(landfold::Dot)
@@ -394,14 +430,31 @@ fn main() -> landfold::Result<()> {
             } else {
                 None
             };
-            let (emb, _) = embed(
-                set.points.view(),
-                metric.as_ref(),
-                &opts,
-                init.as_ref().map(|p| p.points.view()),
-                set.weights.as_ref().map(|w| w.view()),
-                pre,
-            )?;
+            let (emb, _) = if let Some(spec) = continue_sigma {
+                let sigmas: Vec<f64> = spec
+                    .split(',')
+                    .map(|s| s.trim().parse::<f64>())
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(|e| landfold::LandfoldError::Parse(e.to_string()))?;
+                embed_sigma_schedule(
+                    set.points.view(),
+                    metric.as_ref(),
+                    &opts,
+                    &sigmas,
+                    init.as_ref().map(|p| p.points.view()),
+                    set.weights.as_ref().map(|w| w.view()),
+                    pre,
+                )?
+            } else {
+                embed(
+                    set.points.view(),
+                    metric.as_ref(),
+                    &opts,
+                    init.as_ref().map(|p| p.points.view()),
+                    set.weights.as_ref().map(|w| w.view()),
+                    pre,
+                )?
+            };
             let mut out = io::stdout().lock();
             if verbose {
                 writeln!(out, " # Error in fitting LD points: {}", emb.stress)?;

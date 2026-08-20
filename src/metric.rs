@@ -111,6 +111,75 @@ impl Metric for Euclid {
     }
 }
 
+/// Euclidean distance stretched along one unit axis `u`:
+/// `D^2 = ||x-y||^2 + alpha (u·(x-y))^2`.
+///
+/// Used to emphasise a named structural contrast (fcc vs ico in the
+/// coordination-count space) before the Ceriotti transfer.
+#[derive(Clone, Debug)]
+pub struct Stretch {
+    axis: Vec<f64>,
+    alpha: f64,
+}
+
+impl Stretch {
+    pub fn new(axis: Vec<f64>, alpha: f64) -> Result<Self> {
+        if axis.is_empty() || axis.iter().any(|v| !v.is_finite()) {
+            return Err(LandfoldError::Msg(
+                "stretch axis must be finite and nonempty".into(),
+            ));
+        }
+        if !alpha.is_finite() || alpha < 0.0 {
+            return Err(LandfoldError::Msg(
+                "stretch alpha must be finite and nonnegative".into(),
+            ));
+        }
+        let n2: f64 = axis.iter().map(|v| v * v).sum();
+        if !(n2 > 0.0 && n2.is_finite()) {
+            return Err(LandfoldError::Msg(
+                "stretch axis must have positive finite length".into(),
+            ));
+        }
+        let n = n2.sqrt();
+        Ok(Self {
+            axis: axis.into_iter().map(|v| v / n).collect(),
+            alpha,
+        })
+    }
+
+    pub fn from_refs(a: &[f64], b: &[f64], alpha: f64) -> Result<Self> {
+        if a.len() != b.len() {
+            return Err(LandfoldError::MetricSize {
+                left: a.len(),
+                right: b.len(),
+            });
+        }
+        let axis: Vec<f64> = a.iter().zip(b).map(|(x, y)| x - y).collect();
+        Self::new(axis, alpha)
+    }
+}
+
+impl Metric for Stretch {
+    fn dim(&self) -> Option<usize> {
+        Some(self.axis.len())
+    }
+
+    fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
+        let mut eu2 = 0.0;
+        let mut proj = 0.0;
+        for i in 0..a.len() {
+            let d = a[i] - b[i];
+            eu2 += d * d;
+            proj += d * self.axis[i];
+        }
+        let d2 = eu2 + self.alpha * proj * proj;
+        if !d2.is_finite() || d2 < 0.0 {
+            return f64::INFINITY;
+        }
+        d2.sqrt()
+    }
+}
+
 /// Hypertoroidal (minimum-image) Euclidean metric. `periods[i]` is the
 /// period of coordinate `i`.
 #[derive(Clone, Debug)]
@@ -274,6 +343,16 @@ mod tests {
             5.0,
             epsilon = 1e-15
         );
+    }
+
+    #[test]
+    fn stretch_increases_distance_along_the_axis() {
+        let m = Stretch::from_refs(&[0.0, 0.0], &[1.0, 0.0], 3.0).unwrap();
+        let along = m.dist(&[0.0, 0.0], &[1.0, 0.0]).unwrap();
+        let across = m.dist(&[0.0, 0.0], &[0.0, 1.0]).unwrap();
+        assert!(along > 1.9);
+        assert_relative_eq!(across, 1.0, epsilon = 1e-14);
+        assert!(Stretch::new(vec![0.0, 0.0], 1.0).is_err());
     }
 
     #[test]

@@ -235,6 +235,37 @@ impl Stress {
         Self::try_new(hd, fhd, tfun_ld, imix, weights, pair_weights)
     }
 
+    /// Pair weights `F(D)(1-F(D))`. Only mid-scale pairs contribute to χ.
+    pub fn midscale_pair_weights(fhd: ArrayView2<f64>) -> crate::error::Result<Array2<f64>> {
+        let n = fhd.nrows();
+        if fhd.ncols() != n {
+            return Err(crate::error::LandfoldError::Shape(
+                "midscale weights need a square F(D) matrix",
+            ));
+        }
+        let mut w = Array2::<f64>::zeros((n, n));
+        for i in 0..n {
+            for j in 0..i {
+                let f = fhd[(i, j)];
+                if !f.is_finite() || f < 0.0 {
+                    return Err(crate::error::LandfoldError::Msg(
+                        "midscale F(D) must be finite and nonnegative".into(),
+                    ));
+                }
+                let wij = f * (1.0 - f).max(0.0);
+                if !wij.is_finite() {
+                    return Err(crate::error::LandfoldError::Msg(
+                        "midscale pair weight overflowed".into(),
+                    ));
+                }
+                w[(i, j)] = wij;
+                w[(j, i)] = wij;
+            }
+        }
+        validate_pair_weight_mass(&w)?;
+        Ok(w)
+    }
+
     fn from_parts(
         hd: Array2<f64>,
         fhd: Array2<f64>,
@@ -774,6 +805,15 @@ mod tests {
         for g in ev.grad.iter() {
             assert_relative_eq!(*g, 0.0, epsilon = 1e-12);
         }
+    }
+
+    #[test]
+    fn midscale_weights_peak_at_half() {
+        let f = array![[0.0, 0.5, 1.0], [0.5, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        let w = Stress::midscale_pair_weights(f.view()).unwrap();
+        assert!((w[(0, 1)] - 0.25).abs() < 1e-15);
+        assert!(w[(0, 2)].abs() < 1e-15);
+        assert_eq!(w[(0, 0)], 0.0);
     }
 
     #[test]

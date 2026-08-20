@@ -44,6 +44,10 @@ pub struct IterOpts {
     pub gopt: usize,
     /// Pointwise global grid (`dimred -grid`). `None` skips that phase.
     pub global: Option<ProjOpts>,
+    /// Pair weights `F(D)(1-F(D))` so only mid-scale pairs drive χ.
+    pub midweight: bool,
+    /// Classical MDS of `F(D)` rather than `D`.
+    pub init_transformed: bool,
 }
 
 impl Default for IterOpts {
@@ -59,6 +63,8 @@ impl Default for IterOpts {
             preopt: 0,
             gopt: 0,
             global: None,
+            midweight: false,
+            init_transformed: false,
         }
     }
 }
@@ -213,6 +219,8 @@ pub fn embed(
             ));
         }
         p.to_owned()
+    } else if opts.init_transformed {
+        classical_mds(fhd.view(), opts.lowdim)?.0
     } else {
         classical_mds(hd.view(), opts.lowdim)?.0
     };
@@ -221,13 +229,18 @@ pub fn embed(
     }
 
     let w1 = weights.map(|w| w.to_owned());
+    let pair_w = if opts.midweight {
+        Some(Stress::midscale_pair_weights(fhd.view())?)
+    } else {
+        None
+    };
     let stress = Stress::try_new(
         hd.clone(),
         fhd.clone(),
         opts.tfun_ld.clone(),
         opts.imix,
         w1.clone(),
-        None,
+        pair_w,
     )?;
     let first_steps = if opts.preopt > 0 {
         opts.preopt
@@ -277,6 +290,60 @@ pub fn embed_points(
     opts: &IterOpts,
 ) -> Result<Embedding> {
     Ok(embed(points, metric, opts, None, None, None)?.0)
+}
+
+/// Ceriotti χ at decreasing σ, warm-started. Large σ is almost MDS;
+/// the last σ is the published scale.
+pub fn embed_sigma_schedule(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    opts: &IterOpts,
+    sigmas: &[f64],
+    init: Option<ArrayView2<f64>>,
+    weights: Option<ArrayView1<f64>>,
+    precomputed_dist: Option<ArrayView2<f64>>,
+) -> Result<(Embedding, CgReport)> {
+    if sigmas.is_empty() {
+        return Err(crate::error::LandfoldError::Msg(
+            "sigma schedule needs at least one scale".into(),
+        ));
+    }
+    if sigmas.iter().any(|s| !s.is_finite() || *s <= 0.0) {
+        return Err(crate::error::LandfoldError::Msg(
+            "sigma schedule entries must be finite and > 0".into(),
+        ));
+    }
+    let (sigma0, a, b) = opts.tfun_hd.xsigmoid_params().ok_or_else(|| {
+        crate::error::LandfoldError::Msg(
+            "sigma schedule needs a Ceriotti xsigmoid --fun-hd".into(),
+        )
+    })?;
+    let _ = sigma0;
+    let ld_ab = opts.tfun_ld.xsigmoid_params();
+    let mut current_init = init.map(|p| p.to_owned());
+    let mut last = None;
+    for (k, &sigma) in sigmas.iter().enumerate() {
+        let mut stage = opts.clone();
+        stage.tfun_hd = Transfer::xsigmoid(sigma, a, b)?;
+        if let Some((_, la, lb)) = ld_ab {
+            stage.tfun_ld = Transfer::xsigmoid(sigma, la, lb)?;
+        }
+        if k + 1 < sigmas.len() {
+            stage.global = None;
+            stage.preopt = 0;
+        }
+        let (emb, report) = embed(
+            points,
+            metric,
+            &stage,
+            current_init.as_ref().map(|p| p.view()),
+            weights,
+            precomputed_dist,
+        )?;
+        current_init = Some(emb.low.clone());
+        last = Some((emb, report));
+    }
+    last.ok_or_else(|| crate::error::LandfoldError::Msg("empty sigma schedule".into()))
 }
 
 fn run_solver(
@@ -547,5 +614,40 @@ mod tests {
         assert!(emb.stress.is_finite());
         assert_eq!(emb.low.nrows(), 4);
         assert_eq!(emb.low.ncols(), 2);
+    }
+
+    #[test]
+    fn midweight_and_sigma_schedule_return_finite_maps() {
+        let points = array![
+            [0.0, 0.0],
+            [0.1, 0.0],
+            [0.0, 0.1],
+            [8.0, 0.0],
+            [8.1, 0.0],
+            [8.0, 0.1],
+        ];
+        let mut opts = IterOpts {
+            lowdim: 2,
+            tfun_hd: Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap(),
+            tfun_ld: Transfer::xsigmoid(3.0, 2.0, 2.0).unwrap(),
+            midweight: true,
+            init_transformed: true,
+            ..IterOpts::default()
+        };
+        opts.cg.maxiter = 8;
+        let (emb, _) = embed(points.view(), &Euclid, &opts, None, None, None).unwrap();
+        assert!(emb.stress.is_finite());
+        let (emb2, _) = embed_sigma_schedule(
+            points.view(),
+            &Euclid,
+            &opts,
+            &[6.0, 3.0],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(emb2.stress.is_finite());
+        assert_eq!(emb2.low.nrows(), 6);
     }
 }

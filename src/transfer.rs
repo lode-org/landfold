@@ -273,6 +273,18 @@ impl Transfer {
         self.mode
     }
 
+    /// `(sigma, a, b)` when this transfer is a Ceriotti xsigmoid.
+    pub fn xsigmoid_params(&self) -> Option<(f64, f64, f64)> {
+        if self.mode != TransferMode::XSigmoid || self.pars.len() < 4 {
+            return None;
+        }
+        let inv = self.pars[0];
+        if !(inv.is_finite() && inv > 0.0) {
+            return None;
+        }
+        Some((1.0 / inv, self.pars[2], self.pars[3]))
+    }
+
     /// Family name for docs and Python: `ceriotti`, `imq`, or the other arms.
     pub fn family(&self) -> &'static str {
         match self.mode {
