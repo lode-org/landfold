@@ -2,6 +2,8 @@
 //!
 //! The adapter consumes the interchange layout used by chemparseplot:
 //! `/path/images` contains one flattened Cartesian coordinate row per frame.
+//! String metadata accepts variable-length Unicode/ASCII and fixed-width ASCII
+//! values up to 1024 bytes.
 //! HDF5 remains optional so users that use CON or chemfiles do not link the
 //! native HDF5 library.
 
