@@ -48,3 +48,21 @@ def test_chemgp_hdf5_path_preserves_shape_and_provenance(tmp_path: Path) -> None
     assert metadata["provenance"]["schema"] == "landfold.provenance.v1"
     assert metadata["provenance"]["input_digest"].startswith("sha256:")
     assert len(metadata["provenance"]["eindir_revision"]) == 40
+
+
+def test_python_metadata_normalizes_nested_numpy_values() -> None:
+    value = {
+        "unit": b"angstrom",
+        "scalar": np.float64(1.5),
+        "array": np.array([np.int64(2), b"ok"], dtype=object),
+        "nested": {"flag": np.bool_(True)},
+        "tuple": (np.float64(3.0),),
+    }
+
+    assert BRIDGE._python_metadata(value) == {
+        "unit": "angstrom",
+        "scalar": 1.5,
+        "array": [2, "ok"],
+        "nested": {"flag": True},
+        "tuple": [3.0],
+    }

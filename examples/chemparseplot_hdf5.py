@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
@@ -19,11 +20,17 @@ import landfold
 def _python_metadata(value: object) -> object:
     if isinstance(value, bytes):
         return value.decode("utf-8")
+    if isinstance(value, Mapping):
+        return {
+            str(_python_metadata(key)): _python_metadata(item)
+            for key, item in value.items()
+        }
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return _python_metadata(value.tolist())
     if isinstance(value, np.generic):
-        scalar = value.item()
-        return scalar.decode("utf-8") if isinstance(scalar, bytes) else scalar
+        return _python_metadata(value.item())
+    if isinstance(value, (list, tuple)):
+        return [_python_metadata(item) for item in value]
     return value
 
 
