@@ -58,6 +58,29 @@ pub(crate) fn validate_distance(distance: f64) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn stable_euclid<'a, 'b>(
+    a: impl Iterator<Item = &'a f64>,
+    b: impl Iterator<Item = &'b f64>,
+) -> f64 {
+    let mut scale = 0.0;
+    let mut sum = 0.0;
+    for (&ai, &bi) in a.zip(b) {
+        let delta = (bi - ai).abs();
+        if !delta.is_finite() {
+            return f64::INFINITY;
+        }
+        if delta > scale {
+            let ratio = if scale == 0.0 { 0.0 } else { scale / delta };
+            sum = sum * ratio * ratio + 1.0;
+            scale = delta;
+        } else if scale > 0.0 {
+            let ratio = delta / scale;
+            sum += ratio * ratio;
+        }
+    }
+    scale * sum.sqrt()
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Euclid;
 
@@ -67,12 +90,7 @@ impl Metric for Euclid {
     }
 
     fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
-        let mut acc = 0.0;
-        for i in 0..a.len() {
-            let d = b[i] - a[i];
-            acc += d * d;
-        }
-        acc.sqrt()
+        stable_euclid(a.iter(), b.iter())
     }
 }
 
@@ -244,6 +262,16 @@ mod tests {
             m.dist(&[0.0, 0.0], &[3.0, 4.0]).unwrap(),
             5.0,
             epsilon = 1e-15
+        );
+    }
+
+    #[test]
+    fn euclid_accepts_large_finite_separations() {
+        let m = Euclid;
+        assert_relative_eq!(
+            m.dist(&[1.0e200], &[-1.0e200]).unwrap(),
+            2.0e200,
+            max_relative = 1e-14
         );
     }
 

@@ -7,7 +7,7 @@
 use ndarray::{Array1, Array2, ArrayView2};
 
 use crate::error::Result;
-use crate::metric::{Metric, validate_distance};
+use crate::metric::{Metric, stable_euclid, validate_distance};
 
 fn checked_product(left: usize, right: usize, what: &'static str) -> Result<usize> {
     left.checked_mul(right).ok_or_else(|| {
@@ -34,29 +34,6 @@ fn validate_finite_points(points: ArrayView2<f64>) -> Result<()> {
         ));
     }
     Ok(())
-}
-
-fn stable_euclid<'a, 'b>(
-    a: impl Iterator<Item = &'a f64>,
-    b: impl Iterator<Item = &'b f64>,
-) -> f64 {
-    let mut scale = 0.0;
-    let mut sum = 0.0;
-    for (&ai, &bi) in a.zip(b) {
-        let delta = (bi - ai).abs();
-        if !delta.is_finite() {
-            return f64::INFINITY;
-        }
-        if delta > scale {
-            let ratio = if scale == 0.0 { 0.0 } else { scale / delta };
-            sum = sum * ratio * ratio + 1.0;
-            scale = delta;
-        } else if scale > 0.0 {
-            let ratio = delta / scale;
-            sum += ratio * ratio;
-        }
-    }
-    scale * sum.sqrt()
 }
 
 fn gemm_euclid(norm_i: f64, norm_j: f64, gram: f64) -> Option<f64> {
