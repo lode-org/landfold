@@ -779,6 +779,7 @@ mod tests {
         assert!(stress.try_eval(array![0.0].view(), 1).is_err());
         assert!(stress.try_eval(array![0.0, f64::NAN].view(), 1).is_err());
         assert!(stress.try_eval(array![0.0, 0.0].view(), 0).is_err());
+        assert!(stress.try_eval(array![].view(), usize::MAX).is_err());
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_ok());
     }
 
