@@ -34,6 +34,19 @@ def _python_metadata(value: object) -> object:
     return value
 
 
+def _path_observables(result: object, n_images: int) -> dict[str, list[float]]:
+    path = result.path
+    observables: dict[str, list[float]] = {}
+    for name in ("energies", "f_para", "rxn_coord"):
+        values = np.asarray(getattr(path, name), dtype=np.float64)
+        if values.ndim != 1 or values.shape[0] != n_images:
+            raise ValueError(f"ChemGP path {name} must have one value per image")
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f"ChemGP path {name} must be finite")
+        observables[name] = values.tolist()
+    return observables
+
+
 def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
     result = load_neb_result(str(path))
     images = np.asarray(result.path.images, dtype=np.float64)
@@ -71,6 +84,7 @@ def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
         "length_unit": source_metadata.get("length_unit"),
         "n_atoms": images.shape[1] // 3,
         "source_metadata": source_metadata,
+        "path_observables": _path_observables(result, images.shape[0]),
         "provenance": provenance,
     }
     return landfold.embed_euclid_result(

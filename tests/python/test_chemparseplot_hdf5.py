@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +46,11 @@ def test_chemgp_hdf5_path_preserves_shape_and_provenance(tmp_path: Path) -> None
     assert metadata["length_unit"] == "angstrom"
     assert metadata["n_atoms"] == 2
     assert metadata["source_metadata"]["atomic_numbers"] == [1, 8]
+    assert metadata["path_observables"] == {
+        "energies": [0.0, 1.0, 0.5],
+        "f_para": [0.0, 0.0, 0.0],
+        "rxn_coord": [0.0, 1.0, 2.0],
+    }
     assert metadata["provenance"]["schema"] == "landfold.provenance.v1"
     assert metadata["provenance"]["input_digest"].startswith("sha256:")
     assert len(metadata["provenance"]["eindir_revision"]) == 40
@@ -66,3 +72,21 @@ def test_python_metadata_normalizes_nested_numpy_values() -> None:
         "nested": {"flag": True},
         "tuple": [3.0],
     }
+
+
+@pytest.mark.parametrize(
+    "values, message",
+    [
+        (np.array([0.0]), "one value per image"),
+        (np.array([0.0, np.nan]), "must be finite"),
+    ],
+)
+def test_path_observables_are_finite_and_image_aligned(
+    values: np.ndarray, message: str
+) -> None:
+    result = SimpleNamespace(
+        path=SimpleNamespace(energies=values, f_para=np.zeros(2), rxn_coord=np.zeros(2))
+    )
+
+    with pytest.raises(ValueError, match=message):
+        BRIDGE._path_observables(result, 2)
