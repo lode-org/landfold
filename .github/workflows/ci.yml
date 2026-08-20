@@ -2,23 +2,86 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
 jobs:
+  rust:
+    name: Rust (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            features: ""
+          - name: readcon
+            features: readcon
+          - name: chemfiles-hdf5
+            features: readcon-chemfiles,hdf5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: HaoZeke/eindir
+          ref: b0131396b562b65353c1d525bb5fb06b6c5545b3
+          path: _deps/eindir
+      - uses: actions/checkout@v4
+        with:
+          repository: HaoZeke/xtsci-optimize
+          ref: 43fc4f42eb0e131ee3d8009e2edbbcd126ccb16b
+          path: _deps/xtsci-optimize
+      - name: Expose sibling path dependencies
+        run: |
+          ln -s "$GITHUB_WORKSPACE/_deps/eindir" "$GITHUB_WORKSPACE/../eindir"
+          ln -s "$GITHUB_WORKSPACE/_deps/xtsci-optimize" "$GITHUB_WORKSPACE/../xtsci-optimize"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native trajectory dependencies
+        if: matrix.name == 'chemfiles-hdf5'
+        run: sudo apt-get update && sudo apt-get install --yes cmake libhdf5-dev pkg-config
+      - name: Test
+        run: cargo test --locked --all-targets ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
+      - name: Clippy
+        if: matrix.name == 'default'
+        run: cargo clippy --locked --all-targets -- -D warnings
+
   contracts:
+    name: Python and metadata contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: HaoZeke/eindir
+          ref: b0131396b562b65353c1d525bb5fb06b6c5545b3
+          path: _deps/eindir
+      - uses: actions/checkout@v4
+        with:
+          repository: HaoZeke/xtsci-optimize
+          ref: 43fc4f42eb0e131ee3d8009e2edbbcd126ccb16b
+          path: _deps/xtsci-optimize
+      - name: Expose sibling path dependencies
+        run: |
+          ln -s "$GITHUB_WORKSPACE/_deps/eindir" "$GITHUB_WORKSPACE/../eindir"
+          ln -s "$GITHUB_WORKSPACE/_deps/xtsci-optimize" "$GITHUB_WORKSPACE/../xtsci-optimize"
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check default targets
-        run: cargo test --locked --all-targets
-      - name: Check readcon integration
-        run: cargo test --locked --features readcon
-      - name: Check Python dependency contract
-        run: bash scripts/check_pyo3_pin.sh
+      - name: Validate metadata and Python pin
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          bash scripts/check_pyo3_pin.sh
+      - name: Test Python provenance contract
+        run: cargo test --locked --features python --test pyo3_pin
+
+  workflow-schema:
+    name: Workflow schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse and validate workflow shape
+        run: |
+          ruby -e 'require "yaml"; workflow = YAML.load_file(".github/workflows/ci.yml"); abort "missing workflow name" unless workflow["name"]; abort "missing jobs" unless workflow["jobs"].is_a?(Hash) && workflow["jobs"].any?'
