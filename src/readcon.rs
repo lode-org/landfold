@@ -216,6 +216,6 @@ mod tests {
         assert_eq!(positions[1][[0, 0]], 2.0);
         assert_eq!(batch.frame_ids, vec![0, 1]);
         assert_eq!(batch.atom_ids, vec![0, 1]);
-        assert_eq!(batch.length_unit, None);
+        assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
     }
 }
