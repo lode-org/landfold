@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,13 +28,13 @@ jobs:
           - name: chemfiles-hdf5
             features: readcon-chemfiles,hdf5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           repository: HaoZeke/eindir
           ref: b0131396b562b65353c1d525bb5fb06b6c5545b3
           path: _deps/eindir
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: HaoZeke/xtsci-optimize
           ref: 43fc4f42eb0e131ee3d8009e2edbbcd126ccb16b
@@ -54,13 +57,13 @@ jobs:
     name: Python and metadata contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           repository: HaoZeke/eindir
           ref: b0131396b562b65353c1d525bb5fb06b6c5545b3
           path: _deps/eindir
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: HaoZeke/xtsci-optimize
           ref: 43fc4f42eb0e131ee3d8009e2edbbcd126ccb16b
@@ -81,7 +84,7 @@ jobs:
     name: Workflow schema
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Parse and validate workflow shape
         run: |
-          ruby -e 'require "yaml"; workflow = YAML.load_file(".github/workflows/ci.yml"); abort "missing workflow name" unless workflow["name"]; abort "missing jobs" unless workflow["jobs"].is_a?(Hash) && workflow["jobs"].any?'
+          ruby -e 'require "yaml"; workflow = YAML.load_file(".github/workflows/ci.yml"); triggers = workflow["on"] || workflow[true]; abort "missing workflow name" unless workflow["name"]; abort "missing triggers" unless triggers; abort "missing jobs" unless workflow["jobs"].is_a?(Hash) && workflow["jobs"].any?'
