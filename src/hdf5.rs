@@ -48,7 +48,9 @@ fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec
         return Ok(None);
     };
     if dataset.ndim() != 1 || dataset.shape()[0] != expected {
-        return Err(LandfoldError::Shape("HDF5 trajectory identity dataset shape"));
+        return Err(LandfoldError::Shape(
+            "HDF5 trajectory identity dataset shape",
+        ));
     }
     let ids = dataset
         .read_raw::<u64>()
@@ -61,10 +63,7 @@ mod tests {
     use super::*;
     #[test]
     fn reads_images_and_explicit_identity() {
-        let path = std::env::temp_dir().join(format!(
-            "landfold-hdf5-{}.h5",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("landfold-hdf5-{}.h5", std::process::id()));
         let file = hdf5::File::create(&path).expect("create HDF5 fixture");
         let path_group = file.create_group("path").expect("create path group");
         path_group
@@ -81,7 +80,9 @@ mod tests {
             .expect("create frame IDs")
             .write_raw(&[41_u64, 42])
             .expect("write frame IDs");
-        let metadata_group = file.create_group("metadata").expect("create metadata group");
+        let metadata_group = file
+            .create_group("metadata")
+            .expect("create metadata group");
         metadata_group
             .new_dataset::<u64>()
             .shape(2)
@@ -95,15 +96,16 @@ mod tests {
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert_eq!(batch.frame_ids, vec![41, 42]);
         assert_eq!(batch.atom_ids, vec![7, 8]);
-        assert_eq!(batch.frame(1).expect("second frame").row(0).to_vec(), vec![6.0, 7.0, 8.0]);
+        assert_eq!(
+            batch.frame(1).expect("second frame").row(0).to_vec(),
+            vec![6.0, 7.0, 8.0]
+        );
     }
 
     #[test]
     fn defaults_identity_and_rejects_nonfinite_images() {
-        let path = std::env::temp_dir().join(format!(
-            "landfold-hdf5-invalid-{}.h5",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("landfold-hdf5-invalid-{}.h5", std::process::id()));
         let file = hdf5::File::create(&path).expect("create HDF5 fixture");
         let path_group = file.create_group("path").expect("create path group");
         path_group
