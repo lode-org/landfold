@@ -202,7 +202,16 @@ impl Stress {
                 grad: Array1::zeros(coords.len()),
             };
         };
-        if d == 0 || coords.len() != expected_len || coords.as_slice().is_none() {
+        if d == 0
+            || coords.len() != expected_len
+            || coords.as_slice().is_none()
+            || self.hd.as_slice().is_none()
+            || self.fhd.as_slice().is_none()
+            || self
+                .weights
+                .as_ref()
+                .is_some_and(|weights| weights.as_slice().is_none())
+        {
             return StressEval {
                 value: OPTIMIZER_PENALTY,
                 grad: Array1::zeros(coords.len()),
@@ -732,6 +741,26 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn eval_penalizes_non_contiguous_public_distance_state() {
+        use ndarray::ShapeBuilder;
+
+        let hd = Array2::from_shape_vec((2, 2).strides((1, 2)), vec![0.0, 2.0, 2.0, 0.0])
+            .unwrap();
+        let stress = Stress::new(
+            hd.clone(),
+            hd,
+            Transfer::identity(),
+            0.0,
+            None,
+            None,
+        )
+        .unwrap();
+        let evaluation = stress.eval(array![0.0, 0.0, 1.0, 0.0].view(), 2);
+        assert_eq!(evaluation.value, OPTIMIZER_PENALTY);
+        assert_eq!(evaluation.grad.len(), 4);
     }
 
     #[test]
