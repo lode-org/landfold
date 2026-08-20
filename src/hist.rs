@@ -406,6 +406,11 @@ impl FreeEnergy {
         let mut rho = counts.clone();
         let area = ((h.x_edges[nx] - h.x_edges[0]) / nx as f64)
             * ((h.y_edges[ny] - h.y_edges[0]) / ny as f64);
+        if !area.is_finite() || area <= 0.0 {
+            return Err(LandfoldError::Msg(
+                "FES bin area must be finite and positive".into(),
+            ));
+        }
         if h.samples > 0.0 && area > 0.0 {
             rho.mapv_inplace(|c| c / (h.samples * area));
         }
@@ -1004,6 +1009,12 @@ mod tests {
     fn rejects_overflowing_fes_coordinate_padding() {
         let points = array![[-f64::MAX, 0.0], [f64::MAX, 0.0]];
         assert!(fes_from_points(points.view(), 4, 4, 1.0, 0.05, None).is_err());
+    }
+
+    #[test]
+    fn rejects_overflowing_fes_bin_area() {
+        let h = Histogram2d::new(-1e200, 1e200, 2, -1e200, 1e200, 2).unwrap();
+        assert!(FreeEnergy::from_histogram(&h, 1.0).is_err());
     }
 
     #[test]
