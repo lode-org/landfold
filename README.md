@@ -153,7 +153,9 @@ in Rust. It consumes `/path/images`, and optionally `/path/frame_ids`,
 `/path/energies`, `/path/f_para`, `/path/rxn_coord`, `/metadata/atom_ids`,
 `/metadata/atomic_numbers`, and `/metadata/cell`, returning the same validated
 `FrameBatch`. `/metadata/atom_symbols` is also accepted for stable chemical
-identity. Atomic numbers, symbols, and a finite 3x3 cell are retained as typed fields;
+identity. Atomic numbers, symbols, and a finite 3x3 cell are retained as typed
+fields; Chemparseplot’s flattened nine-element cell representation is normalized
+to that same 3x3 field.
 `/metadata/length_unit` is retained as `FrameBatch::length_unit` when present;
 per-image path observables are available through
 `FrameBatch::frame_metadata` when present:

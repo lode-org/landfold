@@ -50,8 +50,10 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
         let dataset = file
             .dataset("/metadata/cell")
             .map_err(|error| LandfoldError::Parse(error.to_string()))?;
-        if dataset.shape() != [3, 3] {
-            return Err(LandfoldError::Shape("HDF5 cell must be a 3x3 dataset"));
+        if dataset.shape() != [3, 3] && dataset.shape() != [9] {
+            return Err(LandfoldError::Shape(
+                "HDF5 cell must be a 3x3 or flattened 9-element dataset",
+            ));
         }
         let values = dataset
             .read_raw::<f64>()
@@ -276,7 +278,7 @@ mod tests {
             .expect("write atom symbols");
         metadata_group
             .new_dataset::<f64>()
-            .shape((3, 3))
+            .shape(9)
             .create("cell")
             .expect("create cell")
             .write_raw(&[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0])
