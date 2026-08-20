@@ -369,8 +369,8 @@ mod tests {
             .expect("create images")
             .write_raw(&[0.0; 6])
             .expect("write images");
-        file.create_group("metadata")
-            .expect("create metadata group")
+        let metadata_group = file.create_group("metadata").expect("create metadata group");
+        metadata_group
             .new_dataset::<VarLenAscii>()
             .shape(2)
             .create("atom_symbols")
