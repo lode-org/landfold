@@ -453,25 +453,11 @@ fn place_one(
     for a in &mut aff {
         *a /= zsum;
     }
-    let mut pt = vec![0.0; n];
-    for j in 0..n {
-        let mut s = 0.0;
-        for k in 0..n {
-            s += aff[k] * model.p_tm1[(k, j)];
-        }
-        pt[j] = s.max(POT_FLOOR);
-    }
-    // Lafon–Keller–Coifman Nyström: y = p^{(t)} Y. A convex combination
-    // of landmark coordinates, so the image stays in their convex hull.
-    let zpt: f64 = pt.iter().sum();
-    if !(zpt > 0.0) {
-        return Err(LandfoldError::Msg(
-            "PHATE project: diffused mass is zero".into(),
-        ));
-    }
+    // Landmark coordinates already carry P^t through the potential MDS.
+    // A second P^{t-1} on the query washes the map out to a line.
     let mut y = vec![0.0; dim];
     for j in 0..n {
-        let w = pt[j] / zpt;
+        let w = aff[j];
         for h in 0..dim {
             y[h] += w * landmark_ld[(j, h)];
         }
