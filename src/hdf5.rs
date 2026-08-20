@@ -417,15 +417,15 @@ mod tests {
             .create("atom_symbols")
             .expect("create atom symbols")
             .write_raw(&[
-                FixedAscii::from_ascii("C").expect("valid symbol"),
-                FixedAscii::from_ascii("H").expect("valid symbol"),
+                FixedAscii::<1>::from_ascii("C").expect("valid symbol"),
+                FixedAscii::<1>::from_ascii("H").expect("valid symbol"),
             ])
             .expect("write atom symbols");
         metadata_group
             .new_dataset::<FixedAscii<8>>()
             .create("length_unit")
             .expect("create length unit")
-            .write_scalar(&FixedAscii::from_ascii("angstrom").expect("valid length unit"))
+            .write_scalar(&FixedAscii::<8>::from_ascii("angstrom").expect("valid length unit"))
             .expect("write length unit");
         drop(file);
 
