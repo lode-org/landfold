@@ -964,6 +964,7 @@ dependencies = [
  "pyo3",
  "rayon",
  "readcon-core",
+ "serde_json",
  "thiserror",
  "xtsci-optimize",
 ]

@@ -34,6 +34,7 @@ hdf5 = ["dep:hdf5"]
 [dependencies]
 ndarray = "0.17"
 nalgebra = "0.33"
+serde_json = "1"
 thiserror = "2"
 eindir-core = {
     version = "0.6.0",

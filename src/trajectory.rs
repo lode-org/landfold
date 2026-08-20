@@ -1,7 +1,9 @@
 //! Validated, format-neutral batches of coordinate frames.
 
 use ndarray::{Array2, ArrayView2};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
+
+use serde_json::Value;
 
 use crate::{LandfoldError, Result};
 
@@ -15,6 +17,8 @@ pub struct FrameBatch {
     pub atom_ids: Vec<u64>,
     pub frame_ids: Vec<u64>,
     pub length_unit: Option<String>,
+    /// Per-frame JSON metadata. An empty vector means the source supplied no metadata.
+    pub metadata: Vec<BTreeMap<String, Value>>,
 }
 
 impl FrameBatch {
@@ -25,11 +29,23 @@ impl FrameBatch {
         frame_ids: Vec<u64>,
         length_unit: Option<String>,
     ) -> Result<Self> {
+        Self::new_with_metadata(frames, atom_ids, frame_ids, length_unit, Vec::new())
+    }
+
+    /// Build a batch while retaining one metadata map for every frame.
+    pub fn new_with_metadata(
+        frames: Vec<Array2<f64>>,
+        atom_ids: Vec<u64>,
+        frame_ids: Vec<u64>,
+        length_unit: Option<String>,
+        metadata: Vec<BTreeMap<String, Value>>,
+    ) -> Result<Self> {
         let batch = Self {
             frames,
             atom_ids,
             frame_ids,
             length_unit,
+            metadata,
         };
         batch.validate()?;
         Ok(batch)
@@ -41,18 +57,22 @@ impl FrameBatch {
         let atom_ids = &self.atom_ids;
         let frame_ids = &self.frame_ids;
         let length_unit = &self.length_unit;
+        let metadata = &self.metadata;
         if length_unit.as_deref().is_some_and(str::is_empty) {
             return Err(LandfoldError::Msg(
                 "trajectory length unit must not be empty".into(),
             ));
         }
         if frames.is_empty() {
-            if !atom_ids.is_empty() || !frame_ids.is_empty() {
+            if !atom_ids.is_empty() || !frame_ids.is_empty() || !metadata.is_empty() {
                 return Err(LandfoldError::Shape(
-                    "empty trajectory batches cannot have IDs",
+                    "empty trajectory batches cannot have IDs or metadata",
                 ));
             }
             return Ok(());
+        }
+        if !metadata.is_empty() && metadata.len() != frames.len() {
+            return Err(LandfoldError::Shape("trajectory metadata length"));
         }
         let shape = frames[0].dim();
         if shape.1 != 3 || shape.0 != atom_ids.len() {
@@ -128,6 +148,11 @@ impl FrameBatch {
         self.frames.get(index).map(|frame| frame.view())
     }
 
+    /// Return metadata for a frame when the source supplied per-frame metadata.
+    pub fn frame_metadata(&self, index: usize) -> Option<&BTreeMap<String, Value>> {
+        self.metadata.get(index)
+    }
+
     /// Flatten each `(n_atoms, 3)` frame into one solver input row.
     pub fn flattened_points(&self) -> Result<Array2<f64>> {
         self.validate()?;
@@ -192,6 +217,15 @@ mod tests {
         assert!(
             FrameBatch::new(vec![array![[0.0, 0.0, 0.0]]], vec![0, 1], vec![0], None,).is_err()
         );
+
+        assert!(FrameBatch::new_with_metadata(
+            vec![array![[0.0, 0.0, 0.0]], array![[1.0, 0.0, 0.0]]],
+            vec![0],
+            vec![0, 1],
+            None,
+            vec![std::collections::BTreeMap::new()],
+        )
+        .is_err());
     }
 
     #[test]

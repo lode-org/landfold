@@ -121,7 +121,11 @@ pub fn frames_batch(frames: &[ConFrame]) -> Result<FrameBatch> {
             "readcon frames have inconsistent length units".into(),
         ));
     }
-    FrameBatch::new(positions, atom_ids, frame_ids, length_unit)
+    let metadata = frames
+        .iter()
+        .map(|frame| frame.header.metadata.clone())
+        .collect();
+    FrameBatch::new_with_metadata(positions, atom_ids, frame_ids, length_unit, metadata)
 }
 
 /// Read a chemfiles-supported trajectory through readcon's canonical frame
@@ -206,14 +210,37 @@ mod tests {
         assert_eq!(batch.atom_ids, vec![0, 1]);
         assert_eq!(batch.n_frames(), 2);
         assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
+        assert_eq!(batch.metadata.len(), 2);
+    }
+
+    #[test]
+    fn preserves_json_metadata_in_the_format_neutral_batch() {
+        use std::collections::BTreeMap;
+
+        let mut first = frame(0.0);
+        let mut metadata = BTreeMap::new();
+        metadata.insert("energy".into(), serde_json::json!(-1.25));
+        metadata.insert("generator".into(), serde_json::json!("eon"));
+        first.header.metadata = metadata;
+
+        let batch = frames_batch(&[first, frame(2.0)]).expect("convert CON frames");
+        assert_eq!(
+            batch.frame_metadata(0).and_then(|m| m.get("energy")),
+            Some(&serde_json::json!(-1.25))
+        );
+        assert_eq!(
+            batch.frame_metadata(0).and_then(|m| m.get("generator")),
+            Some(&serde_json::json!("eon"))
+        );
+        assert!(batch.frame_metadata(1).is_some());
     }
 
     #[test]
     fn rejects_mixed_explicit_and_implicit_frame_ids() {
         let mut first = frame(0.0);
         first.header.set_frame_index(41);
-        let error = frames_batch(&[first, frame(2.0)])
-            .expect_err("mixed frame identity must be rejected");
+        let error =
+            frames_batch(&[first, frame(2.0)]).expect_err("mixed frame identity must be rejected");
         assert!(error.to_string().contains("mix explicit and implicit"));
     }
 
