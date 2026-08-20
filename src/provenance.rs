@@ -1,7 +1,10 @@
 //! Provenance required for reproducible Landfold result artifacts.
 
+use serde_json::{Value, json};
+
 /// Version of the provenance object embedded in Landfold result artifacts.
 pub const PROVENANCE_SCHEMA: &str = "landfold.provenance.v1";
+pub const EON_COMPATIBILITY_SCHEMA: &str = "eon.compatibility.v1";
 
 /// Compatibility and input identity for a Landfold analysis.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,7 +33,102 @@ pub struct Provenance {
     pub dlpack_minor: u16,
 }
 
+/// Compatibility stamp carried by eOn's `EngineCompatibility` Cap'n Proto
+/// record and its JSON representation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineCompatibility {
+    pub schema: String,
+    pub engine_id: String,
+    pub protocol_family: String,
+    pub protocol_major: u16,
+    pub protocol_minor: u16,
+    pub abi_major: u16,
+    pub abi_minor: u16,
+    pub layout_revision: u32,
+    pub build_identity: String,
+}
+
+impl EngineCompatibility {
+    pub fn from_json(value: &Value) -> Result<Self, String> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| "eOn engine compatibility must be an object".to_owned())?;
+        let text = |key: &str| -> Result<String, String> {
+            object
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| format!("eOn engine compatibility requires string field {key}"))
+        };
+        let integer = |key: &str| -> Result<u64, String> {
+            object
+                .get(key)
+                .and_then(Value::as_u64)
+                .ok_or_else(|| format!("eOn engine compatibility requires integer field {key}"))
+        };
+        let schema = text("schema")?;
+        if schema != EON_COMPATIBILITY_SCHEMA {
+            return Err(format!("unsupported eOn compatibility schema {schema}"));
+        }
+        let protocol_major = integer("protocolMajor")?;
+        let protocol_minor = integer("protocolMinor")?;
+        let abi_major = integer("abiMajor")?;
+        let abi_minor = integer("abiMinor")?;
+        let layout_revision = integer("layoutRevision")?;
+        Ok(Self {
+            schema,
+            engine_id: text("engineId")?,
+            protocol_family: text("protocolFamily")?,
+            protocol_major: u16::try_from(protocol_major)
+                .map_err(|_| "protocolMajor exceeds UInt16".to_owned())?,
+            protocol_minor: u16::try_from(protocol_minor)
+                .map_err(|_| "protocolMinor exceeds UInt16".to_owned())?,
+            abi_major: u16::try_from(abi_major)
+                .map_err(|_| "abiMajor exceeds UInt16".to_owned())?,
+            abi_minor: u16::try_from(abi_minor)
+                .map_err(|_| "abiMinor exceeds UInt16".to_owned())?,
+            layout_revision: u32::try_from(layout_revision)
+                .map_err(|_| "layoutRevision exceeds UInt32".to_owned())?,
+            build_identity: text("buildIdentity")?,
+        })
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "schema": self.schema,
+            "engineId": self.engine_id,
+            "protocolFamily": self.protocol_family,
+            "protocolMajor": self.protocol_major,
+            "protocolMinor": self.protocol_minor,
+            "abiMajor": self.abi_major,
+            "abiMinor": self.abi_minor,
+            "layoutRevision": self.layout_revision,
+            "buildIdentity": self.build_identity,
+        })
+    }
+}
+
 impl Provenance {
+    /// Convert an eOn engine stamp into Landfold's artifact provenance.
+    pub fn from_eon_compatibility(
+        run_id: impl Into<String>,
+        input_digest: impl Into<String>,
+        compatibility: &EngineCompatibility,
+    ) -> Result<Self, String> {
+        Self::new(
+            run_id,
+            input_digest,
+            &compatibility.engine_id,
+            &compatibility.protocol_family,
+            compatibility.protocol_major,
+            compatibility.protocol_minor,
+            compatibility.layout_revision,
+            compatibility.abi_major,
+            compatibility.abi_minor,
+        )
+    }
+
     /// Construct and validate a source provenance record.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -148,6 +246,42 @@ impl Provenance {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn eon_stamp() -> Value {
+        serde_json::json!({
+            "schema": "eon.compatibility.v1",
+            "engineId": "eon",
+            "protocolFamily": "eon.objective",
+            "protocolMajor": 1,
+            "protocolMinor": 0,
+            "abiMajor": 1,
+            "abiMinor": 1,
+            "layoutRevision": 3,
+            "buildIdentity": "eon-2.11.1+abc123"
+        })
+    }
+
+    #[test]
+    fn eon_engine_stamp_round_trips_into_landfold_provenance() {
+        let compatibility = EngineCompatibility::from_json(&eon_stamp()).unwrap();
+        let provenance = Provenance::from_eon_compatibility(
+            "run-42",
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            &compatibility,
+        )
+        .unwrap();
+        assert_eq!(provenance.engine_id, "eon");
+        assert_eq!(provenance.abi_layout_revision, 3);
+        assert_eq!(compatibility.to_json(), eon_stamp());
+    }
+
+    #[test]
+    fn eon_engine_stamp_rejects_wrong_schema() {
+        let mut stamp = eon_stamp();
+        stamp["schema"] = Value::String("eon.compatibility.v0".into());
+        let error = EngineCompatibility::from_json(&stamp).unwrap_err();
+        assert!(error.contains("unsupported eOn compatibility schema"));
+    }
 
     #[test]
     fn accepts_a_complete_anneal_engine_provenance_record() {
