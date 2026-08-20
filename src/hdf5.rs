@@ -154,7 +154,11 @@ fn read_atomic_numbers(file: &hdf5::File, path: &str, expected: usize) -> Result
         .map(Some)
 }
 
-fn read_atom_symbols(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<String>>> {
+fn read_atom_symbols(
+    file: &hdf5::File,
+    path: &str,
+    expected: usize,
+) -> Result<Option<Vec<String>>> {
     if !file.link_exists(path) {
         return Ok(None);
     }
@@ -167,7 +171,10 @@ fn read_atom_symbols(file: &hdf5::File, path: &str, expected: usize) -> Result<O
     let values = dataset
         .read_raw::<VarLenUnicode>()
         .map_err(|error| LandfoldError::Parse(error.to_string()))?;
-    if values.iter().any(|symbol| symbol.as_str().trim().is_empty()) {
+    if values
+        .iter()
+        .any(|symbol| symbol.as_str().trim().is_empty())
+    {
         return Err(LandfoldError::Msg(
             "HDF5 atom symbols must be nonempty".into(),
         ));

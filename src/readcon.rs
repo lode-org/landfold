@@ -259,10 +259,7 @@ mod tests {
 
         let mut first = frame(0.0);
         let mut metadata = BTreeMap::new();
-        metadata.insert(
-            "units".into(),
-            serde_json::json!({"length": "angstrom"}),
-        );
+        metadata.insert("units".into(), serde_json::json!({"length": "angstrom"}));
         metadata.insert("energy".into(), serde_json::json!(-1.25));
         metadata.insert("generator".into(), serde_json::json!("eon"));
         first.header.metadata = metadata;
