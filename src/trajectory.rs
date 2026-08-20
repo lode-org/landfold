@@ -94,7 +94,7 @@ impl FrameBatch {
         frame_ids: Vec<u64>,
         length_unit: Option<String>,
     ) -> Result<Self> {
-        if points.ncols() % 3 != 0 {
+        if !points.ncols().is_multiple_of(3) {
             return Err(LandfoldError::Shape(
                 "trajectory flattened width must be divisible by three",
             ));
