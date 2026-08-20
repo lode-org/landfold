@@ -48,6 +48,11 @@ value remains absolute.
 initialiser; `--distances` prints pairwise distances of the embedding
 (the C++ Torgerson pairwise invariant).
 
+`--stretch refs.cv --alpha 4` lengthens high-D distances along a named
+contrast (two reference rows, e.g. fcc and ico coordination counts)
+before the Ceriotti transfer. `--midweight` restricts χ to mid-scale
+pairs; `--continue-sigma 12,8,5` warm-starts from a large σ.
+
 `landfold embed --preopt` / `--grid` / `--gopt` is the C++ `dimred`
 mix-down path (identity MDS, then sigmoid χ, then pointwise grid).
 `-v` writes `# Error in fitting LD points:` on stdout. `landfold
