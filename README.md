@@ -29,7 +29,9 @@ landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
 `--features highs`) are extra solver arms. `--highs` is
 bound-constrained L-BFGS-QP via HiGHS.
 For the HiGHS arm, the `--trust` option sets the per-coordinate trust radius
-and `--box lo,hi` applies uniform coordinate bounds.
+and `--box lo,hi` applies uniform coordinate bounds. Without `--trust`, the
+CLI scales the initial radius from the low-D coordinate span; an explicit
+value remains absolute.
 `Solver::Standard` (full-pair Polak-Ribiere CG) stays the default.
 `landfold mds` is the Torgerson (1952)
 initialiser; `--distances` prints pairwise distances of the embedding
