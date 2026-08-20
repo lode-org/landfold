@@ -793,6 +793,8 @@ mod tests {
         assert!(stress.try_eval(array![0.0, 0.0].view(), 0).is_err());
         assert!(stress.try_eval(array![].view(), usize::MAX).is_err());
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_ok());
+        assert_eq!(stress.eval(array![0.0].view(), 1).value, OPTIMIZER_PENALTY);
+        assert_eq!(stress.eval(array![].view(), usize::MAX).value, OPTIMIZER_PENALTY);
     }
 
     #[test]
