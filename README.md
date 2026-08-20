@@ -43,6 +43,19 @@ Gonzalez farthest-point sampling (`--voronoi` for Voronoi masses).
 plus `--cn-csv` is the coordination histogram of the cluster-FES
 figure class. `--blur`, `--floor`, and `--fmax` match that panel.
 
+The public Ceriotti comparison script runs the bundled LJ38 teaching set
+and the beta-hairpin landmark set when the external sketch-map examples are
+available:
+
+```
+LANDFOLD=target/release/landfold \
+SKETCHMAP_PROTEIN=/path/to/sketchmap/examples/protein \
+scripts/ceriotti_public_bench.sh
+```
+
+It reports stress and wall time for the standard, xtsci L-BFGS, and HiGHS
+arms, including a published-map polish with an explicit trust radius.
+
 C++ goldens are `tests/goldens/cpp_oracle.txt`, rebuilt on the remote
 builder by `scripts/gen_cpp_goldens.sh` against the HaoZeke `addLocks`
 tree (`SKMAP_SRC`). `cargo test --release --test cpp_parity` loads that file.
