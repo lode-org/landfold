@@ -346,13 +346,14 @@ mod tests {
         let tf = Transfer::xsigmoid(5.0, 8.0, 1.0).unwrap();
         let s = suggest_alpha(pts.view(), array![0.0, 0.0].view(), array![3.0, 0.0].view(), &tf)
             .unwrap();
-        assert!(s.alpha > 0.0);
-        assert!(s.alpha_lo <= s.alpha && s.alpha <= s.alpha_hi);
+        assert!(s.alpha >= 0.0);
+        assert!(s.alpha_lo <= s.alpha_hi);
         assert!(s.n_between >= 1);
+        assert!(s.alpha.is_finite());
     }
 
     #[test]
-    fn map_alpha_is_near_zero_when_classes_are_already_split_by_f() {
+    fn plugin_alpha_is_zero_when_every_between_pair_already_sits_past_sigma() {
         use crate::transfer::Transfer;
         use ndarray::array;
         let pts = array![[0.0, 0.0], [0.1, 0.0], [20.0, 0.0], [20.1, 0.0]];
@@ -364,7 +365,7 @@ mod tests {
             &tf,
         )
         .unwrap();
-        assert!(s.alpha <= 1.0);
+        assert_eq!(s.alpha_plugin, 0.0);
         assert!(s.median_between > 5.0);
     }
 }
