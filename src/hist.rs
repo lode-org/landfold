@@ -649,17 +649,28 @@ pub fn fes_from_points(
             "fes coordinate span overflowed".into(),
         ));
     }
-    let px = pad * xspan.max(1e-6);
-    let py = pad * yspan.max(1e-6);
-    if !px.is_finite() || !py.is_finite() {
-        return Err(LandfoldError::Msg(
-            "fes coordinate padding overflowed".into(),
-        ));
-    }
-    let xlo = xmin - px;
-    let xhi = xmax + px;
-    let ylo = ymin - py;
-    let yhi = ymax + py;
+    let (xlo, xhi) = if xspan == 0.0 {
+        degenerate_axis_bounds(xmin, pad)?
+    } else {
+        let px = pad * xspan.max(1e-6);
+        if !px.is_finite() {
+            return Err(LandfoldError::Msg(
+                "fes coordinate padding overflowed".into(),
+            ));
+        }
+        (xmin - px, xmax + px)
+    };
+    let (ylo, yhi) = if yspan == 0.0 {
+        degenerate_axis_bounds(ymin, pad)?
+    } else {
+        let py = pad * yspan.max(1e-6);
+        if !py.is_finite() {
+            return Err(LandfoldError::Msg(
+                "fes coordinate padding overflowed".into(),
+            ));
+        }
+        (ymin - py, ymax + py)
+    };
     if !xlo.is_finite() || !xhi.is_finite() || !ylo.is_finite() || !yhi.is_finite() {
         return Err(LandfoldError::Msg(
             "fes padded coordinate bounds overflowed".into(),
@@ -675,6 +686,50 @@ fn validate_fes_kt(kt: f64) -> Result<()> {
         return Err(LandfoldError::Msg("fes kT must be finite and > 0".into()));
     }
     Ok(())
+}
+
+fn degenerate_axis_bounds(value: f64, pad: f64) -> Result<(f64, f64)> {
+    let half = pad * 1e-6;
+    if half.is_finite() && half > 0.0 {
+        let lo = value - half;
+        let hi = value + half;
+        if lo.is_finite() && hi.is_finite() && lo < hi {
+            return Ok((lo, hi));
+        }
+    }
+    let lo = next_down(value);
+    let hi = next_up(value);
+    if lo < hi {
+        Ok((lo, hi))
+    } else {
+        Err(LandfoldError::Msg(
+            "fes degenerate coordinate bounds cannot be represented".into(),
+        ))
+    }
+}
+
+fn next_down(value: f64) -> f64 {
+    if value == 0.0 {
+        return -f64::from_bits(1);
+    }
+    let bits = value.to_bits();
+    if value.is_sign_positive() {
+        f64::from_bits(bits - 1)
+    } else {
+        f64::from_bits(bits + 1)
+    }
+}
+
+fn next_up(value: f64) -> f64 {
+    if value == 0.0 {
+        return f64::from_bits(1);
+    }
+    let bits = value.to_bits();
+    if value.is_sign_positive() {
+        f64::from_bits(bits + 1)
+    } else {
+        f64::from_bits(bits - 1)
+    }
 }
 
 fn plus_zero(x: f64) -> f64 {
@@ -939,6 +994,16 @@ mod tests {
     fn rejects_overflowing_fes_coordinate_padding() {
         let points = array![[-f64::MAX, 0.0], [f64::MAX, 0.0]];
         assert!(fes_from_points(points.view(), 4, 4, 1.0, 0.05, None).is_err());
+    }
+
+    #[test]
+    fn fes_handles_constant_axes_without_padding() {
+        let points = array![[1.0, 2.0], [1.0, 2.0], [1.0, 2.0]];
+        let fes = fes_from_points(points.view(), 4, 4, 1.0, 0.0, None)
+            .expect("constant axes have a valid minimal span");
+        assert!(fes.x_centers.iter().all(|value| value.is_finite()));
+        assert!(fes.y_centers.iter().all(|value| value.is_finite()));
+        assert!(fes.rho.iter().any(|&value| value > 0.0));
     }
 
     #[test]
