@@ -265,6 +265,13 @@ mod tests {
     }
 
     #[test]
+    fn large_translated_points_keep_small_euclidean_separations() {
+        let points = array![[1.0e16, 0.0], [1.0e16 + 2.0, 0.0]];
+        let distances = pairwise_euclid(points.view()).unwrap();
+        assert_relative_eq!(distances[(0, 1)], 2.0, epsilon = 1e-14);
+    }
+
+    #[test]
     fn rejects_metric_dimension_mismatch_before_pairwise_indexing() {
         let points = array![[0.0, 0.0], [1.0, 0.0]];
         let metric = Periodic::isotropic(1, 1.0).unwrap();
