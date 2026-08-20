@@ -64,15 +64,13 @@ jobs:
         with:
           python-version: "3.x"
       - name: Install bridge dependencies
-        run: python -m pip install --disable-pip-version-check numpy h5py chemparseplot ase polars pytest
-      - name: Build Python extension
-        run: cargo build --locked --features python
-      - name: Test Chemparseplot HDF5 bridge
-        env:
-          PYTHONPATH: target/debug
+        run: python -m pip install --disable-pip-version-check maturin numpy h5py chemparseplot ase polars pytest
+      - name: Build and install Python wheel
         run: |
-          cp target/debug/liblandfold.so target/debug/landfold.so
-          python -m pytest -q tests/python/test_chemparseplot_hdf5.py
+          python -m maturin build --locked --release --out dist
+          python -m pip install dist/*.whl
+      - name: Test Chemparseplot HDF5 bridge
+        run: python -m pytest -q tests/python/test_chemparseplot_hdf5.py
 
   workflow-schema:
     name: Workflow schema
