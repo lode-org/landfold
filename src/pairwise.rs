@@ -9,6 +9,12 @@ use ndarray::{Array1, Array2, ArrayView2};
 use crate::error::Result;
 use crate::metric::{Metric, validate_distance};
 
+fn checked_product(left: usize, right: usize, what: &'static str) -> Result<usize> {
+    left.checked_mul(right).ok_or_else(|| {
+        crate::error::LandfoldError::Msg(format!("{what} dimension product overflowed"))
+    })
+}
+
 fn validate_metric_dim(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<()> {
     match metric.dim() {
         Some(expected) if points.ncols() != expected => {
@@ -65,14 +71,19 @@ pub fn pairwise(points: ArrayView2<f64>, metric: &dyn Metric) -> Result<Array2<f
     if n == 0 {
         return Err(crate::error::LandfoldError::Empty);
     }
+    let matrix_len = checked_product(n, n, "pairwise matrix")?;
     validate_finite_points(points)?;
     validate_metric_dim(points, metric)?;
+    #[cfg(feature = "parallel")]
+    let packed_len = checked_product(n, d, "pairwise point")?;
     let mut out = Array2::<f64>::zeros((n, n));
+    debug_assert_eq!(matrix_len, out.len());
 
     #[cfg(feature = "parallel")]
     {
         use rayon::prelude::*;
         let packed: Vec<f64> = points.iter().copied().collect();
+        debug_assert_eq!(packed_len, packed.len());
         let rows: Vec<Vec<f64>> = (0..n)
             .into_par_iter()
             .map(|i| -> Result<Vec<f64>> {
@@ -125,7 +136,10 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
     if n == 0 {
         return Err(crate::error::LandfoldError::Empty);
     }
+    let matrix_len = checked_product(n, n, "Euclidean pairwise matrix")?;
     validate_finite_points(points)?;
+    #[cfg(feature = "parallel")]
+    let packed_len = checked_product(n, points.ncols(), "Euclidean pairwise point")?;
     let norms: Array1<f64> = points
         .rows()
         .into_iter()
@@ -135,10 +149,12 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
     let gemm_valid =
         norms.iter().all(|&value| value.is_finite()) && gram.iter().all(|&value| value.is_finite());
     let mut out = Array2::<f64>::zeros((n, n));
+    debug_assert_eq!(matrix_len, out.len());
     #[cfg(feature = "parallel")]
     {
         use rayon::prelude::*;
         let packed: Vec<f64> = points.iter().copied().collect();
+        debug_assert_eq!(packed_len, packed.len());
         let gram_s = gram.as_slice().expect("gram contiguous");
         let norms_s = norms.as_slice().expect("norms contiguous");
         let rows: Vec<Vec<f64>> = (0..n)
@@ -206,7 +222,9 @@ pub fn apply_transfer(
             "distance matrix must be finite and nonnegative".into(),
         ));
     }
+    let matrix_len = checked_product(n, n, "transformed distance matrix")?;
     let mut transformed = Array2::<f64>::zeros((n, n));
+    debug_assert_eq!(matrix_len, transformed.len());
     let diagonal = t.try_fdf(0.0)?.0;
     for i in 0..n {
         transformed[(i, i)] = diagonal;
@@ -226,6 +244,12 @@ mod tests {
     use crate::metric::{Euclid, Periodic};
     use approx::assert_relative_eq;
     use ndarray::array;
+
+    #[test]
+    fn rejects_dimension_product_overflow() {
+        assert!(checked_product(usize::MAX, 2, "test").is_err());
+        assert_eq!(checked_product(usize::MAX, 1, "test").unwrap(), usize::MAX);
+    }
 
     #[test]
     fn euclid_gemm_matches_metric() {
