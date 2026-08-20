@@ -7,7 +7,7 @@
 
 use std::{collections::BTreeMap, path::Path};
 
-use hdf5::types::VarLenUnicode;
+use hdf5::types::{VarLenAscii, VarLenUnicode};
 use ndarray::Array2;
 
 use crate::trajectory::FrameBatch;
@@ -199,23 +199,25 @@ fn read_atom_symbols(
     if dataset.ndim() != 1 || dataset.shape()[0] != expected {
         return Err(LandfoldError::Shape("HDF5 atom symbol dataset shape"));
     }
-    let values = dataset
-        .read_raw::<VarLenUnicode>()
-        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
-    if values
-        .iter()
-        .any(|symbol| symbol.as_str().trim().is_empty())
-    {
+    let symbols = if let Ok(values) = dataset.read_raw::<VarLenUnicode>() {
+        values
+            .into_iter()
+            .map(|symbol| symbol.as_str().to_owned())
+            .collect::<Vec<_>>()
+    } else {
+        dataset
+            .read_raw::<VarLenAscii>()
+            .map_err(|error| LandfoldError::Parse(error.to_string()))?
+            .into_iter()
+            .map(|symbol| symbol.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+    if symbols.iter().any(|symbol| symbol.trim().is_empty()) {
         return Err(LandfoldError::Msg(
             "HDF5 atom symbols must be nonempty".into(),
         ));
     }
-    Ok(Some(
-        values
-            .into_iter()
-            .map(|symbol| symbol.as_str().to_owned())
-            .collect(),
-    ))
+    Ok(Some(symbols))
 }
 
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
@@ -346,6 +348,36 @@ mod tests {
             batch.frame(1).expect("second frame").row(0).to_vec(),
             vec![6.0, 7.0, 8.0]
         );
+    }
+
+    #[test]
+    fn reads_ascii_atom_symbols() {
+        let path = std::env::temp_dir().join(format!("landfold-hdf5-ascii-{}.h5", std::process::id()));
+        let file = hdf5::File::create(&path).expect("create HDF5 fixture");
+        file.create_group("path")
+            .expect("create path group")
+            .new_dataset::<f64>()
+            .shape((1, 6))
+            .create("images")
+            .expect("create images")
+            .write_raw(&[0.0; 6])
+            .expect("write images");
+        file.create_group("metadata")
+            .expect("create metadata group")
+            .new_dataset::<VarLenAscii>()
+            .shape(2)
+            .create("atom_symbols")
+            .expect("create atom symbols")
+            .write_raw(&[
+                VarLenAscii::from_ascii("C").expect("valid symbol"),
+                VarLenAscii::from_ascii("H").expect("valid symbol"),
+            ])
+            .expect("write atom symbols");
+        drop(file);
+
+        let batch = read_hdf5_batch(&path).expect("read ASCII HDF5 fixture");
+        std::fs::remove_file(path).expect("remove HDF5 fixture");
+        assert_eq!(batch.atom_symbols, Some(vec!["C".into(), "H".into()]));
     }
 
     #[test]
