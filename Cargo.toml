@@ -10,7 +10,7 @@ license = "MIT"
 keywords = ["dimensionality-reduction", "mds", "free-energy", "comp-chem"]
 categories = ["science", "mathematics"]
 authors = ["Rohit Goswami <rgoswami@ieee.org>"]
-exclude = ["oracle/*", "examples/cosmo-lj38/out/*"]
+exclude = ["oracle/*", "examples/cosmo-lj38/out/*", ".grok/*"]
 
 [lib]
 name = "landfold"
@@ -46,7 +46,7 @@ xtsci-optimize = {
     git = "https://github.com/HaoZeke/xtsci-optimize.git",
     rev = "6b4a7fc",
 }
-# clap is used only by the landfold binary in this single package (landfold-w1p0).
+# clap is used only by the landfold binary in this single package.
 clap = { version = "4.5", features = ["derive"] }
 # dlpk 0.4.1 optional pyo3 is 0.29. python feature matches that major.
 # dlpk/pyo3 stays off so this crate owns the single pyo3-ffi links=python edge.
