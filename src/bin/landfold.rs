@@ -15,7 +15,7 @@ use landfold::{
     L1, Stretch,
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
     Transfer, coordination_histogram, embed, embed_sigma_schedule, joint_pairwise_hist,
-    mds_from_points, pairwise,
+    mds_from_points, pairwise, suggest_alpha,
     pairwise_euclid, project_many_report, read_points, select_landmarks, suggest_scale,
     write_plumed, write_points,
 };
@@ -89,8 +89,9 @@ enum Cmd {
         /// Stretch HD along `ref_a - ref_b` (two D-vectors, one per line)
         #[arg(long = "stretch")]
         stretch: Option<PathBuf>,
-        #[arg(long = "alpha", default_value_t = 3.0)]
-        alpha: f64,
+        /// Stretch weight. Default: send median between-class D to σ.
+        #[arg(long = "alpha")]
+        alpha: Option<f64>,
         /// Pooled within-class Mahalanobis using the two `--stretch` refs
         #[arg(long)]
         fisher: bool,
@@ -142,8 +143,8 @@ enum Cmd {
         similarity: bool,
         #[arg(long = "stretch")]
         stretch: Option<PathBuf>,
-        #[arg(long = "alpha", default_value_t = 3.0)]
-        alpha: f64,
+        #[arg(long = "alpha")]
+        alpha: Option<f64>,
         #[arg(long)]
         fisher: bool,
         #[arg(long = "fun-hd", default_value = "identity", help = FUN_SPEC_HELP)]
@@ -433,6 +434,7 @@ fn main() -> landfold::Result<()> {
                         .collect();
                     Box::new(Fisher::from_refs(&pts, &a, &b, 1e-3)?)
                 } else {
+                    let alpha = resolve_alpha(set.points.view(), &a, &b, &fun_hd, alpha)?;
                     Box::new(Stretch::from_refs(&a, &b, alpha)?)
                 }
             } else if fisher {
@@ -548,6 +550,7 @@ fn main() -> landfold::Result<()> {
                         .collect();
                     Box::new(Fisher::from_refs(&pts, &a, &b, 1e-3)?)
                 } else {
+                    let alpha = resolve_alpha(hi.points.view(), &a, &b, &fun_hd, alpha)?;
                     Box::new(Stretch::from_refs(&a, &b, alpha)?)
                 }
             } else if fisher {
@@ -847,6 +850,45 @@ fn main() -> landfold::Result<()> {
         }
     }
     Ok(())
+}
+
+fn resolve_alpha(
+    points: ndarray::ArrayView2<f64>,
+    a: &[f64],
+    b: &[f64],
+    fun_hd: &str,
+    explicit: Option<f64>,
+) -> landfold::Result<f64> {
+    if let Some(v) = explicit {
+        if !v.is_finite() || v < 0.0 {
+            return Err(landfold::LandfoldError::Parse(
+                "--alpha must be finite and nonnegative".into(),
+            ));
+        }
+        return Ok(v);
+    }
+    let sigma = Transfer::from_cli(fun_hd)?
+        .xsigmoid_params()
+        .map(|(s, _, _)| s)
+        .ok_or_else(|| {
+            landfold::LandfoldError::Parse(
+                "--stretch without --alpha needs a Ceriotti --fun-hd so sigma is known".into(),
+            )
+        })?;
+    let ra = ndarray::Array1::from(a.to_vec());
+    let rb = ndarray::Array1::from(b.to_vec());
+    let s = suggest_alpha(points, ra.view(), rb.view(), sigma)?;
+    writeln!(
+        io::stderr(),
+        "# stretch alpha {}  sigma {}  median_within {}  median_between {}  pairs {}/{}",
+        s.alpha,
+        s.sigma,
+        s.median_within,
+        s.median_between,
+        s.n_used,
+        s.n_between
+    )?;
+    Ok(s.alpha)
 }
 
 fn minmax<I: Iterator<Item = f64>>(it: I) -> (f64, f64) {

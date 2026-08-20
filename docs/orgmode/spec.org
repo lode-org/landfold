@@ -22,7 +22,10 @@ Gonzalez landmarks, joint \(P(D,d)\)). Extra transfers (=imq=,
 figure beats the Ceriotti panels on the same data.
 
 =landfold dist --suggest= reads \(\sigma\) off the CDF knee
-(JCTC 2013 Appendix A). Torgerson / Halko rangefinder MDS
+(JCTC 2013 Appendix A). Stretch \(\alpha\) is slaved to that
+\(\sigma\): it is the median of \((\sigma^2-D_0^2)/p^2\) over
+between-class pairs so typical fcc–ico distances sit at the
+sigmoid inflection. Torgerson / Halko rangefinder MDS
 (10.1137/090771806) remains the linearised one-shot arm.
 
 | Layer | C++ sketch-map | landfold |

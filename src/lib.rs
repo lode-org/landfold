@@ -76,7 +76,7 @@ pub use readcon::{
 };
 pub use provenance::{EON_COMPATIBILITY_SCHEMA, EngineCompatibility, PROVENANCE_SCHEMA, Provenance};
 pub use replica::ReplicaOpts;
-pub use scale::{ScaleReport, suggest_scale};
+pub use scale::{ScaleReport, StretchReport, suggest_alpha, suggest_scale};
 pub use search::StochOpts;
 pub use stress::{Stress, StressEval, query_chi};
 pub use trajectory::FrameBatch;
