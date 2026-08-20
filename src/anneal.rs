@@ -82,6 +82,18 @@ pub(crate) fn urand(state: &mut u64) -> f64 {
     (splitmix(state) as f64) * (1.0 / ((u64::MAX as f64) + 1.0))
 }
 
+pub(crate) fn metropolis_probability(current: f64, proposal: f64, temp: f64) -> f64 {
+    if proposal <= current {
+        return 1.0;
+    }
+    let log_probability = (current - proposal) / temp;
+    if log_probability.is_nan() {
+        0.0
+    } else {
+        log_probability.exp().min(1.0)
+    }
+}
+
 /// Axis-aligned Metropolis SA on packed coordinates, then optional CG.
 pub fn minimize_anneal(
     stress: &Stress,
@@ -111,11 +123,7 @@ pub fn minimize_anneal(
             let mut npos = pos.clone();
             npos[iu] += step[iu] * (urand(&mut rng) - 0.5);
             let nnrg = stress.try_eval(npos.view(), d)?.value;
-            let accept_p = if nnrg <= nrg {
-                1.0
-            } else {
-                ((nrg - nnrg) / temp).exp()
-            };
+            let accept_p = metropolis_probability(nrg, nnrg, temp);
             if urand(&mut rng) <= accept_p {
                 accept[iu] += 1;
                 pos = npos;
@@ -192,6 +200,13 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn bounds_metropolis_probability_for_extreme_finite_values() {
+        assert_eq!(metropolis_probability(-f64::MAX, f64::MAX, 1.0), 0.0);
+        assert_eq!(metropolis_probability(f64::MAX, -f64::MAX, 1.0), 1.0);
+        assert!(metropolis_probability(0.0, 1.0, 1.0).is_finite());
     }
 
     #[test]

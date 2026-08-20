@@ -8,7 +8,7 @@
 
 use ndarray::ArrayView1;
 
-use crate::anneal::urand;
+use crate::anneal::{metropolis_probability, urand};
 use crate::cg::{CgOpts, CgReport, minimize, validate_packed_init};
 use crate::search::splitmix;
 use crate::stress::Stress;
@@ -79,16 +79,7 @@ fn metropolis_sweep(
         let mut npos = pos.clone();
         npos[iu] += step * (urand(rng) - 0.5);
         let nnrg = stress.try_eval(npos.view(), d)?.value;
-        let accept = if nnrg <= *nrg {
-            1.0
-        } else {
-            let log_probability = (*nrg - nnrg) / temp;
-            if log_probability.is_nan() {
-                0.0
-            } else {
-                log_probability.exp().min(1.0)
-            }
-        };
+        let accept = metropolis_probability(*nrg, nnrg, temp);
         if urand(rng) <= accept {
             *pos = npos;
             *nrg = nnrg;
