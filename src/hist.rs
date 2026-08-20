@@ -1035,6 +1035,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_overflowing_fes_density_values() {
+        let mut h = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        h.samples = 1.0;
+        h.counts[(0, 0)] = f64::MAX;
+        assert!(FreeEnergy::from_histogram(&h, 1.0).is_err());
+    }
+
+    #[test]
     fn fes_handles_constant_axes_without_padding() {
         let points = array![[1.0, 2.0], [1.0, 2.0], [1.0, 2.0]];
         let fes = fes_from_points(points.view(), 4, 4, 1.0, 0.0, None)
