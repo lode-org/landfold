@@ -105,29 +105,64 @@ pub fn minimize_stochastic(
             let (fld, dfld) = stress.tfun_ld.try_fdf(ld)?;
             let wij = stress.weights.as_ref().map(|w| w[(lo, hi)]).unwrap_or(1.0);
             tw += wij;
+            if !tw.is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "stochastic batch weight accumulation overflowed".into(),
+                ));
+            }
             let df = stress.fhd[(lo, hi)] - fld;
             let dd = stress.hd[(lo, hi)] - ld;
             let dld = if ld < OVERLAP { OVERLAP } else { ld };
             let gij = (df * dfld * omix + stress.imix * dd) / dld * wij;
+            if !gij.is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "stochastic batch gradient overflowed".into(),
+                ));
+            }
             for h in 0..d {
                 let delta = xi[h] - xj[h];
                 grad[lo * d + h] += gij * delta;
                 grad[hi * d + h] -= gij * delta;
             }
         }
+        if grad.iter().any(|&value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "stochastic batch gradient accumulation overflowed".into(),
+            ));
+        }
         if tw <= 0.0 {
             tw = 1.0;
         }
         let scale = -2.0 / tw;
+        if !scale.is_finite() {
+            return Err(crate::error::LandfoldError::Msg(
+                "stochastic batch normalization overflowed".into(),
+            ));
+        }
         let bias1 = 1.0 - BETA1.powi((t + 1) as i32);
         let bias2 = 1.0 - BETA2.powi((t + 1) as i32);
         for k in 0..pos.len() {
             let gradient = scale * grad[k];
+            if !gradient.is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "stochastic update gradient became non-finite".into(),
+                ));
+            }
             first_moment[k] = BETA1 * first_moment[k] + (1.0 - BETA1) * gradient;
             second_moment[k] = BETA2 * second_moment[k] + (1.0 - BETA2) * gradient * gradient;
+            if !first_moment[k].is_finite() || !second_moment[k].is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "stochastic optimizer moments became non-finite".into(),
+                ));
+            }
             let mean = first_moment[k] / bias1;
             let variance = (second_moment[k] / bias2).sqrt();
             pos[k] -= opts.step0 * mean / (variance + EPSILON);
+            if !pos[k].is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "stochastic optimizer coordinates became non-finite".into(),
+                ));
+            }
         }
     }
     let value = stress.try_eval(pos.view(), d)?.value;
@@ -172,6 +207,27 @@ mod tests {
             step0: 0.1,
         };
         assert!(minimize_stochastic(&stress, array![0.0, 1.0e154].view(), 1, &opts).is_err());
+    }
+
+    #[test]
+    fn rejects_overflowing_sampled_pair_weight_accumulation() {
+        let hd = Array2::from_shape_vec((2, 2), vec![0.0, 1.0, 1.0, 0.0]).unwrap();
+        let stress = Stress::new(
+            hd.clone(),
+            hd,
+            Transfer::identity(),
+            1.0,
+            None,
+            Some(Array2::from_elem((2, 2), f64::MAX)),
+        )
+        .unwrap();
+        let opts = StochOpts {
+            steps: 1,
+            batch: 2,
+            seed: 1,
+            step0: 0.1,
+        };
+        assert!(minimize_stochastic(&stress, array![0.0, 1.0].view(), 1, &opts).is_err());
     }
 
     #[test]
