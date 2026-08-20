@@ -82,7 +82,12 @@ fn metropolis_sweep(
         let accept = if nnrg <= *nrg {
             1.0
         } else {
-            ((*nrg - nnrg) / temp).exp()
+            let log_probability = (*nrg - nnrg) / temp;
+            if log_probability.is_nan() {
+                0.0
+            } else {
+                log_probability.exp().min(1.0)
+            }
         };
         if urand(rng) <= accept {
             *pos = npos;
@@ -90,6 +95,30 @@ fn metropolis_sweep(
         }
     }
     Ok(())
+}
+
+fn temperature_ladder(opts: &ReplicaOpts) -> crate::error::Result<Vec<f64>> {
+    let t0 = opts.temp_init.max(1e-300);
+    let t1 = opts.temp_final.max(1e-300);
+    let denominator = (opts.replicas - 1) as f64;
+    let log_step = (t1.ln() - t0.ln()) / denominator;
+    if !log_step.is_finite() {
+        return Err(crate::error::LandfoldError::Msg(
+            "replica temperature schedule is not representable".into(),
+        ));
+    }
+    (0..opts.replicas)
+        .map(|index| {
+            let temperature = (t0.ln() + log_step * index as f64).exp();
+            if temperature.is_finite() && temperature > 0.0 {
+                Ok(temperature)
+            } else {
+                Err(crate::error::LandfoldError::Msg(
+                    "replica temperature schedule is not representable".into(),
+                ))
+            }
+        })
+        .collect()
 }
 
 /// Geometric ladder of temperatures, Metropolis sweeps, adjacent swaps.
@@ -103,18 +132,7 @@ pub fn minimize_replica(
     validate_packed_init(init, stress.n, d)?;
     opts.validate()?;
     let nr = opts.replicas;
-    let t0 = opts.temp_init.max(1e-300);
-    let t1 = opts.temp_final.max(1e-300);
-    let mut temps = vec![0.0; nr];
-    if nr == 1 {
-        temps[0] = t0;
-    } else {
-        let ratio = (t1 / t0).powf(1.0 / (nr - 1) as f64);
-        temps[0] = t0;
-        for i in 1..nr {
-            temps[i] = temps[i - 1] * ratio;
-        }
-    }
+    let temps = temperature_ladder(opts)?;
     let mut pos: Vec<ndarray::Array1<f64>> = (0..nr).map(|_| init.to_owned()).collect();
     let mut nrg: Vec<f64> = pos
         .iter()
@@ -150,7 +168,14 @@ pub fn minimize_replica(
             let beta_i = 1.0 / temps[i];
             let beta_j = 1.0 / temps[i + 1];
             let delta = (beta_i - beta_j) * (nrg[i] - nrg[i + 1]);
-            if delta >= 0.0 || urand(&mut rng) < delta.exp() {
+            let swap_probability = if delta.is_nan() {
+                0.0
+            } else if delta >= 0.0 {
+                1.0
+            } else {
+                delta.exp()
+            };
+            if urand(&mut rng) < swap_probability {
                 pos.swap(i, i + 1);
                 nrg.swap(i, i + 1);
             }
@@ -235,5 +260,28 @@ mod tests {
             ..ReplicaOpts::default()
         };
         assert!(minimize_replica(&stress, ndarray::array![0.0, 1.0e154].view(), 1, &opts, &CgOpts::default()).is_err());
+    }
+
+    #[test]
+    fn supports_extreme_representable_temperature_endpoints() {
+        let hd = ndarray::array![[0.0, 1.0], [1.0, 0.0]];
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 1.0, None, None).unwrap();
+        let opts = ReplicaOpts {
+            replicas: 2,
+            steps: 0,
+            temp_init: 1.0e-308,
+            temp_final: 1.0e308,
+            polish: false,
+            ..ReplicaOpts::default()
+        };
+        let report = minimize_replica(
+            &stress,
+            ndarray::array![0.0, 1.0].view(),
+            1,
+            &opts,
+            &CgOpts::default(),
+        )
+        .expect("log-space temperature ladder should preserve finite endpoints");
+        assert!(report.value.is_finite());
     }
 }
