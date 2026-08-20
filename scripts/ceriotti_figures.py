@@ -59,6 +59,49 @@ def procrustes(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return ac @ r + b.mean(axis=0)
 
 
+def fes_hist(xy: np.ndarray, nx: int, ny: int, kt: float):
+    """Return a normalized histogram free-energy surface for compatibility."""
+    if not np.isfinite(kt) or kt <= 0.0:
+        raise ValueError("kt must be finite and > 0")
+    if nx <= 0 or ny <= 0:
+        raise ValueError("histogram dimensions must be > 0")
+    if xy.ndim != 2 or xy.shape[1] < 2 or xy.shape[0] == 0:
+        raise ValueError("xy must contain at least one two-dimensional point")
+    x = xy[:, 0]
+    y = xy[:, 1]
+    pad = 0.05
+    xmin, xmax = x.min(), x.max()
+    ymin, ymax = y.min(), y.max()
+    dx, dy = xmax - xmin, ymax - ymin
+    if dx == 0.0:
+        dx = max(abs(xmin), 1.0)
+        xmin -= 0.5 * dx
+        xmax += 0.5 * dx
+    if dy == 0.0:
+        dy = max(abs(ymin), 1.0)
+        ymin -= 0.5 * dy
+        ymax += 0.5 * dy
+    xmin -= pad * dx
+    xmax += pad * dx
+    ymin -= pad * dy
+    ymax += pad * dy
+    histogram, xedges, yedges = np.histogram2d(
+        x,
+        y,
+        bins=[nx, ny],
+        range=[[xmin, xmax], [ymin, ymax]],
+    )
+    density = histogram.T
+    if density.max() > 0.0:
+        density = density / density.max()
+    fes = np.full_like(density, np.nan, dtype=float)
+    occupied = density > 0.0
+    fes[occupied] = -kt * np.log(density[occupied])
+    if np.isfinite(fes).any():
+        fes -= np.nanmin(fes)
+    return xedges, yedges, fes
+
+
 def _fill_mask_holes(mask: np.ndarray) -> np.ndarray:
     ny, nx = mask.shape
     reach = np.zeros_like(mask, dtype=bool)
