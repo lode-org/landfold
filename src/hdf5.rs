@@ -121,4 +121,24 @@ mod tests {
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert!(error.to_string().contains("finite"));
     }
+
+    #[test]
+    fn reads_float32_images_into_f64_coordinates() {
+        let path =
+            std::env::temp_dir().join(format!("landfold-hdf5-f32-{}.h5", std::process::id()));
+        let file = hdf5::File::create(&path).expect("create HDF5 fixture");
+        let path_group = file.create_group("path").expect("create path group");
+        path_group
+            .new_dataset::<f32>()
+            .shape((1, 3))
+            .create("images")
+            .expect("create float32 images")
+            .write_raw(&[1.25_f32, 2.5, 3.75])
+            .expect("write float32 images");
+        drop(file);
+
+        let batch = read_hdf5_batch(&path).expect("read float32 HDF5 fixture");
+        std::fs::remove_file(path).expect("remove HDF5 fixture");
+        assert_eq!(batch.frame(0).expect("first frame").row(0).to_vec(), [1.25, 2.5, 3.75]);
+    }
 }

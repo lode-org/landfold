@@ -41,7 +41,7 @@ initialiser; `--distances` prints pairwise distances of the embedding
 grid and optional `--refine` Polak-Ribiere steps; `--print-error`
 appends χ and the nearest-landmark distance. `landfold landmarks` is
 Gonzalez farthest-point sampling (`--voronoi` for Voronoi masses).
-`landfold fes` writes `F = -ln(rho/rhomax)` as CSV/SVG; `--frames`
+`landfold fes` writes `F = -kT ln(rho/rhomax)` as CSV/SVG; `--frames`
 plus `--cn-csv` is the coordination histogram of the cluster-FES
 figure class. `--blur`, `--floor`, and `--fmax` match that panel.
 

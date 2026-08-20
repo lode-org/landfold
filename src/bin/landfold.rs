@@ -3,7 +3,7 @@
 //! `project` is a coarse-then-fine χ grid plus `--refine` steps
 //! (Ceriotti, Tribello, Parrinello, *J. Chem. Theory Comput.* **9**,
 //! 1521 (2013), <https://doi.org/10.1021/ct3010563>). `landmarks` is
-//! Gonzalez farthest-point sampling. `fes` writes `F = -ln(rho/rhomax)`
+//! Gonzalez farthest-point sampling. `fes` writes `F = -kT ln(rho/rhomax)`
 //! as CSV/SVG and optional coordination histograms.
 
 use std::io::{self, Write};
@@ -167,7 +167,7 @@ enum Cmd {
         #[arg(long)]
         distances: bool,
     },
-    /// 2-D F = -ln(rho/rhomax) plus optional coordination histogram
+    /// 2-D F = -kT ln(rho/rhomax) plus optional coordination histogram
     Fes {
         #[arg(long)]
         input: Option<PathBuf>,
