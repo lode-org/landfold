@@ -39,13 +39,13 @@ thiserror = "2"
 eindir-core = {
     version = "0.6.0",
     git = "https://github.com/HaoZeke/eindir.git",
-    rev = "f3c42130bb389ba6cd6e4cfdc8b2e182f4a764e9",
+    rev = "513b8b7fdfaf63cca0b94b2f3316cf2c19a8daaa",
     features = ["capi"],
 }
 xtsci-optimize = {
     version = "0.1.0",
     git = "https://github.com/HaoZeke/xtsci-optimize.git",
-    rev = "2c22d0619cba31026d6f7fa1e4518bb1522417d4",
+    rev = "2c93ae914bac4ba962e670f0d43b234482374a34",
 }
 # clap is used only by the landfold binary in this single package.
 clap = { version = "4.5", features = ["derive"] }

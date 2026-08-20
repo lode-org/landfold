@@ -525,7 +525,7 @@ dependencies = [
 [[package]]
 name = "eindir-core"
 version = "0.6.0"
-source = "git+https://github.com/HaoZeke/eindir.git?rev=f3c42130bb389ba6cd6e4cfdc8b2e182f4a764e9#f3c42130bb389ba6cd6e4cfdc8b2e182f4a764e9"
+source = "git+https://github.com/HaoZeke/eindir.git?rev=513b8b7fdfaf63cca0b94b2f3316cf2c19a8daaa#513b8b7fdfaf63cca0b94b2f3316cf2c19a8daaa"
 dependencies = [
  "cbindgen",
  "dlpk 0.1.5",
@@ -2154,7 +2154,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 [[package]]
 name = "xtsci-optimize"
 version = "0.1.0"
-source = "git+https://github.com/HaoZeke/xtsci-optimize.git?rev=2c22d0619cba31026d6f7fa1e4518bb1522417d4#2c22d0619cba31026d6f7fa1e4518bb1522417d4"
+source = "git+https://github.com/HaoZeke/xtsci-optimize.git?rev=2c93ae914bac4ba962e670f0d43b234482374a34#2c93ae914bac4ba962e670f0d43b234482374a34"
 dependencies = [
  "cbindgen",
  "dlpk 0.1.5",
