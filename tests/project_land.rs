@@ -570,6 +570,8 @@ fn cli_version_and_help_name_the_pyo3_pin() {
     assert!(embed.status.success());
     let e = String::from_utf8(embed.stdout).unwrap();
     assert!(e.contains("--stoch"), "{e}");
+    assert!(e.contains("--trust"), "{e}");
+    assert!(e.contains("--box"), "{e}");
     assert!(
         !e.to_ascii_lowercase().contains("pyo3"),
         "embed CLI does not link python: {e}"
