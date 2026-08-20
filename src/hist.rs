@@ -53,6 +53,22 @@ impl Histogram1d {
                 "1d histogram edges must be uniformly spaced".into(),
             ));
         }
+        let total = self
+            .counts
+            .iter()
+            .copied()
+            .chain([self.below, self.above])
+            .try_fold(0.0, |total, value| {
+                let next = total + value;
+                next.is_finite().then_some(next).ok_or_else(|| {
+                    LandfoldError::Msg("1d histogram sample total overflowed".into())
+                })
+            })?;
+        if !totals_match(self.samples, total) {
+            return Err(LandfoldError::Msg(
+                "1d histogram samples do not match accumulated counts".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -313,6 +329,17 @@ impl Histogram2d {
         {
             return Err(LandfoldError::Msg(
                 "2d histogram counts must be finite and nonnegative".into(),
+            ));
+        }
+        let total = self.counts.iter().copied().try_fold(0.0, |total, value| {
+            let next = total + value;
+            next.is_finite().then_some(next).ok_or_else(|| {
+                LandfoldError::Msg("2d histogram sample total overflowed".into())
+            })
+        })?;
+        if !totals_match(self.samples, total) {
+            return Err(LandfoldError::Msg(
+                "2d histogram samples do not match accumulated counts".into(),
             ));
         }
         Ok(())
@@ -738,6 +765,11 @@ fn uniform_edges(edges: &Array1<f64>) -> bool {
     })
 }
 
+fn totals_match(expected: f64, actual: f64) -> bool {
+    let scale = expected.abs().max(actual.abs()).max(1.0);
+    (expected - actual).abs() <= 64.0 * f64::EPSILON * scale
+}
+
 fn degenerate_axis_bounds(value: f64, pad: f64, bins: usize) -> Result<(f64, f64)> {
     let scale = value.abs().max(1.0);
     let half = (pad * 1e-6).max(scale * 1e-6);
@@ -1094,10 +1126,21 @@ mod tests {
 
     #[test]
     fn rejects_overflowing_fes_density_values() {
-        let mut h = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        let mut h = Histogram2d::new(0.0, 1e-154, 2, 0.0, 1e-154, 2).unwrap();
         h.samples = 1.0;
-        h.counts[(0, 0)] = f64::MAX;
+        h.counts[(0, 0)] = 1.0;
         assert!(FreeEnergy::from_histogram(&h, 1.0).is_err());
+    }
+
+    #[test]
+    fn rejects_inconsistent_histogram_sample_totals() {
+        let mut one = Histogram1d::new(0.0, 1.0, 2).unwrap();
+        one.samples = 1.0;
+        assert!(one.add(0.5, 0.0).is_err());
+
+        let mut two = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
+        two.samples = 1.0;
+        assert!(FreeEnergy::from_histogram(&two, 1.0).is_err());
     }
 
     #[test]
