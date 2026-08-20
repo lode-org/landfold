@@ -234,8 +234,8 @@ mod tests {
 
     #[test]
     fn revalidates_mutated_public_state_before_flattening() {
-        let mut batch = FrameBatch::from_positions(vec![array![[0.0, 0.0, 0.0]]])
-            .expect("valid trajectory");
+        let mut batch =
+            FrameBatch::from_positions(vec![array![[0.0, 0.0, 0.0]]]).expect("valid trajectory");
         batch.atom_ids.push(1);
         assert!(batch.flattened_points().is_err());
     }
