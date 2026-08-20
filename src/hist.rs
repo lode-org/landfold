@@ -1029,6 +1029,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_nonuniform_histogram_edges() {
+        let mut one = Histogram1d::new(0.0, 1.0, 4).unwrap();
+        one.edges[1] = 0.1;
+        assert!(one.add(0.2, 1.0).is_err());
+
+        let mut two = Histogram2d::new(0.0, 1.0, 4, 0.0, 1.0, 4).unwrap();
+        two.x_edges[1] = 0.1;
+        assert!(two.blur(0.0).is_err());
+    }
+
+    #[test]
     fn rejects_overflowing_fes_coordinate_padding() {
         let points = array![[-f64::MAX, 0.0], [f64::MAX, 0.0]];
         assert!(fes_from_points(points.view(), 4, 4, 1.0, 0.05, None).is_err());
