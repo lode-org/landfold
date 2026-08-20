@@ -46,6 +46,11 @@ pub struct EngineCompatibility {
     pub abi_minor: u16,
     pub layout_revision: u32,
     pub build_identity: String,
+    pub readcon_spec_version: Option<u16>,
+    pub readcon_min_version: Option<String>,
+    pub eon_schema_min_version: Option<String>,
+    pub rgpycrumbs_min_version: Option<String>,
+    pub chemparseplot_min_version: Option<String>,
 }
 
 impl EngineCompatibility {
@@ -66,6 +71,39 @@ impl EngineCompatibility {
                 .get(key)
                 .and_then(Value::as_u64)
                 .ok_or_else(|| format!("eOn engine compatibility requires integer field {key}"))
+        };
+        let optional_integer = |key: &str| -> Result<Option<u16>, String> {
+            object
+                .get(key)
+                .map(|value| {
+                    value
+                        .as_u64()
+                        .ok_or_else(|| {
+                            format!("eOn engine compatibility field {key} must be an integer")
+                        })
+                        .and_then(|value| {
+                            u16::try_from(value).map_err(|_| {
+                                format!("eOn engine compatibility field {key} exceeds UInt16")
+                            })
+                        })
+                })
+                .transpose()
+        };
+        let optional_text = |key: &str| -> Result<Option<String>, String> {
+            object
+                .get(key)
+                .map(|value| {
+                    value
+                        .as_str()
+                        .filter(|value| !value.trim().is_empty())
+                        .map(str::to_owned)
+                        .ok_or_else(|| {
+                            format!(
+                                "eOn engine compatibility field {key} must be a non-empty string"
+                            )
+                        })
+                })
+                .transpose()
         };
         let schema = text("schema")?;
         if schema != EON_COMPATIBILITY_SCHEMA {
@@ -91,11 +129,16 @@ impl EngineCompatibility {
             layout_revision: u32::try_from(layout_revision)
                 .map_err(|_| "layoutRevision exceeds UInt32".to_owned())?,
             build_identity: text("buildIdentity")?,
+            readcon_spec_version: optional_integer("readconSpecVersion")?,
+            readcon_min_version: optional_text("readconMinVersion")?,
+            eon_schema_min_version: optional_text("eonSchemaMinVersion")?,
+            rgpycrumbs_min_version: optional_text("rgpycrumbsMinVersion")?,
+            chemparseplot_min_version: optional_text("chemparseplotMinVersion")?,
         })
     }
 
     pub fn to_json(&self) -> Value {
-        json!({
+        let mut value = json!({
             "schema": self.schema,
             "engineId": self.engine_id,
             "protocolFamily": self.protocol_family,
@@ -105,7 +148,23 @@ impl EngineCompatibility {
             "abiMinor": self.abi_minor,
             "layoutRevision": self.layout_revision,
             "buildIdentity": self.build_identity,
-        })
+        });
+        if let Some(version) = self.readcon_spec_version {
+            value["readconSpecVersion"] = json!(version);
+        }
+        if let Some(version) = &self.readcon_min_version {
+            value["readconMinVersion"] = json!(version);
+        }
+        if let Some(version) = &self.eon_schema_min_version {
+            value["eonSchemaMinVersion"] = json!(version);
+        }
+        if let Some(version) = &self.rgpycrumbs_min_version {
+            value["rgpycrumbsMinVersion"] = json!(version);
+        }
+        if let Some(version) = &self.chemparseplot_min_version {
+            value["chemparseplotMinVersion"] = json!(version);
+        }
+        value
     }
 }
 
@@ -259,6 +318,19 @@ mod tests {
             "layoutRevision": 3,
             "buildIdentity": "eon-2.11.1+abc123"
         })
+    }
+
+    #[test]
+    fn eon_engine_stamp_round_trips_stack_floor_fields() {
+        let mut stamp = eon_stamp();
+        stamp["readconSpecVersion"] = json!(3);
+        stamp["readconMinVersion"] = json!("0.14.7");
+        stamp["eonSchemaMinVersion"] = json!("0.2.0");
+        stamp["rgpycrumbsMinVersion"] = json!("1.10.4");
+        stamp["chemparseplotMinVersion"] = json!("1.9.17");
+        let compatibility = EngineCompatibility::from_json(&stamp).unwrap();
+        assert_eq!(compatibility.readcon_spec_version, Some(3));
+        assert_eq!(compatibility.to_json(), stamp);
     }
 
     #[test]
