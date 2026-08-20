@@ -258,7 +258,69 @@ impl Stress {
         }
         let evaluation = self.eval(coords, d);
         if !evaluation.value.is_finite()
-            || evaluation.grad.iter().any(|&component| !component.is_finite())
+            || evaluation
+                .grad
+                .iter()
+                .any(|&component| !component.is_finite())
+        {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress evaluation is non-finite".into(),
+            ));
+        }
+        Ok(evaluation)
+    }
+
+    /// Same checks as [`Self::try_eval`], serial kernel only.
+    ///
+    /// HiGHS starts an OpenMP pool. A later Rayon `eval_parallel`
+    /// deadlocks, so the HiGHS arm evaluates χ on one thread.
+    pub(crate) fn try_eval_serial(
+        &self,
+        coords: ArrayView1<f64>,
+        d: usize,
+    ) -> crate::error::Result<StressEval> {
+        self.validate_state()?;
+        if d == 0 {
+            return Err(crate::error::LandfoldError::LowDim {
+                low: 0,
+                high: self.n,
+            });
+        }
+        let coordinate_len = self.n.checked_mul(d).ok_or_else(|| {
+            crate::error::LandfoldError::Msg(
+                "stress coordinate dimension product overflowed".into(),
+            )
+        })?;
+        if coords.len() != coordinate_len {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress coordinates must have length n * d",
+            ));
+        }
+        if coords.as_slice().is_none() {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress coordinates must be contiguous",
+            ));
+        }
+        if coords.iter().any(|&value| !value.is_finite()) {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress coordinates must be finite".into(),
+            ));
+        }
+        let packed = coords.as_slice().expect("contiguous coordinates");
+        for i in 0..self.n {
+            let xi = &packed[i * d..(i + 1) * d];
+            for j in 0..i {
+                let xj = &packed[j * d..(j + 1) * d];
+                let ld = Euclid.dist(xi, xj)?;
+                self.tfun_ld.try_fdf(ld)?;
+            }
+        }
+        let evaluation = self.eval_serial(coords, d);
+        if !evaluation.value.is_finite()
+            || evaluation
+                .grad
+                .iter()
+                .any(|&component| !component.is_finite())
         {
             return Err(crate::error::LandfoldError::Msg(
                 "stress evaluation is non-finite".into(),
@@ -794,18 +856,23 @@ mod tests {
         assert!(stress.try_eval(array![].view(), usize::MAX).is_err());
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_ok());
         assert_eq!(stress.eval(array![0.0].view(), 1).value, OPTIMIZER_PENALTY);
-        assert_eq!(stress.eval(array![].view(), usize::MAX).value, OPTIMIZER_PENALTY);
+        assert_eq!(
+            stress.eval(array![].view(), usize::MAX).value,
+            OPTIMIZER_PENALTY
+        );
     }
 
     #[test]
     fn checked_eval_rejects_mutated_stress_state() {
         let hd = array![[0.0, 1.0], [1.0, 0.0]];
-        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        let mut stress =
+            Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         stress.fhd = Array2::zeros((1, 1));
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_err());
 
         let hd = array![[0.0, 1.0], [1.0, 0.0]];
-        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        let mut stress =
+            Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         stress.n = 3;
         assert!(stress.try_eval(array![0.0, 0.0].view(), 1).is_err());
     }
@@ -850,21 +917,23 @@ mod tests {
     #[test]
     fn checked_chi1_rejects_invalid_inputs_and_transfer_overflow() {
         let hd = array![[0.0, 1.0], [1.0, 0.0]];
-        let mut stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
+        let mut stress =
+            Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         let x = array![0.0, 1.0e154];
         let landmarks = array![[0.0, 0.0], [1.0, 0.0]];
-        assert!(stress.chi1_checked(x.view(), landmarks.view(), 2, array![].view()).is_err());
+        assert!(
+            stress
+                .chi1_checked(x.view(), landmarks.view(), 2, array![].view())
+                .is_err()
+        );
 
         stress.tfun_ld = Transfer::xsigmoid(1.0, 8.0, 1.0).unwrap();
-        assert!(stress
-            .chi1_checked(x.view(), landmarks.view(), 0, array![1.0, 1.0].view())
-            .is_err());
-        let (value, grad) = stress.chi1(
-            x.view(),
-            landmarks.view(),
-            0,
-            array![1.0, 1.0].view(),
+        assert!(
+            stress
+                .chi1_checked(x.view(), landmarks.view(), 0, array![1.0, 1.0].view())
+                .is_err()
         );
+        let (value, grad) = stress.chi1(x.view(), landmarks.view(), 0, array![1.0, 1.0].view());
         assert_eq!(value, OPTIMIZER_PENALTY);
         assert!(grad.iter().all(|component| *component == 0.0));
     }

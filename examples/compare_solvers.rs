@@ -3,7 +3,7 @@
 
 use std::time::Instant;
 
-use landfold::{embed, AnnealOpts, Euclid, IterOpts, ReplicaOpts, Solver, StochOpts, Transfer};
+use landfold::{AnnealOpts, Euclid, IterOpts, ReplicaOpts, Solver, StochOpts, Transfer, embed};
 use ndarray::Array2;
 
 fn two_wells() -> Array2<f64> {
@@ -75,7 +75,7 @@ fn main() {
     #[cfg(feature = "highs")]
     {
         use landfold::HighsOpts;
-        println!("# HiGHS sequential LP, MDS init");
+        println!("# HiGHS L-BFGS-QP, MDS init");
         let mut h = base_opts();
         h.solver = Solver::Highs(HighsOpts::default());
         run("highs", &pts, h, None);

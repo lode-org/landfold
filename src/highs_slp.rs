@@ -101,7 +101,7 @@ pub fn minimize_highs(
             *v = v.min(b);
         }
     }
-    let mut ev = stress.try_eval(pos.view(), d)?;
+    let mut ev = stress.try_eval_serial(pos.view(), d)?;
     let mut steps = 0;
     let trust0 = opts.trust.max(1e-8);
     let mut trust = trust0;
@@ -133,7 +133,7 @@ pub fn minimize_highs(
                     *v = v.min(b);
                 }
             }
-            let ev1 = stress.try_eval(trial.view(), d)?;
+            let ev1 = stress.try_eval_serial(trial.view(), d)?;
             if ev1.value < ev.value {
                 let s = &trial - &pos;
                 let y = &ev1.grad - &ev.grad;
@@ -168,6 +168,29 @@ mod tests {
     use crate::pairwise::{apply_transfer, pairwise_euclid};
     use crate::transfer::Transfer;
     use ndarray::{Array, array};
+
+    #[test]
+    fn two_well_n16_returns() {
+        let mut pts = ndarray::Array2::<f64>::zeros((16, 6));
+        for i in 0..8 {
+            pts[(i, 0)] = 0.01 * i as f64;
+            pts[(i + 8, 0)] = 6.0 + 0.01 * i as f64;
+            pts[(i + 8, 2)] = 0.5;
+        }
+        let hd = pairwise_euclid(pts.view()).unwrap();
+        let t = Transfer::xsigmoid(3.0, 4.0, 2.0).unwrap();
+        let mut fhd = hd.clone();
+        apply_transfer(&mut fhd, &t).unwrap();
+        let s = Stress::new(hd, fhd, t, 0.0, None, None).unwrap();
+        let init = Array::from_iter((0..32).map(|k| 0.05 * (k as f64 - 16.0)));
+        let ev0 = s.eval(init.view(), 2);
+        let ho = HighsOpts {
+            maxiter: 20,
+            ..HighsOpts::default()
+        };
+        let rep = minimize_highs(&s, init.view(), 2, &ho).unwrap();
+        assert!(rep.value <= ev0.value + 1e-12);
+    }
 
     #[test]
     fn highs_lowers_or_matches_init() {
