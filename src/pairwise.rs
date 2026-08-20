@@ -61,7 +61,15 @@ fn stable_euclid<'a, 'b>(
 
 fn gemm_euclid(norm_i: f64, norm_j: f64, gram: f64) -> Option<f64> {
     let squared = norm_i + norm_j - 2.0 * gram;
-    squared.is_finite().then(|| squared.max(0.0).sqrt())
+    let scale = norm_i.abs() + norm_j.abs() + 2.0 * gram.abs();
+    if !squared.is_finite()
+        || squared < 0.0
+        || !scale.is_finite()
+        || squared <= 64.0 * f64::EPSILON * scale.max(1.0)
+    {
+        return None;
+    }
+    Some(squared.sqrt())
 }
 
 /// Symmetric `n x n` distance matrix. Diagonal is zero.
