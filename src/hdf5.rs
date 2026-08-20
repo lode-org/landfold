@@ -7,7 +7,7 @@
 
 use std::{collections::BTreeMap, path::Path};
 
-use hdf5::types::{VarLenAscii, VarLenUnicode};
+use hdf5::types::{FixedAscii, TypeDescriptor, VarLenAscii, VarLenUnicode};
 use ndarray::Array2;
 
 use crate::trajectory::FrameBatch;
@@ -100,12 +100,14 @@ fn read_length_unit(file: &hdf5::File, path: &str) -> Result<Option<String>> {
     let unit = if let Ok(value) = dataset.read_scalar::<VarLenUnicode>() {
         value.as_str().trim().to_owned()
     } else {
-        dataset
-            .read_scalar::<VarLenAscii>()
-            .map_err(|error| LandfoldError::Parse(error.to_string()))?
-            .as_str()
-            .trim()
-            .to_owned()
+        let values = read_ascii_strings(&dataset)?;
+        if values.len() != 1 {
+            return Err(LandfoldError::Shape("HDF5 length unit must be scalar"));
+        }
+        values
+            .into_iter()
+            .next()
+            .ok_or(LandfoldError::Shape("HDF5 length unit must be scalar"))?
     };
     if unit.is_empty() {
         return Err(LandfoldError::Msg(
@@ -211,12 +213,7 @@ fn read_atom_symbols(
             .map(|symbol| symbol.as_str().to_owned())
             .collect::<Vec<_>>()
     } else {
-        dataset
-            .read_raw::<VarLenAscii>()
-            .map_err(|error| LandfoldError::Parse(error.to_string()))?
-            .into_iter()
-            .map(|symbol| symbol.as_str().to_owned())
-            .collect::<Vec<_>>()
+        read_ascii_strings(&dataset)?
     };
     if symbols.iter().any(|symbol| symbol.trim().is_empty()) {
         return Err(LandfoldError::Msg(
@@ -224,6 +221,50 @@ fn read_atom_symbols(
         ));
     }
     Ok(Some(symbols))
+}
+
+fn read_ascii_strings(dataset: &hdf5::Dataset) -> Result<Vec<String>> {
+    if let Ok(values) = dataset.read_raw::<VarLenAscii>() {
+        return Ok(values
+            .into_iter()
+            .map(|value| value.as_str().to_owned())
+            .collect());
+    }
+    let width = match dataset
+        .dtype()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?
+        .to_descriptor()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?
+    {
+        TypeDescriptor::FixedAscii(width) if width > 0 => width,
+        _ => {
+            return Err(LandfoldError::Parse(
+                "HDF5 string dataset must be ASCII or Unicode".into(),
+            ));
+        }
+    };
+    let bytes = dataset
+        .read_raw::<u8>()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    let expected_bytes = dataset
+        .size()
+        .checked_mul(width)
+        .ok_or(LandfoldError::Shape("HDF5 fixed ASCII string data"))?;
+    if bytes.len() != expected_bytes {
+        return Err(LandfoldError::Shape("HDF5 fixed ASCII string data"));
+    }
+    bytes
+        .chunks_exact(width)
+        .map(|chunk| {
+            let end = chunk
+                .iter()
+                .position(|&byte| byte == 0)
+                .unwrap_or(chunk.len());
+            std::str::from_utf8(&chunk[..end])
+                .map(str::to_owned)
+                .map_err(|error| LandfoldError::Parse(error.to_string()))
+        })
+        .collect()
 }
 
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
@@ -371,20 +412,20 @@ mod tests {
             .expect("write images");
         let metadata_group = file.create_group("metadata").expect("create metadata group");
         metadata_group
-            .new_dataset::<VarLenAscii>()
+            .new_dataset::<FixedAscii<1>>()
             .shape(2)
             .create("atom_symbols")
             .expect("create atom symbols")
             .write_raw(&[
-                VarLenAscii::from_ascii("C").expect("valid symbol"),
-                VarLenAscii::from_ascii("H").expect("valid symbol"),
+                FixedAscii::from_ascii("C").expect("valid symbol"),
+                FixedAscii::from_ascii("H").expect("valid symbol"),
             ])
             .expect("write atom symbols");
         metadata_group
-            .new_dataset::<VarLenAscii>()
+            .new_dataset::<FixedAscii<8>>()
             .create("length_unit")
             .expect("create length unit")
-            .write_scalar(&VarLenAscii::from_ascii("angstrom").expect("valid length unit"))
+            .write_scalar(&FixedAscii::from_ascii("angstrom").expect("valid length unit"))
             .expect("write length unit");
         drop(file);
 
