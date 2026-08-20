@@ -28,6 +28,8 @@ landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
 `--stoch`, `--anneal`, `--replica`, and `--highs` (needs
 `--features highs`) are extra solver arms. `--highs` is
 bound-constrained L-BFGS-QP via HiGHS.
+For the HiGHS arm, the `--trust` option sets the per-coordinate trust radius
+and `--box lo,hi` applies uniform coordinate bounds.
 `Solver::Standard` (full-pair Polak-Ribiere CG) stays the default.
 `landfold mds` is the Torgerson (1952)
 initialiser; `--distances` prints pairwise distances of the embedding
