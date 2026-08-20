@@ -10,7 +10,7 @@ license = "MIT"
 keywords = ["dimensionality-reduction", "mds", "free-energy", "comp-chem"]
 categories = ["science", "mathematics"]
 authors = ["Rohit Goswami <rgoswami@ieee.org>"]
-exclude = ["oracle/*", "examples/cosmo-lj38/out/*", ".grok/*"]
+exclude = ["oracle/*", "examples/cosmo-lj38/out/*", ".grok/*", "dist/*"]
 
 [lib]
 name = "landfold"

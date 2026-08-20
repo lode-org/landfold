@@ -18,6 +18,7 @@ target
 rustc-ice-*.txt
 
 .pixi/
+dist/
 *.svg
 !docs/**/*.svg
 !examples/**/*.svg
