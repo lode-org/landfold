@@ -146,9 +146,11 @@ let embedding = landfold::embed_points(batch.flattened_points()?.view(), &metric
 
 The optional `hdf5` feature reads the chemparseplot interchange layout directly
 in Rust. It consumes `/path/images`, and optionally `/path/frame_ids`,
-`/metadata/atom_ids`, `/metadata/atomic_numbers`, and `/metadata/cell`, returning
-the same validated `FrameBatch`. Atomic numbers and a finite 3x3 cell are
-retained when present:
+`/path/energies`, `/path/f_para`, `/path/rxn_coord`, `/metadata/atom_ids`,
+`/metadata/atomic_numbers`, and `/metadata/cell`, returning the same validated
+`FrameBatch`. Atomic numbers and a finite 3x3 cell are retained as typed fields;
+per-image path observables are available through `FrameBatch::frame_metadata`
+when present:
 
 ```rust
 let batch = landfold::read_hdf5_batch(path)?;
@@ -156,9 +158,10 @@ let batch = landfold::read_hdf5_batch(path)?;
 
 HDF5 is an optional native dependency. `readcon` remains the canonical CON
 reader, `readcon-chemfiles` remains the broad foreign-format ingress, and all
-three adapters converge on `FrameBatch` before embedding. The Rust HDF5
-adapter currently retains coordinate identity; the Python ChemGP bridge also
-forwards richer source metadata around the same coordinate contract.
+three adapters converge on `FrameBatch` before embedding. The Rust HDF5 adapter
+retains coordinate identity and the scalar path observables needed for profile
+analysis; the Python ChemGP bridge also forwards richer source metadata around
+the same coordinate contract.
 
 For ChemGP NEB HDF5 files, the runnable
 [`examples/chemparseplot_hdf5.py`](examples/chemparseplot_hdf5.py) bridge uses
