@@ -48,6 +48,11 @@ impl Histogram1d {
                 "1d histogram state must be finite and nonnegative".into(),
             ));
         }
+        if !uniform_edges(&self.edges) {
+            return Err(LandfoldError::Msg(
+                "1d histogram edges must be uniformly spaced".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -294,6 +299,11 @@ impl Histogram2d {
         {
             return Err(LandfoldError::Msg(
                 "2d histogram edges must be finite and increasing".into(),
+            ));
+        }
+        if !uniform_edges(&self.x_edges) || !uniform_edges(&self.y_edges) {
+            return Err(LandfoldError::Msg(
+                "2d histogram edges must be uniformly spaced".into(),
             ));
         }
         if self
@@ -706,6 +716,22 @@ fn validate_fes_kt(kt: f64) -> Result<()> {
         return Err(LandfoldError::Msg("fes kT must be finite and > 0".into()));
     }
     Ok(())
+}
+
+fn uniform_edges(edges: &Array1<f64>) -> bool {
+    let Some((&first, rest)) = edges.as_slice_memory_order().and_then(|edges| edges.split_first())
+    else {
+        return false;
+    };
+    let Some(&second) = rest.first() else {
+        return false;
+    };
+    let width = second - first;
+    rest.windows(2).all(|pair| {
+        let actual = pair[1] - pair[0];
+        let scale = width.abs().max(actual.abs());
+        (actual - width).abs() <= 16.0 * f64::EPSILON * scale
+    })
 }
 
 fn degenerate_axis_bounds(value: f64, pad: f64, bins: usize) -> Result<(f64, f64)> {
