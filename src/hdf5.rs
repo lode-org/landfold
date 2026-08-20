@@ -230,6 +230,12 @@ fn read_ascii_strings(dataset: &hdf5::Dataset) -> Result<Vec<String>> {
             .map(|value| value.as_str().to_owned())
             .collect());
     }
+    if let Ok(values) = dataset.read_raw::<FixedAscii<1024>>() {
+        return Ok(values
+            .into_iter()
+            .map(|value| value.as_str().to_owned())
+            .collect());
+    }
     let width = match dataset
         .dtype()
         .map_err(|error| LandfoldError::Parse(error.to_string()))?
