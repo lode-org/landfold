@@ -34,8 +34,9 @@ fi
 # 200 landmarks (exercise used 500 on a longer out.all)
 "$LANDFOLD" landmarks -D 10 -n 200 --seed 1 < ts.cv > out/lj38.lm
 
-"$LANDFOLD" embed -D 10 -d 2 --fun-hd 5,8,1 --fun-ld 5,2,2 --steps 40 \
-  < out/lj38.lm > out/lj38.ld
+# Ceriotti reproduction (exercise 5). Extra method: --fun-ld imq,5
+"$LANDFOLD" embed -D 10 -d 2 -w --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 \
+  --steps 40 < out/lj38.lm > out/lj38.ld
 
 "$LANDFOLD" project -D 10 -d 2 \
   --high-file out/lj38.lm --low-file out/lj38.ld \

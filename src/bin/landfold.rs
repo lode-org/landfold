@@ -11,10 +11,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    AnnealOpts, Dot, Embedding, Euclid, FreeEnergy, Histogram2d, IterOpts, L1, MdsMode, Metric,
-    Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Transfer, coordination_histogram,
-    embed, farthest_point, farthest_point_ifirst, mds_from_points, pairwise, pairwise_euclid,
-    project_many_report, read_points, write_points,
+    AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, FreeEnergy, Histogram2d, IterOpts, L1,
+    MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Transfer,
+    coordination_histogram, embed, farthest_point, farthest_point_ifirst, mds_from_points, pairwise,
+    pairwise_euclid, project_many_report, read_points, write_points,
 };
 
 #[derive(Parser, Debug)]
@@ -51,9 +51,9 @@ enum Cmd {
         center: bool,
         #[arg(long)]
         similarity: bool,
-        #[arg(long = "fun-hd", default_value = "identity")]
+        #[arg(long = "fun-hd", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_hd: String,
-        #[arg(long = "fun-ld", default_value = "identity")]
+        #[arg(long = "fun-ld", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_ld: String,
         #[arg(long = "imix", default_value_t = 0.0)]
         imix: f64,
@@ -101,9 +101,9 @@ enum Cmd {
         weighted: bool,
         #[arg(long)]
         dot: bool,
-        #[arg(long = "fun-hd", default_value = "identity")]
+        #[arg(long = "fun-hd", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_hd: String,
-        #[arg(long = "fun-ld", default_value = "identity")]
+        #[arg(long = "fun-ld", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_ld: String,
         #[arg(long = "imix", default_value_t = 0.0)]
         imix: f64,

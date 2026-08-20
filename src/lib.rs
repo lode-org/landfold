@@ -75,7 +75,7 @@ pub use replica::ReplicaOpts;
 pub use search::StochOpts;
 pub use stress::{Stress, StressEval, query_chi};
 pub use trajectory::FrameBatch;
-pub use transfer::{Transfer, TransferMode};
+pub use transfer::{FUN_SPEC_HELP, Transfer, TransferMode};
 
 #[cfg(feature = "python")]
 mod python;

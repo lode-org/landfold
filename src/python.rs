@@ -374,6 +374,48 @@ fn fes_xy_result<'py>(
     Ok(result)
 }
 
+/// Named transfer families. Ceriotti sigmoid reproduces PNAS/JCTC;
+/// `imq` is the extra MethodsX arm. Specs go to `fun_hd` / `fun_ld`.
+#[pyfunction]
+fn transfers() -> Vec<(String, String)> {
+    vec![
+        (
+            "ceriotti".into(),
+            "PNAS 2011 generalised sigmoid. Spec: ceriotti,sigma,a,b or sigma,a,b".into(),
+        ),
+        (
+            "imq".into(),
+            "MethodsX inverse-multiquadric. Spec: imq,sigma".into(),
+        ),
+        ("identity".into(), "F(x)=x. Spec: identity".into()),
+        ("sigmoid".into(), "1-1/(1+(x/sigma)^2). Spec: sigma".into()),
+        ("gamma".into(), "Incomplete-gamma sigmoid. Spec: sigma,n".into()),
+        (
+            "warp".into(),
+            "F_LD^{-1}(F_HD(x)). Spec: sigma,aD,bD,ad,bd".into(),
+        ),
+    ]
+}
+
+/// Solver arms on the same ChiObjective. `standard` is the Ceriotti CG path.
+#[pyfunction]
+fn solvers() -> Vec<(String, String)> {
+    vec![
+        (
+            "standard".into(),
+            "full-pair Polak-Ribiere CG (published Ceriotti path)".into(),
+        ),
+        ("lbfgs".into(), "xtsci-optimize L-BFGS, same ChiObjective".into()),
+        (
+            "highs".into(),
+            "L-BFGS two-loop projected by HiGHS (--features highs)".into(),
+        ),
+        ("stoch".into(), "random pair mini-batches".into()),
+        ("anneal".into(), "Metropolis SA then CG polish".into()),
+        ("replica".into(), "parallel tempering then CG polish".into()),
+    ]
+}
+
 #[pymodule]
 fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(embed_euclid, m)?)?;
@@ -383,8 +425,11 @@ fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(farthest_euclid, m)?)?;
     m.add_function(wrap_pyfunction!(fes_xy, m)?)?;
     m.add_function(wrap_pyfunction!(fes_xy_result, m)?)?;
+    m.add_function(wrap_pyfunction!(transfers, m)?)?;
+    m.add_function(wrap_pyfunction!(solvers, m)?)?;
     m.add("version", crate::VERSION)?;
     m.add("eindir_revision", crate::EINDIR_REVISION)?;
+    m.add("FUN_SPEC_HELP", crate::FUN_SPEC_HELP)?;
     Ok(())
 }
 

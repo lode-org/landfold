@@ -17,6 +17,15 @@
 
 use crate::error::{LandfoldError, Result};
 
+/// CLI / Python help for `--fun-hd` / `--fun-ld`.
+///
+/// Ceriotti generalised sigmoid (`sigma,a,b` or `ceriotti,sigma,a,b`)
+/// is the PNAS 2011 / JCTC 2013 reproduction path. `imq,sigma` is the
+/// extra MethodsX inverse-multiquadric transfer. Both are first-class.
+pub const FUN_SPEC_HELP: &str = "\
+Ceriotti sigmoid (reproduce PNAS/JCTC): sigma,a,b or ceriotti,sigma,a,b. \
+MethodsX IMQ: imq,sigma. Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd.";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
     Identity,
@@ -167,8 +176,10 @@ impl Transfer {
         )
     }
 
-    /// Parse `identity`, `imq,sigma`, `sigma`, `sigma,n`, `sigma,a,b`,
-    /// or `sigma,aD,bD,ad,bd`.
+    /// Parse a named or numeric transfer spec.
+    ///
+    /// Ceriotti reproduction: `sigma,a,b` or `ceriotti,sigma,a,b`.
+    /// Extra MethodsX arm: `imq,sigma`.
     pub fn from_cli(spec: &str) -> Result<Self> {
         let spec = spec.trim();
         if spec.is_empty() || spec.eq_ignore_ascii_case("identity") {
@@ -184,7 +195,17 @@ impl Transfer {
             })?;
             return Self::imq(sigma);
         }
-        let parts: Vec<f64> = spec
+        if lower == "ceriotti" {
+            return Err(LandfoldError::TransferParams(
+                "ceriotti needs sigma,a,b (example: ceriotti,5,8,1)",
+            ));
+        }
+        let numeric = if let Some(rest) = lower.strip_prefix("ceriotti,") {
+            rest
+        } else {
+            spec
+        };
+        let parts: Vec<f64> = numeric
             .split(',')
             .map(|s| {
                 s.trim()
@@ -198,13 +219,26 @@ impl Transfer {
             [s, a, b] => Self::xsigmoid(*s, *a, *b),
             [s, a, b, al, bl] => Self::warp(*s, *a, *b, *al, *bl),
             _ => Err(LandfoldError::TransferParams(
-                "fun spec must be identity | imq[,sigma] | sigma | sigma,n | sigma,a,b | sigma,aD,bD,ad,bd",
+                "fun spec must be ceriotti,sigma,a,b | imq,sigma | identity | sigma | sigma,n | sigma,a,b | sigma,aD,bD,ad,bd",
             )),
         }
     }
 
     pub fn mode(&self) -> TransferMode {
         self.mode
+    }
+
+    /// Family name for docs and Python: `ceriotti`, `imq`, or the other arms.
+    pub fn family(&self) -> &'static str {
+        match self.mode {
+            TransferMode::XSigmoid => "ceriotti",
+            TransferMode::Imq => "imq",
+            TransferMode::Identity => "identity",
+            TransferMode::Sigmoid => "sigmoid",
+            TransferMode::Compress => "compress",
+            TransferMode::Gamma => "gamma",
+            TransferMode::Warp => "warp",
+        }
     }
 
     pub fn f(&self, x: f64) -> f64 {
@@ -497,9 +531,22 @@ mod tests {
     fn from_cli_imq() {
         let t = Transfer::from_cli("imq,5").unwrap();
         assert_eq!(t.mode(), TransferMode::Imq);
+        assert_eq!(t.family(), "imq");
         assert_relative_eq!(t.f(5.0), 0.5, epsilon = 1e-14);
         assert!(Transfer::from_cli("imq,0").is_err());
         assert!(Transfer::imq(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn from_cli_ceriotti_is_xsigmoid_alias() {
+        let named = Transfer::from_cli("ceriotti,5,8,1").unwrap();
+        let numeric = Transfer::from_cli("5,8,1").unwrap();
+        assert_eq!(named.mode(), TransferMode::XSigmoid);
+        assert_eq!(named.family(), "ceriotti");
+        assert_eq!(numeric.family(), "ceriotti");
+        assert_relative_eq!(named.f(5.0), 0.5, epsilon = 1e-14);
+        assert_relative_eq!(named.f(1.0), numeric.f(1.0), epsilon = 1e-14);
+        assert!(Transfer::from_cli("ceriotti").is_err());
     }
 
     #[test]
