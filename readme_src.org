@@ -22,13 +22,16 @@ landfold project -D 30 -d 2 --high-file lm.hd --low-file lm.ld \
 landfold mds -D 30 -d 2 --distances < hd.dat
 landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
     --frames frames.xyz --cn-csv cn.csv
+rgpycrumbs landfold plot-energy --input cloud.energy.csv \
+    --output energy.png --frame rmsd --method grad_imq
 rgpycrumbs landfold plot-fes --input fes.csv --output fes.png \
     --kt 0.168 --fmax 2 --method grad_imq
 #+end_src
 
-=landfold fes --svg= is the debug heatmap. Publication FES figures
-use chemparseplot =plot.landfold.plot_fes= (NEB =grad_imq=
-landscape) via =rgpycrumbs landfold plot-fes=.
+Energy on the 2D plane is the MethodsX representation
+(=plot.representation.plot_energy=, =rgpycrumbs landfold plot-energy=).
+=landfold fes --svg= is the occupancy heatmap. Occupancy publication
+figures use =plot.landfold.plot_fes= via =rgpycrumbs landfold plot-fes=.
 
 * Python
 

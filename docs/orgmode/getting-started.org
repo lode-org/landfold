@@ -107,9 +107,17 @@ landfold fes --input colvar.ld --nx 80 --ny 80 --kt 0.168 \
     --frames frames.xyz --cn-csv cn.csv --cn-cutoff 1.2 --cn-max 12
 #+end_src
 
-=--svg= is the debug heatmap. Publication figures go through
-chemparseplot (=plot.landfold.plot_fes=) on the same GP landscape as
-NEB, dispatched as:
+Energy on that plane is the MethodsX representation (potential
+energy plus synthetic path-tangent gradients, then
+=plot.representation.plot_energy=):
+
+#+begin_src sh
+rgpycrumbs landfold plot-energy --input cloud.energy.csv \
+    --output energy.png --frame rmsd --method grad_imq
+#+end_src
+
+=--svg= is the occupancy heatmap. Occupancy publication figures go
+through chemparseplot (=plot.landfold.plot_fes=):
 
 #+begin_src sh
 rgpycrumbs landfold plot-fes --input fes.csv --output fes.png \
