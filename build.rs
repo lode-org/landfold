@@ -8,13 +8,19 @@ fn valid_revision(value: &str) -> bool {
 fn main() {
     println!("cargo:rerun-if-env-changed=LANDFOLD_EINDIR_REVISION");
     println!("cargo:rerun-if-changed=../eindir/.git/HEAD");
+    let sibling = Path::new(env!("CARGO_MANIFEST_DIR")).join("../eindir");
+    let head_path = sibling.join(".git/HEAD");
+    if let Ok(head) = std::fs::read_to_string(&head_path)
+        && let Some(reference) = head.strip_prefix("ref: ").map(str::trim)
+    {
+        println!("cargo:rerun-if-changed=../eindir/.git/{reference}");
+    }
     let revision = match std::env::var("LANDFOLD_EINDIR_REVISION") {
         Ok(value) if valid_revision(&value) => Some(value),
         Ok(_) => panic!("LANDFOLD_EINDIR_REVISION must be a 40-digit hexadecimal commit"),
         Err(_) => None,
     }
     .or_else(|| {
-            let sibling = Path::new(env!("CARGO_MANIFEST_DIR")).join("../eindir");
             sibling.exists().then(|| {
                 Command::new("git")
                     .args(["-C", sibling.to_str().unwrap_or_default(), "rev-parse", "HEAD"])
