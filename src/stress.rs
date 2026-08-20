@@ -32,6 +32,28 @@ pub(crate) fn validate_weights(
     Ok(())
 }
 
+fn validate_distance_matrix(matrix: &Array2<f64>, label: &str) -> crate::error::Result<()> {
+    let n = matrix.nrows();
+    for i in 0..n {
+        if matrix[(i, i)] != 0.0 {
+            return Err(crate::error::LandfoldError::Msg(format!(
+                "{label} distance matrix diagonal must be zero"
+            )));
+        }
+        for j in 0..i {
+            let left = matrix[(i, j)];
+            let right = matrix[(j, i)];
+            let scale = left.abs().max(right.abs()).max(1.0);
+            if (left - right).abs() > 64.0 * f64::EPSILON * scale {
+                return Err(crate::error::LandfoldError::Msg(format!(
+                    "{label} distance matrix must be symmetric"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 pub struct Stress {
     pub n: usize,
@@ -118,6 +140,8 @@ impl Stress {
                 "stress distances and weights must be finite and nonnegative".into(),
             ));
         }
+        validate_distance_matrix(&self.hd, "high-D")?;
+        validate_distance_matrix(&self.fhd, "transformed high-D")?;
         validate_imix(self.imix)
     }
 
@@ -145,6 +169,8 @@ impl Stress {
                 "stress distance matrices must be finite and nonnegative".into(),
             ));
         }
+        validate_distance_matrix(&hd, "high-D")?;
+        validate_distance_matrix(&fhd, "transformed high-D")?;
         validate_weights(weights.as_ref().map(|w| w.view()), n)?;
         if pair_weights
             .as_ref()
@@ -856,6 +882,30 @@ mod tests {
     fn new_rejects_invalid_state() {
         let hd = array![[0.0, -1.0], [-1.0, 0.0]];
         assert!(Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).is_err());
+    }
+
+    #[test]
+    fn rejects_nonsymmetric_or_nonzero_diagonal_distances() {
+        let asymmetric = array![[0.0, 1.0], [2.0, 0.0]];
+        assert!(Stress::new(
+            asymmetric.clone(),
+            asymmetric,
+            Transfer::identity(),
+            0.0,
+            None,
+            None,
+        )
+        .is_err());
+        let diagonal = array![[1.0, 0.0], [0.0, 0.0]];
+        assert!(Stress::new(
+            diagonal.clone(),
+            diagonal,
+            Transfer::identity(),
+            0.0,
+            None,
+            None,
+        )
+        .is_err());
     }
 
     #[test]
