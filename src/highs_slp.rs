@@ -20,6 +20,8 @@ pub struct HighsOpts {
     pub maxiter: usize,
     /// L_inf trust radius on the step.
     pub trust: f64,
+    /// Scale the initial trust radius from the packed coordinate span.
+    pub adaptive_trust: bool,
     /// Optional box lower bound on every coordinate.
     pub lo: Option<f64>,
     /// Optional box upper bound on every coordinate.
@@ -33,6 +35,7 @@ impl Default for HighsOpts {
         Self {
             maxiter: 40,
             trust: 0.5,
+            adaptive_trust: false,
             lo: None,
             hi: None,
             center: true,
@@ -63,6 +66,27 @@ impl HighsOpts {
             ));
         }
         Ok(())
+    }
+
+    fn initial_trust(&self, pos: ArrayView1<f64>) -> Result<f64> {
+        let mut trust = self.trust.max(1e-8);
+        if self.adaptive_trust {
+            let min = pos.iter().copied().fold(f64::INFINITY, f64::min);
+            let max = pos.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let span = max - min;
+            if !span.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "HiGHS coordinate span overflowed".into(),
+                ));
+            }
+            trust = trust.max(span / 5.0);
+        }
+        if !trust.is_finite() {
+            return Err(LandfoldError::Msg(
+                "HiGHS initial trust radius overflowed".into(),
+            ));
+        }
+        Ok(trust)
     }
 
     fn step(&self, d: usize, n_atoms: usize, trust: f64) -> HighsStep {
@@ -101,7 +125,7 @@ pub fn minimize_highs(
     }
     let mut ev = stress.try_eval(pos.view(), d)?;
     let mut steps = 0;
-    let trust0 = opts.trust.max(1e-8);
+    let trust0 = opts.initial_trust(pos.view())?;
     let mut trust = trust0;
     let mut lbfgs = Lbfgs::with_capacity(8);
     let n_atoms = pos.len() / d;
@@ -267,5 +291,17 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn adaptive_trust_uses_initial_coordinate_span() {
+        let opts = HighsOpts {
+            adaptive_trust: true,
+            ..HighsOpts::default()
+        };
+        let small = array![-5.0, 5.0];
+        let large = array![-50.0, 50.0];
+        assert_eq!(opts.initial_trust(small.view()).unwrap(), 2.0);
+        assert_eq!(opts.initial_trust(large.view()).unwrap(), 20.0);
     }
 }
