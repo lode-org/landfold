@@ -192,7 +192,7 @@ mod tests {
             .shape(2)
             .create("frame_ids")
             .expect("create frame IDs")
-            .write_raw(&[41_u64, 42])
+            .write_raw(&[41_i64, 42])
             .expect("write frame IDs");
         for (name, values) in [
             ("energies", [1.0, 2.0]),
@@ -217,7 +217,7 @@ mod tests {
             .write_scalar(&VarLenUnicode::from_str("angstrom").expect("valid length unit"))
             .expect("write length unit");
         metadata_group
-            .new_dataset::<u64>()
+            .new_dataset::<i64>()
             .shape(2)
             .create("atom_ids")
             .expect("create atom IDs")
