@@ -43,8 +43,7 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     let frame_ids = read_ids(&file, "/path/frame_ids", shape[0])?
         .unwrap_or_else(|| (0..shape[0] as u64).collect());
     let length_unit = read_length_unit(&file, "/metadata/length_unit")?;
-    let mut batch =
-        FrameBatch::from_flattened_points(points, atom_ids, frame_ids, length_unit)?;
+    let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, length_unit)?;
     batch.atomic_numbers = read_atomic_numbers(&file, "/metadata/atomic_numbers", n_atoms)?;
     if file.link_exists("/metadata/cell") {
         let dataset = file
@@ -74,7 +73,10 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
             }
         }
     }
-    if metadata.iter().any(|frame_metadata| !frame_metadata.is_empty()) {
+    if metadata
+        .iter()
+        .any(|frame_metadata| !frame_metadata.is_empty())
+    {
         batch.metadata = metadata;
     }
     batch.validate()?;
@@ -103,11 +105,7 @@ fn read_length_unit(file: &hdf5::File, path: &str) -> Result<Option<String>> {
     Ok(Some(unit.to_owned()))
 }
 
-fn read_frame_scalars(
-    file: &hdf5::File,
-    path: &str,
-    expected: usize,
-) -> Result<Option<Vec<f64>>> {
+fn read_frame_scalars(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<f64>>> {
     if !file.link_exists(path) {
         return Ok(None);
     }
@@ -128,11 +126,7 @@ fn read_frame_scalars(
     Ok(Some(values))
 }
 
-fn read_atomic_numbers(
-    file: &hdf5::File,
-    path: &str,
-    expected: usize,
-) -> Result<Option<Vec<u64>>> {
+fn read_atomic_numbers(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
     if !file.link_exists(path) {
         return Ok(None);
     }
@@ -140,9 +134,7 @@ fn read_atomic_numbers(
         .dataset(path)
         .map_err(|error| LandfoldError::Parse(error.to_string()))?;
     if dataset.ndim() != 1 || dataset.shape()[0] != expected {
-        return Err(LandfoldError::Shape(
-            "HDF5 atomic number dataset shape",
-        ));
+        return Err(LandfoldError::Shape("HDF5 atomic number dataset shape"));
     }
     let values = dataset
         .read_raw::<i64>()
@@ -154,9 +146,7 @@ fn read_atomic_numbers(
                 .ok()
                 .filter(|&number| (1..=118).contains(&number))
                 .ok_or_else(|| {
-                    LandfoldError::Msg(
-                        "HDF5 atomic numbers must be in the range 1..=118".into(),
-                    )
+                    LandfoldError::Msg("HDF5 atomic numbers must be in the range 1..=118".into())
                 })
         })
         .collect::<Result<Vec<_>>>()
@@ -311,7 +301,10 @@ mod tests {
 
         let batch = read_hdf5_batch(&path).expect("read float32 HDF5 fixture");
         std::fs::remove_file(path).expect("remove HDF5 fixture");
-        assert_eq!(batch.frame(0).expect("first frame").row(0).to_vec(), [1.25, 2.5, 3.75]);
+        assert_eq!(
+            batch.frame(0).expect("first frame").row(0).to_vec(),
+            [1.25, 2.5, 3.75]
+        );
     }
 
     #[test]

@@ -242,14 +242,16 @@ mod tests {
             FrameBatch::new(vec![array![[0.0, 0.0, 0.0]]], vec![0, 1], vec![0], None,).is_err()
         );
 
-        assert!(FrameBatch::new_with_metadata(
-            vec![array![[0.0, 0.0, 0.0]], array![[1.0, 0.0, 0.0]]],
-            vec![0],
-            vec![0, 1],
-            None,
-            vec![std::collections::BTreeMap::new()],
-        )
-        .is_err());
+        assert!(
+            FrameBatch::new_with_metadata(
+                vec![array![[0.0, 0.0, 0.0]], array![[1.0, 0.0, 0.0]]],
+                vec![0],
+                vec![0, 1],
+                None,
+                vec![std::collections::BTreeMap::new()],
+            )
+            .is_err()
+        );
     }
 
     #[test]
