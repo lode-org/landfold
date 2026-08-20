@@ -177,8 +177,9 @@ For ChemGP NEB HDF5 files, the runnable
 and forwards source metadata to `embed_euclid_result`. The bridge records
 explicit frame and atom IDs, preserves optional ChemGP metadata such as atomic
 numbers and cells, retains finite per-image `energies`, `f_para`, and
-`rxn_coord` under `metadata["path_observables"]`, and uses `None` when the
-source does not declare a length unit rather than guessing one.
+`rxn_coord` under `metadata["path_observables"]`, retains the validated
+flattened force-gradient array under `metadata["path_gradients"]`, and uses
+`None` when the source does not declare a length unit rather than guessing one.
 
 ## License
 

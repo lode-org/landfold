@@ -47,6 +47,15 @@ def _path_observables(result: object, n_images: int) -> dict[str, list[float]]:
     return observables
 
 
+def _path_gradients(result: object, n_images: int, width: int) -> list[list[float]]:
+    gradients = np.asarray(result.path.gradients, dtype=np.float64)
+    if gradients.shape != (n_images, width):
+        raise ValueError("ChemGP path gradients must match image shape")
+    if not np.all(np.isfinite(gradients)):
+        raise ValueError("ChemGP path gradients must be finite")
+    return gradients.tolist()
+
+
 def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
     result = load_neb_result(str(path))
     images = np.asarray(result.path.images, dtype=np.float64)
@@ -85,6 +94,7 @@ def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
         "n_atoms": images.shape[1] // 3,
         "source_metadata": source_metadata,
         "path_observables": _path_observables(result, images.shape[0]),
+        "path_gradients": _path_gradients(result, images.shape[0], images.shape[1]),
         "provenance": provenance,
     }
     return landfold.embed_euclid_result(

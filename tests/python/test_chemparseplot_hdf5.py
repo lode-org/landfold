@@ -51,6 +51,7 @@ def test_chemgp_hdf5_path_preserves_shape_and_provenance(tmp_path: Path) -> None
         "f_para": [0.0, 0.0, 0.0],
         "rxn_coord": [0.0, 1.0, 2.0],
     }
+    assert metadata["path_gradients"] == np.zeros((3, 6)).tolist()
     assert metadata["provenance"]["schema"] == "landfold.provenance.v1"
     assert metadata["provenance"]["input_digest"].startswith("sha256:")
     assert len(metadata["provenance"]["eindir_revision"]) == 40
@@ -90,3 +91,19 @@ def test_path_observables_are_finite_and_image_aligned(
 
     with pytest.raises(ValueError, match=message):
         BRIDGE._path_observables(result, 2)
+
+
+@pytest.mark.parametrize(
+    "gradients, message",
+    [
+        (np.zeros((1, 6)), "match image shape"),
+        (np.full((2, 6), np.nan), "must be finite"),
+    ],
+)
+def test_path_gradients_are_finite_and_shape_aligned(
+    gradients: np.ndarray, message: str
+) -> None:
+    result = SimpleNamespace(path=SimpleNamespace(gradients=gradients))
+
+    with pytest.raises(ValueError, match=message):
+        BRIDGE._path_gradients(result, 2, 6)
