@@ -867,26 +867,25 @@ fn resolve_alpha(
         }
         return Ok(v);
     }
-    let sigma = Transfer::from_cli(fun_hd)?
-        .xsigmoid_params()
-        .map(|(s, _, _)| s)
-        .ok_or_else(|| {
-            landfold::LandfoldError::Parse(
-                "--stretch without --alpha needs a Ceriotti --fun-hd so sigma is known".into(),
-            )
-        })?;
+    let tfun = Transfer::from_cli(fun_hd)?;
+    if tfun.xsigmoid_params().is_none() {
+        return Err(landfold::LandfoldError::Parse(
+            "--stretch without --alpha needs a Ceriotti --fun-hd".into(),
+        ));
+    }
     let ra = ndarray::Array1::from(a.to_vec());
     let rb = ndarray::Array1::from(b.to_vec());
-    let s = suggest_alpha(points, ra.view(), rb.view(), sigma)?;
+    let s = suggest_alpha(points, ra.view(), rb.view(), &tfun)?;
     writeln!(
         io::stderr(),
-        "# stretch alpha {}  sigma {}  median_within {}  median_between {}  pairs {}/{}",
+        "# stretch MAP alpha {}  68% [{}, {}]  plugin {}  sigma {}  median_within {}  median_between {}",
         s.alpha,
+        s.alpha_lo,
+        s.alpha_hi,
+        s.alpha_plugin,
         s.sigma,
         s.median_within,
-        s.median_between,
-        s.n_used,
-        s.n_between
+        s.median_between
     )?;
     Ok(s.alpha)
 }

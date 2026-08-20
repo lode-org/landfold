@@ -49,10 +49,11 @@ initialiser; `--distances` prints pairwise distances of the embedding
 (the C++ Torgerson pairwise invariant).
 
 `--stretch refs.cv` lengthens high-D distances along a named contrast
-(two reference rows). \(\alpha\) is not a free knob: the default sends
-the median between-class Euclidean distance to the Ceriotti \(\sigma\)
-already chosen from the pairwise histogram. Pass `--alpha` only to
-override that.
+(two reference rows). \(\alpha\) is the MAP of a one-dimensional
+posterior: pair labels (same class / different) are Bernoulli with
+probability \(F(D(\alpha))\), the same transfer as χ, flat prior on
+\(\alpha\ge 0\). The plug-in median of \((\sigma^2-D_0^2)/p^2\) is
+printed as `plugin` and is biased high. Pass `--alpha` only to override.
 
 `landfold embed --preopt` / `--grid` / `--gopt` is the C++ `dimred`
 mix-down path (identity MDS, then sigmoid χ, then pointwise grid).
