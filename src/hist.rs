@@ -411,8 +411,14 @@ impl FreeEnergy {
                 "FES bin area must be finite and positive".into(),
             ));
         }
-        if h.samples > 0.0 && area > 0.0 {
-            rho.mapv_inplace(|c| c / (h.samples * area));
+        if h.samples > 0.0 {
+            let normalization = h.samples * area;
+            if !normalization.is_finite() || normalization <= 0.0 {
+                return Err(LandfoldError::Msg(
+                    "FES density normalization must be finite and positive".into(),
+                ));
+            }
+            rho.mapv_inplace(|c| c / normalization);
         }
         let mut rmax = 0.0;
         for v in rho.iter() {
