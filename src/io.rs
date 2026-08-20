@@ -38,7 +38,9 @@ pub fn read_points<R: BufRead>(r: R, dim: usize, weighted: bool) -> Result<Point
                 lineno + 1
             )));
         }
-        let need = dim + usize::from(weighted);
+        let need = dim
+            .checked_add(usize::from(weighted))
+            .ok_or(LandfoldError::Shape("point table column count overflow"))?;
         if nums.len() != need {
             return Err(LandfoldError::Parse(format!(
                 "line {}: expected exactly {need} columns, got {}",
@@ -130,6 +132,7 @@ mod tests {
         assert!(read_points(Cursor::new("0 NaN\n"), 2, false).is_err());
         assert!(read_points(Cursor::new("0 1 2\n"), 0, false).is_err());
         assert!(read_points(Cursor::new("0 1 2\n"), 2, false).is_err());
+        assert!(read_points(Cursor::new("0\n"), usize::MAX, true).is_err());
     }
 
     #[test]
