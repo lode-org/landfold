@@ -5,7 +5,7 @@
 //! HDF5 remains optional so users that use CON or chemfiles do not link the
 //! native HDF5 library.
 
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 use ndarray::Array2;
 
@@ -58,8 +58,49 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
                 .map_err(|_| LandfoldError::Shape("HDF5 cell data shape"))?,
         );
     }
+    let path_observables = [
+        ("energies", "/path/energies"),
+        ("f_para", "/path/f_para"),
+        ("rxn_coord", "/path/rxn_coord"),
+    ];
+    let mut metadata = vec![BTreeMap::new(); shape[0]];
+    for (key, path) in path_observables {
+        if let Some(values) = read_frame_scalars(&file, path, shape[0])? {
+            for (frame_metadata, value) in metadata.iter_mut().zip(values) {
+                frame_metadata.insert(key.into(), serde_json::json!(value));
+            }
+        }
+    }
+    if metadata.iter().any(|frame_metadata| !frame_metadata.is_empty()) {
+        batch.metadata = metadata;
+    }
     batch.validate()?;
     Ok(batch)
+}
+
+fn read_frame_scalars(
+    file: &hdf5::File,
+    path: &str,
+    expected: usize,
+) -> Result<Option<Vec<f64>>> {
+    if !file.link_exists(path) {
+        return Ok(None);
+    }
+    let dataset = file
+        .dataset(path)
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if dataset.ndim() != 1 || dataset.shape()[0] != expected {
+        return Err(LandfoldError::Shape("HDF5 path observable dataset shape"));
+    }
+    let values = dataset
+        .read_raw::<f64>()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "HDF5 path observables must be finite".into(),
+        ));
+    }
+    Ok(Some(values))
 }
 
 fn read_atomic_numbers(
@@ -137,6 +178,19 @@ mod tests {
             .expect("create frame IDs")
             .write_raw(&[41_u64, 42])
             .expect("write frame IDs");
+        for (name, values) in [
+            ("energies", [1.0, 2.0]),
+            ("f_para", [0.1, 0.2]),
+            ("rxn_coord", [0.0, 1.0]),
+        ] {
+            path_group
+                .new_dataset::<f64>()
+                .shape(2)
+                .create(name)
+                .expect("create path observable")
+                .write_raw(&values)
+                .expect("write path observable");
+        }
         let metadata_group = file
             .create_group("metadata")
             .expect("create metadata group");
@@ -169,6 +223,18 @@ mod tests {
         assert_eq!(batch.atom_ids, vec![7, 8]);
         assert_eq!(batch.atomic_numbers, Some(vec![6, 1]));
         assert_eq!(batch.cell.as_ref().expect("cell").dim(), (3, 3));
+        assert_eq!(
+            batch.frame_metadata(1).and_then(|m| m.get("energies")),
+            Some(&serde_json::json!(2.0))
+        );
+        assert_eq!(
+            batch.frame_metadata(0).and_then(|m| m.get("f_para")),
+            Some(&serde_json::json!(0.1))
+        );
+        assert_eq!(
+            batch.frame_metadata(1).and_then(|m| m.get("rxn_coord")),
+            Some(&serde_json::json!(1.0))
+        );
         assert_eq!(
             batch.frame(1).expect("second frame").row(0).to_vec(),
             vec![6.0, 7.0, 8.0]
