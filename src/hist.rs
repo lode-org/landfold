@@ -77,13 +77,15 @@ impl Histogram1d {
         for i in 0..=n {
             edges[i] = lo + span * (i as f64) / n as f64;
         }
-        Ok(Self {
+        let histogram = Self {
             edges,
             counts: Array1::zeros(n),
             below: 0.0,
             above: 0.0,
             samples: 0.0,
-        })
+        };
+        histogram.validate_state()?;
+        Ok(histogram)
     }
 
     pub fn add(&mut self, x: f64, w: f64) -> Result<()> {
@@ -210,12 +212,14 @@ impl Histogram2d {
         for i in 0..=ny {
             y_edges[i] = ylo + y_span * (i as f64) / ny as f64;
         }
-        Ok(Self {
+        let histogram = Self {
             x_edges,
             y_edges,
             counts: Array2::zeros((ny, nx)),
             samples: 0.0,
-        })
+        };
+        histogram.validate_state()?;
+        Ok(histogram)
     }
 
     pub fn add(&mut self, x: f64, y: f64, w: f64) -> Result<()> {
