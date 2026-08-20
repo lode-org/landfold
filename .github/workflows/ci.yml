@@ -54,6 +54,26 @@ jobs:
       - name: Test Python provenance contract
         run: cargo test --locked --features python --test pyo3_pin
 
+  python-bridge:
+    name: Chemparseplot HDF5 bridge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install bridge dependencies
+        run: python -m pip install --disable-pip-version-check numpy h5py chemparseplot ase polars pytest
+      - name: Build Python extension
+        run: cargo build --locked --features python
+      - name: Test Chemparseplot HDF5 bridge
+        env:
+          PYTHONPATH: target/debug
+        run: |
+          cp target/debug/liblandfold.so target/debug/landfold.so
+          python -m pytest -q tests/python/test_chemparseplot_hdf5.py
+
   workflow-schema:
     name: Workflow schema
     runs-on: ubuntu-latest
