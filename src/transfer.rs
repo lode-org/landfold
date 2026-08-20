@@ -73,9 +73,9 @@ impl Transfer {
         if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("xsigmoid sigma must be > 0"));
         }
-        if !(a.is_finite() && a > 0.0 && b.is_finite() && b > 0.0) {
+        if !(a.is_finite() && a >= 1.0 && b.is_finite() && b > 0.0) {
             return Err(LandfoldError::TransferParams(
-                "xsigmoid a and b must be finite and > 0",
+                "xsigmoid a must be finite and >= 1; b must be finite and > 0",
             ));
         }
         Self::from_parts(
@@ -235,7 +235,12 @@ fn pow_exp(base: f64, exp: f64) -> f64 {
 
 fn xsigmoid_fdf(pars: &[f64], x: f64) -> (f64, f64) {
     if x == 0.0 {
-        return (0.0, 0.0);
+        let derivative = if pars[2] == 1.0 {
+            pars[3] * pars[1] * pars[0]
+        } else {
+            0.0
+        };
+        return (0.0, derivative);
     }
     let sx = x * pars[0];
     let sx = pars[1] * pow_exp(sx, pars[2]);
@@ -403,6 +408,14 @@ mod tests {
         let h = 1e-7;
         let fd = (t.f(x + h) - t.f(x - h)) / (2.0 * h);
         assert_relative_eq!(t.df(x), fd, epsilon = 1e-7);
+    }
+
+    #[test]
+    fn xsigmoid_handles_the_finite_unit_exponent_slope_at_zero() {
+        let t = Transfer::xsigmoid(2.0, 1.0, 2.0).unwrap();
+        let expected = 2.0 * (2.0_f64.powf(0.5) - 1.0) / 2.0;
+        assert_relative_eq!(t.df(0.0), expected);
+        assert!(Transfer::xsigmoid(2.0, 0.5, 2.0).is_err());
     }
 
     #[test]
