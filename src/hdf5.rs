@@ -43,12 +43,12 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
         .unwrap_or_else(|| (0..shape[0] as u64).collect());
     let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, None)?;
     batch.atomic_numbers = read_ids(&file, "/metadata/atomic_numbers", n_atoms)?;
-    if let Some(numbers) = &batch.atomic_numbers {
-        if numbers.iter().any(|&number| number == 0 || number > 118) {
-            return Err(LandfoldError::Msg(
-                "HDF5 atomic numbers must be in the range 1..=118".into(),
-            ));
-        }
+    if let Some(numbers) = &batch.atomic_numbers
+        && numbers.iter().any(|&number| number == 0 || number > 118)
+    {
+        return Err(LandfoldError::Msg(
+            "HDF5 atomic numbers must be in the range 1..=118".into(),
+        ));
     }
     if file.link_exists("/metadata/cell") {
         let dataset = file
