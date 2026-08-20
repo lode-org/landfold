@@ -15,6 +15,13 @@ pub fn occupancy_map_floor(xy: &[[f64; 2]], family: &[usize]) -> usize {
     if xy.len() < 2 || xy.len() != family.len() {
         return 1;
     }
+    if xy
+        .iter()
+        .flat_map(|point| point.iter())
+        .any(|value| !value.is_finite())
+    {
+        return 1;
+    }
     if family.iter().all(|&f| f == family[0]) {
         return 1;
     }
@@ -157,5 +164,13 @@ mod tests {
     fn overlapping_families_are_one_community() {
         let xy = [[0.0, 0.0], [0.1, 0.0], [0.05, 0.05], [0.08, 0.02]];
         assert_eq!(occupancy_map_floor(&xy, &[0, 0, 1, 1]), 1);
+    }
+
+    #[test]
+    fn invalid_coordinates_are_one_community() {
+        assert_eq!(
+            occupancy_map_floor(&[[0.0, 0.0], [f64::NAN, 1.0]], &[0, 1]),
+            1
+        );
     }
 }
