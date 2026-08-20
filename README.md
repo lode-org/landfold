@@ -176,8 +176,9 @@ For ChemGP NEB HDF5 files, the runnable
 `chemparseplot.parse.trajectory.hdf5.load_neb_result`, reshapes its image path,
 and forwards source metadata to `embed_euclid_result`. The bridge records
 explicit frame and atom IDs, preserves optional ChemGP metadata such as atomic
-numbers and cells, and uses `None` when the source does not declare a length
-unit rather than guessing one.
+numbers and cells, retains finite per-image `energies`, `f_para`, and
+`rxn_coord` under `metadata["path_observables"]`, and uses `None` when the
+source does not declare a length unit rather than guessing one.
 
 ## License
 
