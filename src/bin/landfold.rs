@@ -581,7 +581,7 @@ fn main() -> landfold::Result<()> {
                     lowdim: low,
                     ..PhateOpts::default()
                 };
-                let query = read_points(io::stdin().lock(), high, weighted)?;
+                let query = read_points(io::stdin().lock(), high, false)?;
                 let proj = phate_project(
                     hi.points.view(),
                     lo.points.view(),
