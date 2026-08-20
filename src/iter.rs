@@ -46,6 +46,8 @@ pub struct IterOpts {
     pub global: Option<ProjOpts>,
     /// Pair weights `F(D)(1-F(D))` so only mid-scale pairs drive χ.
     pub midweight: bool,
+    /// Explicit pair weights. When set, they replace `--midweight`.
+    pub pair_weights: Option<Array2<f64>>,
     /// Classical MDS of `F(D)` rather than `D`.
     pub init_transformed: bool,
 }
@@ -64,6 +66,7 @@ impl Default for IterOpts {
             gopt: 0,
             global: None,
             midweight: false,
+            pair_weights: None,
             init_transformed: false,
         }
     }
@@ -229,7 +232,9 @@ pub fn embed(
     }
 
     let w1 = weights.map(|w| w.to_owned());
-    let pair_w = if opts.midweight {
+    let pair_w = if let Some(pw) = &opts.pair_weights {
+        Some(pw.clone())
+    } else if opts.midweight {
         Some(Stress::midscale_pair_weights(fhd.view())?)
     } else {
         None

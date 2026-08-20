@@ -17,6 +17,7 @@ pub mod cg;
 pub mod chi_obj;
 pub mod error;
 pub mod floor;
+pub mod gapsplit;
 #[cfg(feature = "hdf5")]
 pub mod hdf5;
 #[cfg(feature = "highs")]
@@ -46,6 +47,7 @@ pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use error::{LandfoldError, Result};
 pub use floor::occupancy_map_floor;
+pub use gapsplit::{GapReport, gap_pair_weights, gap_split_embed, suggest_tau};
 #[cfg(feature = "hdf5")]
 pub use hdf5::read_hdf5_batch;
 #[cfg(feature = "highs")]
@@ -63,7 +65,7 @@ pub use landmark::{
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
-pub use phate::{PhateModel, PhateOpts, phate_embed, phate_project};
+pub use phate::{PhateModel, PhateOpts, phate_embed, phate_project, slow_mode};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
 };

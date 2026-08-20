@@ -1,0 +1,5 @@
+name = "LandfoldAlg"
+defaultTargets = ["LandfoldAlg"]
+
+[[lean_lib]]
+name = "LandfoldAlg"

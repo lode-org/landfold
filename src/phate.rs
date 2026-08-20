@@ -253,6 +253,65 @@ fn diffuse(
     Ok((p_t, p_tm1, t))
 }
 
+/// Second eigenfunction of the locally scaled walk (Rohrdanz / Coifman).
+/// This is the data-driven slow coordinate `ψ` in the gap-split theorem.
+pub fn slow_mode(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    knn: usize,
+    decay: f64,
+) -> Result<Array1<f64>> {
+    let n = points.nrows();
+    if n < 3 {
+        return Err(LandfoldError::Msg(
+            "slow mode needs at least three points".into(),
+        ));
+    }
+    if knn == 0 || knn >= n {
+        return Err(LandfoldError::Msg(format!(
+            "slow-mode knn must be in 1..n-1 (got knn={}, n={})",
+            knn, n
+        )));
+    }
+    let dist = pairwise(points, metric)?;
+    let bandwidths = knn_bandwidth(dist.view(), knn)?;
+    let kernel = alpha_kernel(dist.view(), bandwidths.view(), decay)?;
+    let mut deg = vec![0.0; n];
+    for i in 0..n {
+        let s: f64 = (0..n).map(|j| kernel[(i, j)]).sum();
+        if !(s > 0.0) || !s.is_finite() {
+            return Err(LandfoldError::Msg(format!(
+                "slow-mode degree at row {i} is not positive"
+            )));
+        }
+        deg[i] = s;
+    }
+    let mut m = vec![0.0; n * n];
+    for i in 0..n {
+        let si = deg[i].sqrt();
+        for j in 0..n {
+            m[i * n + j] = kernel[(i, j)] / (si * deg[j].sqrt());
+        }
+    }
+    let dm = DMatrix::<f64>::from_row_slice(n, n, &m);
+    let eigen = SymmetricEigen::new(dm);
+    let mut order: Vec<(f64, usize)> = (0..n)
+        .map(|k| (eigen.eigenvalues[k], k))
+        .collect();
+    order.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    let src = order[1].1;
+    let mut psi = Array1::<f64>::zeros(n);
+    for i in 0..n {
+        psi[i] = eigen.eigenvectors[(i, src)];
+        if !psi[i].is_finite() {
+            return Err(LandfoldError::Msg(
+                "slow-mode coordinate is not finite".into(),
+            ));
+        }
+    }
+    Ok(psi)
+}
+
 fn assemble_p(
     evecs: &DMatrix<f64>,
     evals: &[f64],

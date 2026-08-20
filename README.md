@@ -64,6 +64,13 @@ distance. `landfold project --phate` places new rows by a Nyström
 potential and a metric MDS fit against the stored landmark map.
 This is not a Ceriotti transfer and does not use χ.
 
+`landfold embed --gapsplit` is the map licensed by
+`lean/LandfoldAlg`: the second eigenfunction `ψ` of the locally
+scaled walk, then Ceriotti χ only on pairs with `|Δψ| ≤ τ`. The
+displayed coordinates are `(ψ, s)`. Stretch *inserts* a named axis;
+gap-split *removes* the axis the sample already has. See
+`lean/Statement.md`.
+
 `landfold embed --preopt` / `--grid` / `--gopt` is the C++ `dimred`
 mix-down path (identity MDS, then sigmoid χ, then pointwise grid).
 `-v` writes `# Error in fitting LD points:` on stdout. `landfold

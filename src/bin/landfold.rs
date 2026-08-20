@@ -17,7 +17,7 @@ use landfold::{
     Transfer, coordination_histogram, embed, embed_sigma_schedule, joint_pairwise_hist,
     mds_from_points, pairwise, phate_embed, phate_project, suggest_alpha,
     pairwise_euclid, project_many_report, read_points, select_landmarks, suggest_scale,
-    write_plumed, write_points, PhateOpts,
+    write_plumed, write_points, PhateOpts, gap_split_embed,
 };
 
 #[derive(Parser, Debug)]
@@ -132,6 +132,13 @@ enum Cmd {
         /// PHATE diffusion time. Default: von Neumann entropy knee
         #[arg(long = "phate-t")]
         phate_t: Option<usize>,
+        /// Gap-split: display (ψ, s) with χ only on pairs the slow mode
+        /// does not already separate (Lean `chi_decouples`)
+        #[arg(long)]
+        gapsplit: bool,
+        /// Gap cut on |Δψ|. Default: 0.35 of the ψ range
+        #[arg(long = "gap-tau")]
+        gap_tau: Option<f64>,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -355,8 +362,36 @@ fn main() -> landfold::Result<()> {
             phate_knn,
             phate_decay,
             phate_t,
+            gapsplit,
+            gap_tau,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
+            if gapsplit {
+                let mut opts = IterOpts {
+                    lowdim: 1,
+                    tfun_hd: Transfer::from_cli(&fun_hd)?,
+                    tfun_ld: Transfer::from_cli(&fun_ld)?,
+                    ..IterOpts::default()
+                };
+                opts.cg.maxiter = steps;
+                opts.preopt = preopt;
+                opts.init_transformed = init_transformed;
+                let (coords, rep) = gap_split_embed(
+                    set.points.view(),
+                    &Euclid,
+                    &opts,
+                    phate_knn,
+                    phate_decay,
+                    gap_tau,
+                )?;
+                write_points(&mut io::stdout().lock(), &coords, None)?;
+                writeln!(
+                    io::stderr(),
+                    "# gap-split tau {} kept {}/{} pairs",
+                    rep.tau, rep.n_kept, rep.n_pairs
+                )?;
+                return Ok(());
+            }
             if phate {
                 let popts = PhateOpts {
                     knn: phate_knn,
