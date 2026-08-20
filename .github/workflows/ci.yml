@@ -53,6 +53,9 @@ jobs:
         run: |
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           bash scripts/check_pyo3_pin.sh
+      - name: Check optional reader isolation
+        run: |
+          ! cargo tree --locked --no-default-features --depth 1 | grep -E 'hdf5|readcon|chemfiles'
       - name: Test Python provenance contract
         run: cargo test --locked --features python --test pyo3_pin
       - name: Strict feature Clippy
