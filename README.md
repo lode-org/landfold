@@ -150,7 +150,8 @@ The optional `hdf5` feature reads the chemparseplot interchange layout directly
 in Rust. It consumes `/path/images`, and optionally `/path/frame_ids`,
 `/path/energies`, `/path/f_para`, `/path/rxn_coord`, `/metadata/atom_ids`,
 `/metadata/atomic_numbers`, and `/metadata/cell`, returning the same validated
-`FrameBatch`. Atomic numbers and a finite 3x3 cell are retained as typed fields;
+`FrameBatch`. `/metadata/atom_symbols` is also accepted for stable chemical
+identity. Atomic numbers, symbols, and a finite 3x3 cell are retained as typed fields;
 `/metadata/length_unit` is retained as `FrameBatch::length_unit` when present;
 per-image path observables are available through
 `FrameBatch::frame_metadata` when present:

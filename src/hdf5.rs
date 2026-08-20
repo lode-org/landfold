@@ -45,6 +45,7 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     let length_unit = read_length_unit(&file, "/metadata/length_unit")?;
     let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, length_unit)?;
     batch.atomic_numbers = read_atomic_numbers(&file, "/metadata/atomic_numbers", n_atoms)?;
+    batch.atom_symbols = read_atom_symbols(&file, "/metadata/atom_symbols", n_atoms)?;
     if file.link_exists("/metadata/cell") {
         let dataset = file
             .dataset("/metadata/cell")
@@ -153,6 +154,32 @@ fn read_atomic_numbers(file: &hdf5::File, path: &str, expected: usize) -> Result
         .map(Some)
 }
 
+fn read_atom_symbols(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<String>>> {
+    if !file.link_exists(path) {
+        return Ok(None);
+    }
+    let dataset = file
+        .dataset(path)
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if dataset.ndim() != 1 || dataset.shape()[0] != expected {
+        return Err(LandfoldError::Shape("HDF5 atom symbol dataset shape"));
+    }
+    let values = dataset
+        .read_raw::<VarLenUnicode>()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if values.iter().any(|symbol| symbol.as_str().trim().is_empty()) {
+        return Err(LandfoldError::Msg(
+            "HDF5 atom symbols must be nonempty".into(),
+        ));
+    }
+    Ok(Some(
+        values
+            .into_iter()
+            .map(|symbol| symbol.as_str().to_owned())
+            .collect(),
+    ))
+}
+
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
     if !file.link_exists(path) {
         return Ok(None);
@@ -231,6 +258,16 @@ mod tests {
             .write_raw(&[6_i64, 1])
             .expect("write atomic numbers");
         metadata_group
+            .new_dataset::<VarLenUnicode>()
+            .shape(2)
+            .create("atom_symbols")
+            .expect("create atom symbols")
+            .write_raw(&[
+                VarLenUnicode::from_str("C").expect("valid symbol"),
+                VarLenUnicode::from_str("H").expect("valid symbol"),
+            ])
+            .expect("write atom symbols");
+        metadata_group
             .new_dataset::<f64>()
             .shape((3, 3))
             .create("cell")
@@ -245,6 +282,7 @@ mod tests {
         assert_eq!(batch.atom_ids, vec![7, 8]);
         assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
         assert_eq!(batch.atomic_numbers, Some(vec![6, 1]));
+        assert_eq!(batch.atom_symbols, Some(vec!["C".into(), "H".into()]));
         assert_eq!(batch.cell.as_ref().expect("cell").dim(), (3, 3));
         assert_eq!(
             batch.frame_metadata(1).and_then(|m| m.get("energies")),
