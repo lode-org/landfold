@@ -127,8 +127,17 @@ where
         .map_err(|e| LandfoldError::Optimize(e.to_string()))
 }
 
+pub(crate) fn packed_len(n: usize, d: usize) -> Result<usize> {
+    if d == 0 {
+        return Err(LandfoldError::Shape("optimizer coordinates shape"));
+    }
+    n.checked_mul(d).ok_or_else(|| {
+        LandfoldError::Msg("optimizer coordinate dimension product overflowed".into())
+    })
+}
+
 pub(crate) fn validate_packed_init(init: ArrayView1<'_, f64>, n: usize, d: usize) -> Result<()> {
-    if d == 0 || init.len() != n.saturating_mul(d) {
+    if init.len() != packed_len(n, d)? {
         return Err(LandfoldError::Shape("optimizer coordinates shape"));
     }
     if init.iter().any(|value| !value.is_finite()) {
@@ -210,5 +219,11 @@ mod tests {
             },
         );
         assert!(report.is_err());
+    }
+
+    #[test]
+    fn rejects_packed_coordinate_dimension_overflow() {
+        assert!(packed_len(usize::MAX, 2).is_err());
+        assert_eq!(packed_len(usize::MAX, 1).unwrap(), usize::MAX);
     }
 }

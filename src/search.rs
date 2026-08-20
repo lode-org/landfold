@@ -9,7 +9,7 @@
 
 use ndarray::ArrayView1;
 
-use crate::cg::{CgReport, validate_packed_init};
+use crate::cg::{CgReport, packed_len, validate_packed_init};
 use crate::metric::{Euclid, Metric};
 use crate::stress::{OVERLAP, Stress};
 
@@ -69,6 +69,7 @@ pub fn minimize_stochastic(
 ) -> crate::error::Result<CgReport> {
     let n = stress.n;
     validate_packed_init(init, n, d)?;
+    let coordinate_len = packed_len(n, d)?;
     opts.validate()?;
     let mut pos = init.to_owned();
     if n < 2 {
@@ -81,14 +82,14 @@ pub fn minimize_stochastic(
     let mut rng = opts.seed | 1;
     let metric = Euclid;
     let omix = 1.0 - stress.imix;
-    let mut first_moment = vec![0.0; n * d];
-    let mut second_moment = vec![0.0; n * d];
+    let mut first_moment = vec![0.0; coordinate_len];
+    let mut second_moment = vec![0.0; coordinate_len];
     const BETA1: f64 = 0.9;
     const BETA2: f64 = 0.999;
     const EPSILON: f64 = 1e-8;
 
     for t in 0..opts.steps {
-        let mut grad = vec![0.0; n * d];
+        let mut grad = vec![0.0; coordinate_len];
         let mut tw = 0.0;
         let b = opts.batch.max(1);
         for _ in 0..b {
