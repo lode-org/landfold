@@ -13,15 +13,22 @@ use crate::{LandfoldError, Result};
 /// ordered coordinate frames without depending on a file format.
 #[derive(Clone, Debug)]
 pub struct FrameBatch {
+    /// Cartesian coordinates with shape `(n_atoms, 3)`, one array per frame.
     pub frames: Vec<Array2<f64>>,
+    /// Stable per-atom identifiers in the coordinate row order.
     pub atom_ids: Vec<u64>,
+    /// Stable per-frame identifiers in trajectory order.
     pub frame_ids: Vec<u64>,
+    /// Declared coordinate unit, when the source provides one.
     pub length_unit: Option<String>,
+    /// Optional atomic numbers in the coordinate row order.
     pub atomic_numbers: Option<Vec<u64>>,
+    /// Optional chemical symbols in the coordinate row order.
     pub atom_symbols: Option<Vec<String>>,
     /// Optional per-frame flattened Cartesian gradients with shape
     /// `(n_frames, 3 * n_atoms)`.
     pub gradients: Option<Array2<f64>>,
+    /// Optional periodic cell with shape `(3, 3)`.
     pub cell: Option<Array2<f64>>,
     /// Per-frame JSON metadata. An empty vector means the source supplied no metadata.
     pub metadata: Vec<BTreeMap<String, Value>>,
