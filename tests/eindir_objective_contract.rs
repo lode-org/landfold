@@ -27,7 +27,7 @@ fn xtsci_consumes_landfold_objective_with_rgpot_provenance() {
         3,
         1,
         0,
-        "513b8b7fdfaf63cca0b94b2f3316cf2c19a8daaa",
+        "091c6f7d6ea70821c3374152481fb9500e799af2",
     )
     .expect("valid rgpot provenance");
     let initial = ndarray::Array1::from_iter(points.iter().copied());
@@ -54,6 +54,6 @@ fn xtsci_consumes_landfold_objective_with_rgpot_provenance() {
     assert_eq!(provenance.engine_id, "rgpot");
     assert_eq!(
         provenance.eindir_revision.as_deref(),
-        Some("513b8b7fdfaf63cca0b94b2f3316cf2c19a8daaa")
+        Some("091c6f7d6ea70821c3374152481fb9500e799af2")
     );
 }
