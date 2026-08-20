@@ -73,6 +73,8 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/_deps/eindir" "$GITHUB_WORKSPACE/../eindir"
           ln -s "$GITHUB_WORKSPACE/_deps/xtsci-optimize" "$GITHUB_WORKSPACE/../xtsci-optimize"
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Python development headers
+        run: sudo apt-get update && sudo apt-get install --yes python3-dev
       - name: Validate metadata and Python pin
         run: |
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
