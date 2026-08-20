@@ -145,8 +145,10 @@ let embedding = landfold::embed_points(batch.flattened_points()?.view(), &metric
 ```
 
 The optional `hdf5` feature reads the chemparseplot interchange layout directly
-in Rust. It consumes `/path/images`, and optionally `/path/frame_ids` and
-`/metadata/atom_ids`, returning the same validated `FrameBatch`:
+in Rust. It consumes `/path/images`, and optionally `/path/frame_ids`,
+`/metadata/atom_ids`, `/metadata/atomic_numbers`, and `/metadata/cell`, returning
+the same validated `FrameBatch`. Atomic numbers and a finite 3x3 cell are
+retained when present:
 
 ```rust
 let batch = landfold::read_hdf5_batch(path)?;
