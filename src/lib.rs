@@ -61,10 +61,6 @@ pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
 };
-pub use replica::ReplicaOpts;
-pub use search::StochOpts;
-pub use stress::{Stress, StressEval, query_chi};
-pub use trajectory::FrameBatch;
 #[cfg(feature = "readcon")]
 pub use readcon::{
     frame_positions, frames_batch, frames_positions, read_con_batch, read_con_frames,
@@ -74,6 +70,10 @@ pub use readcon::{
 pub use readcon::{
     read_trajectory_batch, read_trajectory_frames, read_trajectory_positions,
 };
+pub use replica::ReplicaOpts;
+pub use search::StochOpts;
+pub use stress::{Stress, StressEval, query_chi};
+pub use trajectory::FrameBatch;
 pub use transfer::{Transfer, TransferMode};
 
 #[cfg(feature = "python")]
