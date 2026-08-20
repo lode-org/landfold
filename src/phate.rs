@@ -118,6 +118,8 @@ pub fn phate_embed(
 
 /// Place `new_points` on a fitted PHATE map. `landmark_ld` is the stored
 /// embedding of the landmarks (sign/rotation of a fresh MDS are discarded).
+/// New rows are a Nyström average of those coordinates (Lafon, Keller,
+/// Coifman, *IEEE Trans. Pattern Anal. Mach. Intell.* **28**, 1784 (2006)).
 pub fn phate_project(
     landmarks: ArrayView2<f64>,
     landmark_ld: ArrayView2<f64>,
@@ -459,66 +461,25 @@ fn place_one(
         }
         pt[j] = s.max(POT_FLOOR);
     }
-    let mut uz = vec![0.0; n];
-    for j in 0..n {
-        uz[j] = if (model.gamma - 1.0).abs() < 1e-12 {
-            -pt[j].ln()
-        } else if model.gamma.abs() < 1e-12 {
-            pt[j].sqrt()
-        } else {
-            pt[j].powf(model.gamma)
-        };
+    // Lafon–Keller–Coifman Nyström: y = p^{(t)} Y. A convex combination
+    // of landmark coordinates, so the image stays in their convex hull.
+    let zpt: f64 = pt.iter().sum();
+    if !(zpt > 0.0) {
+        return Err(LandfoldError::Msg(
+            "PHATE project: diffused mass is zero".into(),
+        ));
     }
-    let mut delta = vec![0.0; n];
+    let mut y = vec![0.0; dim];
     for j in 0..n {
-        let mut s = 0.0;
-        for k in 0..n {
-            let e = uz[k] - model.potential[(j, k)];
-            s += e * e;
-        }
-        delta[j] = s.sqrt();
-    }
-    metric_mds_place(landmark_ld, &delta, dim)
-}
-
-fn metric_mds_place(ld: ArrayView2<f64>, delta: &[f64], dim: usize) -> Result<Vec<f64>> {
-    let n = ld.nrows();
-    let mut nearest = 0;
-    let mut best = f64::INFINITY;
-    for j in 0..n {
-        if delta[j] < best {
-            best = delta[j];
-            nearest = j;
-        }
-    }
-    let mut y: Vec<f64> = (0..dim).map(|h| ld[(nearest, h)]).collect();
-    for step in 0..80 {
-        let lr = 0.15 / (1.0 + 0.02 * step as f64);
-        let mut g = vec![0.0; dim];
-        for j in 0..n {
-            let mut r2 = 0.0;
-            let mut diff = vec![0.0; dim];
-            for h in 0..dim {
-                diff[h] = y[h] - ld[(j, h)];
-                r2 += diff[h] * diff[h];
-            }
-            let r = r2.sqrt();
-            if r < 1e-12 {
-                continue;
-            }
-            let w = 1.0 - delta[j] / r;
-            for h in 0..dim {
-                g[h] += w * diff[h];
-            }
-        }
+        let w = pt[j] / zpt;
         for h in 0..dim {
-            y[h] -= lr * g[h];
-            if !y[h].is_finite() {
-                return Err(LandfoldError::Msg(
-                    "PHATE OOS placement is not finite".into(),
-                ));
-            }
+            y[h] += w * landmark_ld[(j, h)];
         }
+    }
+    if y.iter().any(|v| !v.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "PHATE OOS placement is not finite".into(),
+        ));
     }
     Ok(y)
 }
@@ -614,6 +575,14 @@ mod tests {
         let d1b = (proj[(1, 0)] - cb[0]).hypot(proj[(1, 1)] - cb[1]);
         assert!(d0a < d0b, "query in blob A must land nearer A ({d0a} vs {d0b})");
         assert!(d1b < d1a, "query in blob B must land nearer B ({d1b} vs {d1a})");
+        let xmin = y.column(0).iter().copied().fold(f64::INFINITY, f64::min);
+        let xmax = y.column(0).iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let ymin = y.column(1).iter().copied().fold(f64::INFINITY, f64::min);
+        let ymax = y.column(1).iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        for i in 0..2 {
+            assert!(proj[(i, 0)] >= xmin - 1e-6 && proj[(i, 0)] <= xmax + 1e-6);
+            assert!(proj[(i, 1)] >= ymin - 1e-6 && proj[(i, 1)] <= ymax + 1e-6);
+        }
     }
 
     #[test]
