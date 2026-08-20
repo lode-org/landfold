@@ -64,12 +64,18 @@ impl Histogram1d {
         if n == 0 || !lo.is_finite() || !hi.is_finite() || hi <= lo {
             return Err(LandfoldError::Shape("histogram needs n>0 and hi>lo"));
         }
+        let span = hi - lo;
+        if !span.is_finite() {
+            return Err(LandfoldError::Msg(
+                "histogram endpoint span overflowed".into(),
+            ));
+        }
         let edge_len = n
             .checked_add(1)
             .ok_or(LandfoldError::Msg("histogram edge dimension overflowed".into()))?;
         let mut edges = Array1::zeros(edge_len);
         for i in 0..=n {
-            edges[i] = lo + (hi - lo) * (i as f64) / n as f64;
+            edges[i] = lo + span * (i as f64) / n as f64;
         }
         Ok(Self {
             edges,
@@ -189,13 +195,20 @@ impl Histogram2d {
             .ok_or(LandfoldError::Msg("histogram y-edge dimension overflowed".into()))?;
         nx.checked_mul(ny)
             .ok_or(LandfoldError::Msg("histogram cell dimension overflowed".into()))?;
+        let x_span = xhi - xlo;
+        let y_span = yhi - ylo;
+        if !x_span.is_finite() || !y_span.is_finite() {
+            return Err(LandfoldError::Msg(
+                "histogram endpoint span overflowed".into(),
+            ));
+        }
         let mut x_edges = Array1::zeros(x_edge_len);
         let mut y_edges = Array1::zeros(y_edge_len);
         for i in 0..=nx {
-            x_edges[i] = xlo + (xhi - xlo) * (i as f64) / nx as f64;
+            x_edges[i] = xlo + x_span * (i as f64) / nx as f64;
         }
         for i in 0..=ny {
-            y_edges[i] = ylo + (yhi - ylo) * (i as f64) / ny as f64;
+            y_edges[i] = ylo + y_span * (i as f64) / ny as f64;
         }
         Ok(Self {
             x_edges,
@@ -892,6 +905,13 @@ mod tests {
         assert!(Histogram1d::new(0.0, 1.0, usize::MAX).is_err());
         assert!(Histogram2d::new(0.0, 1.0, usize::MAX, 0.0, 1.0, 1).is_err());
         assert!(coordination_histogram(array![[0.0, 0.0]].view(), 1.0, usize::MAX).is_err());
+    }
+
+    #[test]
+    fn rejects_overflowing_histogram_endpoint_spans() {
+        assert!(Histogram1d::new(-f64::MAX, f64::MAX, 2).is_err());
+        assert!(Histogram2d::new(-f64::MAX, f64::MAX, 2, 0.0, 1.0, 2).is_err());
+        assert!(Histogram2d::new(0.0, 1.0, 2, -f64::MAX, f64::MAX, 2).is_err());
     }
 
     #[test]
