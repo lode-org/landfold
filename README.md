@@ -77,6 +77,8 @@ density, χ, nearest-landmark diagnostics, and caller-supplied source metadata
 for plotting adapters. pyo3/numpy stay on 0.29 so the graph
 shares one major with dlpk 0.4.1. dlpk's `pyo3` feature stays off
 (`pyo3-ffi` is `links = "python"`). Check on the remote builder:
+Install the optional Chemparseplot bridge dependencies with
+`pip install 'landfold[chemparseplot]'`.
 
 The structured dictionaries use `coordinates` plus `stress` for embeddings,
 `coordinates` plus `chi`, `nearest_distance`, and `nearest_index` for
