@@ -18,6 +18,7 @@ pub struct FrameBatch {
     pub frame_ids: Vec<u64>,
     pub length_unit: Option<String>,
     pub atomic_numbers: Option<Vec<u64>>,
+    pub atom_symbols: Option<Vec<String>>,
     pub cell: Option<Array2<f64>>,
     /// Per-frame JSON metadata. An empty vector means the source supplied no metadata.
     pub metadata: Vec<BTreeMap<String, Value>>,
@@ -48,6 +49,7 @@ impl FrameBatch {
             frame_ids,
             length_unit,
             atomic_numbers: None,
+            atom_symbols: None,
             cell: None,
             metadata,
         };
@@ -74,6 +76,7 @@ impl FrameBatch {
                 || !frame_ids.is_empty()
                 || !metadata.is_empty()
                 || atomic_numbers.is_some()
+                || self.atom_symbols.is_some()
                 || cell.is_some()
             {
                 return Err(LandfoldError::Shape(
@@ -91,6 +94,14 @@ impl FrameBatch {
         {
             return Err(LandfoldError::Msg(
                 "trajectory atomic numbers must match atoms and be in the range 1..=118".into(),
+            ));
+        }
+        if let Some(symbols) = &self.atom_symbols
+            && (symbols.len() != atom_ids.len()
+                || symbols.iter().any(|symbol| symbol.trim().is_empty()))
+        {
+            return Err(LandfoldError::Msg(
+                "trajectory atom symbols must match atoms and be nonempty".into(),
             ));
         }
         if let Some(cell) = cell
@@ -215,6 +226,16 @@ mod tests {
         assert_eq!(batch.n_atoms(), 1);
         assert_eq!(batch.frame_ids, vec![11, 12]);
         assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
+    }
+
+    #[test]
+    fn validates_stable_atom_symbols() {
+        let mut batch =
+            FrameBatch::from_positions(vec![array![[0.0, 0.0, 0.0]]]).expect("valid trajectory");
+        batch.atom_symbols = Some(vec!["H".into()]);
+        batch.validate().expect("valid atom symbols");
+        batch.atom_symbols = Some(vec!["H".into(), "O".into()]);
+        assert!(batch.validate().is_err());
     }
 
     #[test]

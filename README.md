@@ -117,8 +117,10 @@ chemfiles conversion layer. Use `read_con_frames` or
 `*_positions` helpers when a validated `(n_atoms, 3)` array is the algorithm
 input. `read_con_batch` and `read_trajectory_batch` expose the same inputs as a
 format-neutral `FrameBatch`, retaining frame IDs, atom IDs, the length unit, and
-typed per-frame JSON metadata in `FrameBatch::metadata`.
-All frames in a trajectory must retain the same atom IDs and count.
+typed per-frame JSON metadata in `FrameBatch::metadata`. CON and Chemfiles
+adapters also preserve stable per-atom chemical symbols in
+`FrameBatch::atom_symbols`.
+All frames in a trajectory must retain the same atom IDs, symbols, and count.
 
 This feature links the native Chemfiles library. On systems whose CMake
 version rejects Chemfiles' legacy minimum-version declaration, configure the

@@ -95,6 +95,26 @@ pub fn frames_batch(frames: &[ConFrame]) -> Result<FrameBatch> {
         .as_slice()
         .ok_or(LandfoldError::Shape("readcon atom IDs must be contiguous"))?
         .to_vec();
+    if first.atom_data.len() != atom_ids.len() {
+        return Err(LandfoldError::Shape("readcon atom symbols and IDs"));
+    }
+    let atom_symbols = first
+        .atom_data
+        .iter()
+        .map(|atom| atom.symbol.to_string())
+        .collect::<Vec<_>>();
+    for (frame_index, frame) in frames.iter().enumerate() {
+        let symbols = frame
+            .atom_data
+            .iter()
+            .map(|atom| atom.symbol.to_string())
+            .collect::<Vec<_>>();
+        if symbols != atom_symbols {
+            return Err(LandfoldError::Msg(format!(
+                "readcon frame {frame_index} has different atom symbols"
+            )));
+        }
+    }
     let explicit_frame_ids = frames
         .iter()
         .map(|frame| frame.header.frame_index())
@@ -125,7 +145,11 @@ pub fn frames_batch(frames: &[ConFrame]) -> Result<FrameBatch> {
         .iter()
         .map(|frame| frame.header.metadata.clone())
         .collect();
-    FrameBatch::new_with_metadata(positions, atom_ids, frame_ids, length_unit, metadata)
+    let mut batch =
+        FrameBatch::new_with_metadata(positions, atom_ids, frame_ids, length_unit, metadata)?;
+    batch.atom_symbols = Some(atom_symbols);
+    batch.validate()?;
+    Ok(batch)
 }
 
 /// Read a chemfiles-supported trajectory through readcon's canonical frame
@@ -180,6 +204,15 @@ mod tests {
     }
 
     #[test]
+    fn rejects_changed_atom_symbols_in_a_batch() {
+        let first = frame(0.0);
+        let mut second = frame(1.0);
+        second.atom_data[0].symbol = "O".into();
+        let error = frames_batch(&[first, second]).expect_err("symbols must be stable");
+        assert!(error.to_string().contains("different atom symbols"));
+    }
+
+    #[test]
     fn reads_positions_from_a_con_file() {
         use readcon_core::writer::ConFrameWriter;
 
@@ -197,6 +230,13 @@ mod tests {
         assert_eq!(positions[0][[1, 0]], 4.0);
         assert_eq!(batch.frame_ids, vec![0]);
         assert_eq!(batch.atom_ids, vec![0, 1]);
+        assert_eq!(
+            batch
+                .atom_symbols
+                .as_ref()
+                .map(|symbols| symbols.iter().map(String::as_str).collect::<Vec<_>>()),
+            Some(vec!["H", "H"])
+        );
     }
 
     #[test]
