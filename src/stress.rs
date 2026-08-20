@@ -272,8 +272,8 @@ impl Stress {
 
     /// Same checks as [`Self::try_eval`], serial kernel only.
     ///
-    /// HiGHS starts an OpenMP pool. A later Rayon `eval_parallel`
-    /// deadlocks, so the HiGHS arm evaluates χ on one thread.
+    /// Used when a HiGHS OpenMP pool must not meet Rayon.
+    #[allow(dead_code)]
     pub(crate) fn try_eval_serial(
         &self,
         coords: ArrayView1<f64>,

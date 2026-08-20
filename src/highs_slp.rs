@@ -66,18 +66,17 @@ impl HighsOpts {
     }
 
     fn step(&self, d: usize, n_atoms: usize, trust: f64) -> HighsStep {
-        let mut equalities = Vec::new();
-        if self.center {
-            for h in 0..d {
-                let coeffs: Vec<_> = (0..n_atoms).map(|i| (i * d + h, 1.0)).collect();
-                equalities.push((coeffs, 0.0));
-            }
-        }
+        let equalities = Vec::new();
         HighsStep {
             trust: Some(trust),
             lo: self.lo,
             hi: self.hi,
             equalities,
+            center_axes: if self.center {
+                Some((n_atoms, d))
+            } else {
+                None
+            },
         }
     }
 }
@@ -100,12 +99,13 @@ pub fn minimize_highs(
             *v = v.min(b);
         }
     }
-    let mut ev = stress.try_eval_serial(pos.view(), d)?;
+    let mut ev = stress.try_eval(pos.view(), d)?;
     let mut steps = 0;
     let trust0 = opts.trust.max(1e-8);
     let mut trust = trust0;
     let mut lbfgs = Lbfgs::with_capacity(8);
     let n_atoms = pos.len() / d;
+    let mut trial = pos.clone();
     for _ in 0..opts.maxiter {
         let gnorm: f64 = ev.grad.iter().map(|g| g * g).sum::<f64>().sqrt();
         if gnorm < 1e-8 {
@@ -118,7 +118,7 @@ pub fn minimize_highs(
         let mut t = 1.0;
         let mut accepted = false;
         for _ in 0..8 {
-            let mut trial = pos.clone();
+            trial.assign(&pos);
             for i in 0..trial.len() {
                 trial[i] += t * step[i];
             }
@@ -132,12 +132,12 @@ pub fn minimize_highs(
                     *v = v.min(b);
                 }
             }
-            let ev1 = stress.try_eval_serial(trial.view(), d)?;
+            let ev1 = stress.try_eval(trial.view(), d)?;
             if ev1.value < ev.value {
                 let s = &trial - &pos;
                 let y = &ev1.grad - &ev.grad;
                 lbfgs.record(s, y);
-                pos = trial;
+                pos.assign(&trial);
                 ev = ev1;
                 accepted = true;
                 steps += 1;
