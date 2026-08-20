@@ -383,6 +383,10 @@ mod tests {
         emb.low = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         emb.weights = array![1.0, 1.0];
         assert!(project_report(&emb, array![0.0, 0.0].view(), &Euclid, &opts).is_err());
+
+        emb.weights = array![1.0, 1.0, 1.0];
+        emb.hd[(1, 0)] = 2.0;
+        assert!(project_report(&emb, array![0.0, 0.0].view(), &Euclid, &opts).is_err());
     }
 
     #[test]

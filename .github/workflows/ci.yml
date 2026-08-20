@@ -29,20 +29,6 @@ jobs:
             features: readcon-chemfiles,hdf5
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
-        with:
-          repository: HaoZeke/eindir
-          ref: b0131396b562b65353c1d525bb5fb06b6c5545b3
-          path: _deps/eindir
-      - uses: actions/checkout@v6
-        with:
-          repository: HaoZeke/xtsci-optimize
-          ref: 43fc4f42eb0e131ee3d8009e2edbbcd126ccb16b
-          path: _deps/xtsci-optimize
-      - name: Expose sibling path dependencies
-        run: |
-          ln -s "$GITHUB_WORKSPACE/_deps/eindir" "$GITHUB_WORKSPACE/../eindir"
-          ln -s "$GITHUB_WORKSPACE/_deps/xtsci-optimize" "$GITHUB_WORKSPACE/../xtsci-optimize"
       - uses: dtolnay/rust-toolchain@stable
       - name: Install native trajectory dependencies
         if: matrix.name == 'chemfiles-hdf5'
@@ -58,20 +44,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
-        with:
-          repository: HaoZeke/eindir
-          ref: b0131396b562b65353c1d525bb5fb06b6c5545b3
-          path: _deps/eindir
-      - uses: actions/checkout@v6
-        with:
-          repository: HaoZeke/xtsci-optimize
-          ref: 43fc4f42eb0e131ee3d8009e2edbbcd126ccb16b
-          path: _deps/xtsci-optimize
-      - name: Expose sibling path dependencies
-        run: |
-          ln -s "$GITHUB_WORKSPACE/_deps/eindir" "$GITHUB_WORKSPACE/../eindir"
-          ln -s "$GITHUB_WORKSPACE/_deps/xtsci-optimize" "$GITHUB_WORKSPACE/../xtsci-optimize"
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Python development headers
         run: sudo apt-get update && sudo apt-get install --yes python3-dev

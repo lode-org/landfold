@@ -5,8 +5,35 @@ fn valid_revision(value: &str) -> bool {
     value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn locked_eindir_revision(manifest_dir: &Path) -> Option<String> {
+    let lockfile = manifest_dir.join("Cargo.lock");
+    let mut package = None;
+    for line in std::fs::read_to_string(lockfile).ok()?.lines() {
+        if line == "name = \"eindir-core\"" {
+            package = Some(());
+            continue;
+        }
+        if package.is_some()
+            && let Some(source) =
+                line.strip_prefix("source = \"git+https://github.com/HaoZeke/eindir.git")
+            && let Some(revision) = source
+                .split('#')
+                .nth(1)
+                .map(|value| value.trim_end_matches('"'))
+            && valid_revision(revision)
+        {
+            return Some(revision.to_owned());
+        }
+        if line == "[[package]]" {
+            package = None;
+        }
+    }
+    None
+}
+
 fn main() {
     println!("cargo:rerun-if-env-changed=LANDFOLD_EINDIR_REVISION");
+    println!("cargo:rerun-if-changed=Cargo.lock");
     println!("cargo:rerun-if-changed=../eindir/.git/HEAD");
     let sibling = Path::new(env!("CARGO_MANIFEST_DIR")).join("../eindir");
     let head_path = sibling.join(".git/HEAD");
@@ -37,6 +64,7 @@ fn main() {
                 .filter(|value| valid_revision(value))
         })?
     })
+    .or_else(|| locked_eindir_revision(Path::new(env!("CARGO_MANIFEST_DIR"))))
     .unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=LANDFOLD_EINDIR_REVISION={revision}");
 }

@@ -32,7 +32,10 @@ pub(crate) fn validate_weights(
     Ok(())
 }
 
-fn validate_distance_matrix(matrix: &Array2<f64>, label: &str) -> crate::error::Result<()> {
+pub(crate) fn validate_distance_matrix(
+    matrix: &Array2<f64>,
+    label: &str,
+) -> crate::error::Result<()> {
     let n = matrix.nrows();
     for i in 0..n {
         if matrix[(i, i)] != 0.0 {
