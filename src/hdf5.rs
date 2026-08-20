@@ -97,16 +97,22 @@ fn read_length_unit(file: &hdf5::File, path: &str) -> Result<Option<String>> {
     if dataset.ndim() != 0 {
         return Err(LandfoldError::Shape("HDF5 length unit must be scalar"));
     }
-    let value = dataset
-        .read_scalar::<VarLenUnicode>()
-        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
-    let unit = value.as_str().trim();
+    let unit = if let Ok(value) = dataset.read_scalar::<VarLenUnicode>() {
+        value.as_str().trim().to_owned()
+    } else {
+        dataset
+            .read_scalar::<VarLenAscii>()
+            .map_err(|error| LandfoldError::Parse(error.to_string()))?
+            .as_str()
+            .trim()
+            .to_owned()
+    };
     if unit.is_empty() {
         return Err(LandfoldError::Msg(
             "HDF5 length unit must not be empty".into(),
         ));
     }
-    Ok(Some(unit.to_owned()))
+    Ok(Some(unit))
 }
 
 fn read_frame_scalars(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<f64>>> {
@@ -374,11 +380,18 @@ mod tests {
                 VarLenAscii::from_ascii("H").expect("valid symbol"),
             ])
             .expect("write atom symbols");
+        metadata_group
+            .new_dataset::<VarLenAscii>()
+            .create("length_unit")
+            .expect("create length unit")
+            .write_scalar(&VarLenAscii::from_ascii("angstrom").expect("valid length unit"))
+            .expect("write length unit");
         drop(file);
 
         let batch = read_hdf5_batch(&path).expect("read ASCII HDF5 fixture");
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert_eq!(batch.atom_symbols, Some(vec!["C".into(), "H".into()]));
+        assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
     }
 
     #[test]
