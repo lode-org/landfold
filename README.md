@@ -149,8 +149,9 @@ in Rust. It consumes `/path/images`, and optionally `/path/frame_ids`,
 `/path/energies`, `/path/f_para`, `/path/rxn_coord`, `/metadata/atom_ids`,
 `/metadata/atomic_numbers`, and `/metadata/cell`, returning the same validated
 `FrameBatch`. Atomic numbers and a finite 3x3 cell are retained as typed fields;
-per-image path observables are available through `FrameBatch::frame_metadata`
-when present:
+`/metadata/length_unit` is retained as `FrameBatch::length_unit` when present;
+per-image path observables are available through
+`FrameBatch::frame_metadata` when present:
 
 ```rust
 let batch = landfold::read_hdf5_batch(path)?;
