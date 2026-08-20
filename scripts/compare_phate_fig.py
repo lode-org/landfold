@@ -45,17 +45,37 @@ def main() -> None:
     base = np.loadtxt("/tmp/landfold-cmp-base.proj")
     ph = np.loadtxt("/tmp/ts_phate.proj")
     refs_ph = np.loadtxt("/tmp/refs_phate.ld")
+    ts = np.loadtxt(EX / "ts.all")
+    pb = ts[:, 1]
     tscv = cf.load_ts_cv(EX / "ts.all")
     fcc0 = cf.match_tip(base, tscv, cf.cn_vector(EX / "lj38_fcc.xyz"))
     ico0 = cf.match_tip(base, tscv, cf.cn_vector(EX / "lj38_ico.xyz"))
+    out = ROOT / "docs" / "ceriotti-figs"
+    out.mkdir(parents=True, exist_ok=True)
+
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.8), dpi=170, facecolor="white")
     _panel(axes[0], base, r"Ceriotti $\chi$", fcc0, ico0)
     mesh = _panel(axes[1], ph, r"PHATE (Moon 2019)", refs_ph[0], refs_ph[1])
     fig.colorbar(mesh, ax=axes, fraction=0.03, pad=0.02).set_label(r"$F/\varepsilon$")
-    dest = ROOT / "docs" / "ceriotti-figs" / "lj38_phate_vs_ceriotti.png"
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest = out / "lj38_phate_vs_ceriotti.png"
     fig.savefig(dest, dpi=170, facecolor="white")
+    plt.close(fig)
     print("wrote", dest)
+
+    fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=170, facecolor="white")
+    sc = ax.scatter(ph[:, 0], ph[:, 1], c=pb, s=6, cmap="coolwarm", vmin=0, vmax=1, linewidths=0)
+    ax.scatter(*refs_ph[0], s=80, marker="*", c="#f4d35e", edgecolors="k", zorder=5, label="fcc")
+    ax.scatter(*refs_ph[1], s=80, marker="*", c="#111111", zorder=5, label="ico")
+    ax.set_title(r"PHATE coloured by TSE committor $p_B$")
+    ax.set_xlabel(r"$s_1$")
+    ax.set_ylabel(r"$s_2$")
+    ax.set_aspect("equal", adjustable="box")
+    ax.legend(fontsize=8, loc="lower left")
+    fig.colorbar(sc, ax=ax, fraction=0.04, pad=0.02).set_label(r"$p_B$")
+    dest2 = out / "lj38_phate_committor.png"
+    fig.savefig(dest2, dpi=170, facecolor="white")
+    plt.close(fig)
+    print("wrote", dest2)
 
 
 if __name__ == "__main__":
