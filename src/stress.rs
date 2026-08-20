@@ -92,6 +92,17 @@ impl Stress {
                 "stress state matrices must be square and match n",
             ));
         }
+        if self.hd.as_slice().is_none()
+            || self.fhd.as_slice().is_none()
+            || self
+                .weights
+                .as_ref()
+                .is_some_and(|weights| weights.as_slice().is_none())
+        {
+            return Err(crate::error::LandfoldError::Shape(
+                "stress state matrices must be contiguous",
+            ));
+        }
         if self
             .hd
             .iter()
@@ -761,6 +772,9 @@ mod tests {
         let evaluation = stress.eval(array![0.0, 0.0, 1.0, 0.0].view(), 2);
         assert_eq!(evaluation.value, OPTIMIZER_PENALTY);
         assert_eq!(evaluation.grad.len(), 4);
+        assert!(stress
+            .try_eval(array![0.0, 0.0, 1.0, 0.0].view(), 2)
+            .is_err());
     }
 
     #[test]
