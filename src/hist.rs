@@ -1014,6 +1014,9 @@ mod tests {
         assert!(fes.x_centers.iter().all(|value| value.is_finite()));
         assert!(fes.y_centers.iter().all(|value| value.is_finite()));
         assert!(fes.rho.iter().any(|&value| value > 0.0));
+
+        let extreme = array![[f64::MAX, 0.0], [f64::MAX, 0.0]];
+        assert!(fes_from_points(extreme.view(), 4, 4, 1.0, 0.0, None).is_ok());
     }
 
     #[test]
