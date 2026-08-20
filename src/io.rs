@@ -89,6 +89,11 @@ pub fn write_points<W: Write>(
     pts: &Array2<f64>,
     weights: Option<&Array1<f64>>,
 ) -> Result<()> {
+    if pts.nrows() == 0 || pts.ncols() == 0 {
+        return Err(LandfoldError::Shape(
+            "point table must be nonempty and have positive dimension",
+        ));
+    }
     if let Some(weights) = weights {
         if weights.len() != pts.nrows() {
             return Err(LandfoldError::Shape("point weight length"));
@@ -141,5 +146,12 @@ mod tests {
         let points = Array2::zeros((1, 2));
         let mut output = Vec::new();
         assert!(write_points(&mut output, &points, Some(&Array1::from(vec![-1.0]))).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_point_tables_on_write() {
+        let mut output = Vec::new();
+        assert!(write_points(&mut output, &Array2::zeros((0, 2)), None).is_err());
+        assert!(write_points(&mut output, &Array2::zeros((1, 0)), None).is_err());
     }
 }
