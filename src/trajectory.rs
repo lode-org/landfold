@@ -86,9 +86,12 @@ impl FrameBatch {
             return Err(LandfoldError::Shape("trajectory metadata length"));
         }
         if let Some(numbers) = atomic_numbers
-            && numbers.len() != atom_ids.len()
+            && (numbers.len() != atom_ids.len()
+                || numbers.iter().any(|&number| !(1..=118).contains(&number)))
         {
-            return Err(LandfoldError::Shape("trajectory atomic number length"));
+            return Err(LandfoldError::Msg(
+                "trajectory atomic numbers must match atoms and be in the range 1..=118".into(),
+            ));
         }
         if let Some(cell) = cell
             && (cell.dim() != (3, 3) || cell.iter().any(|&value| !value.is_finite()))
@@ -293,5 +296,21 @@ mod tests {
             FrameBatch::from_positions(vec![array![[0.0, 0.0, 0.0]]]).expect("valid trajectory");
         batch.atom_ids.push(1);
         assert!(batch.flattened_points().is_err());
+    }
+
+    #[test]
+    fn validates_structure_metadata_invariants() {
+        let mut batch =
+            FrameBatch::from_positions(vec![array![[0.0, 0.0, 0.0]]]).expect("valid trajectory");
+        batch.atomic_numbers = Some(vec![0]);
+        assert!(batch.validate().is_err());
+
+        batch.atomic_numbers = Some(vec![1]);
+        batch.cell = Some(array![
+            [1.0, 0.0, 0.0],
+            [0.0, f64::NAN, 0.0],
+            [0.0, 0.0, 1.0]
+        ]);
+        assert!(batch.validate().is_err());
     }
 }
