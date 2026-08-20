@@ -23,7 +23,13 @@ landfold dist -D 30 < hd.dat
 landfold mds -D 30 -d 2 --distances < hd.dat
 landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
     --frames frames.xyz --cn-csv cn.csv
+rgpycrumbs landfold plot-fes --input fes.csv --output fes.png \
+    --kt 0.168 --fmax 2 --method grad_imq
 ```
+
+`landfold fes --svg` is the debug heatmap. Publication FES figures
+use chemparseplot `plot.landfold.plot_fes` (NEB `grad_imq`
+landscape) via `rgpycrumbs landfold plot-fes`.
 
 `--stoch`, `--anneal`, `--replica`, and `--highs` (needs
 `--features highs`) are extra solver arms. `--highs` is
