@@ -25,6 +25,22 @@ impl FrameBatch {
         frame_ids: Vec<u64>,
         length_unit: Option<String>,
     ) -> Result<Self> {
+        let batch = Self {
+            frames,
+            atom_ids,
+            frame_ids,
+            length_unit,
+        };
+        batch.validate()?;
+        Ok(batch)
+    }
+
+    /// Revalidate a batch before handing it to an algorithm or serializer.
+    pub fn validate(&self) -> Result<()> {
+        let frames = &self.frames;
+        let atom_ids = &self.atom_ids;
+        let frame_ids = &self.frame_ids;
+        let length_unit = &self.length_unit;
         if length_unit.as_deref().is_some_and(str::is_empty) {
             return Err(LandfoldError::Msg(
                 "trajectory length unit must not be empty".into(),
@@ -36,12 +52,7 @@ impl FrameBatch {
                     "empty trajectory batches cannot have IDs",
                 ));
             }
-            return Ok(Self {
-                frames,
-                atom_ids,
-                frame_ids,
-                length_unit,
-            });
+            return Ok(());
         }
         let shape = frames[0].dim();
         if shape.1 != 3 || shape.0 != atom_ids.len() {
@@ -72,12 +83,7 @@ impl FrameBatch {
                 "trajectory frame IDs must be unique".into(),
             ));
         }
-        Ok(Self {
-            frames,
-            atom_ids,
-            frame_ids,
-            length_unit,
-        })
+        Ok(())
     }
 
     /// Construct a batch with implicit atom and frame IDs.
@@ -124,6 +130,7 @@ impl FrameBatch {
 
     /// Flatten each `(n_atoms, 3)` frame into one solver input row.
     pub fn flattened_points(&self) -> Result<Array2<f64>> {
+        self.validate()?;
         let width = self
             .n_atoms()
             .checked_mul(3)
@@ -223,5 +230,13 @@ mod tests {
         );
         assert_eq!(batch.atom_ids, vec![10, 11]);
         assert_eq!(batch.frame_ids, vec![20]);
+    }
+
+    #[test]
+    fn revalidates_mutated_public_state_before_flattening() {
+        let mut batch = FrameBatch::from_positions(vec![array![[0.0, 0.0, 0.0]]])
+            .expect("valid trajectory");
+        batch.atom_ids.push(1);
+        assert!(batch.flattened_points().is_err());
     }
 }
