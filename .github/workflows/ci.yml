@@ -58,8 +58,9 @@ jobs:
           ! cargo tree --locked --no-default-features --depth 1 | grep -E 'hdf5|readcon|chemfiles'
       - name: Check package contents
         run: |
-          cargo package --locked --list > package-files.txt
-          test -s package-files.txt
+          package_files="$RUNNER_TEMP/landfold-package-files.txt"
+          cargo package --locked --list > "$package_files"
+          test -s "$package_files"
       - name: Test Python provenance contract
         run: cargo test --locked --features python --test pyo3_pin
       - name: Strict feature Clippy
