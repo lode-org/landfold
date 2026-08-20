@@ -7,6 +7,7 @@
 
 use std::{collections::BTreeMap, path::Path};
 
+use hdf5::types::VarLenUnicode;
 use ndarray::Array2;
 
 use crate::trajectory::FrameBatch;
@@ -41,7 +42,9 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
         .unwrap_or_else(|| (0..shape[1] as u64 / 3).collect());
     let frame_ids = read_ids(&file, "/path/frame_ids", shape[0])?
         .unwrap_or_else(|| (0..shape[0] as u64).collect());
-    let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, None)?;
+    let length_unit = read_length_unit(&file, "/metadata/length_unit")?;
+    let mut batch =
+        FrameBatch::from_flattened_points(points, atom_ids, frame_ids, length_unit)?;
     batch.atomic_numbers = read_atomic_numbers(&file, "/metadata/atomic_numbers", n_atoms)?;
     if file.link_exists("/metadata/cell") {
         let dataset = file
@@ -76,6 +79,28 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     }
     batch.validate()?;
     Ok(batch)
+}
+
+fn read_length_unit(file: &hdf5::File, path: &str) -> Result<Option<String>> {
+    if !file.link_exists(path) {
+        return Ok(None);
+    }
+    let dataset = file
+        .dataset(path)
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if dataset.ndim() != 0 {
+        return Err(LandfoldError::Shape("HDF5 length unit must be scalar"));
+    }
+    let value = dataset
+        .read_scalar::<VarLenUnicode>()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    let unit = value.as_str().trim();
+    if unit.is_empty() {
+        return Err(LandfoldError::Msg(
+            "HDF5 length unit must not be empty".into(),
+        ));
+    }
+    Ok(Some(unit.to_owned()))
 }
 
 fn read_frame_scalars(
@@ -159,6 +184,7 @@ fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     #[test]
     fn reads_images_and_explicit_identity() {
         let path = std::env::temp_dir().join(format!("landfold-hdf5-{}.h5", std::process::id()));
@@ -195,6 +221,12 @@ mod tests {
             .create_group("metadata")
             .expect("create metadata group");
         metadata_group
+            .new_dataset::<VarLenUnicode>()
+            .create("length_unit")
+            .expect("create length unit")
+            .write_scalar(&VarLenUnicode::from_str("angstrom").expect("valid length unit"))
+            .expect("write length unit");
+        metadata_group
             .new_dataset::<u64>()
             .shape(2)
             .create("atom_ids")
@@ -221,6 +253,7 @@ mod tests {
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert_eq!(batch.frame_ids, vec![41, 42]);
         assert_eq!(batch.atom_ids, vec![7, 8]);
+        assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
         assert_eq!(batch.atomic_numbers, Some(vec![6, 1]));
         assert_eq!(batch.cell.as_ref().expect("cell").dim(), (3, 3));
         assert_eq!(
