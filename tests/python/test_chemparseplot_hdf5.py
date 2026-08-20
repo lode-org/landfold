@@ -29,6 +29,8 @@ def test_chemgp_hdf5_path_preserves_shape_and_provenance(tmp_path: Path) -> None
         path_group.create_dataset("gradients", data=np.zeros_like(images))
         path_group.create_dataset("f_para", data=np.zeros(3))
         path_group.create_dataset("rxn_coord", data=np.arange(3, dtype=np.float64))
+        metadata_group = handle.create_group("metadata")
+        metadata_group.create_dataset("atomic_numbers", data=np.array([1, 8]))
 
     result = BRIDGE.embed_hdf5(path)
 
@@ -38,6 +40,9 @@ def test_chemgp_hdf5_path_preserves_shape_and_provenance(tmp_path: Path) -> None
     assert result["highdim"] == 6
     metadata = result["metadata"]
     assert metadata["frame_indices"] == [0, 1, 2]
+    assert metadata["atom_ids"] == [0, 1]
+    assert metadata["length_unit"] is None
     assert metadata["n_atoms"] == 2
+    assert metadata["source_metadata"]["atomic_numbers"] == [1, 8]
     assert metadata["provenance"]["schema"] == "landfold.provenance.v1"
     assert metadata["provenance"]["input_digest"].startswith("sha256:")

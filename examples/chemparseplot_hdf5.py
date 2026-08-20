@@ -16,18 +16,36 @@ from chemparseplot.parse.trajectory.hdf5 import load_neb_result
 import landfold
 
 
+def _python_metadata(value: object) -> object:
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
 def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
     result = load_neb_result(str(path))
     images = np.asarray(result.path.images, dtype=np.float64)
     if images.ndim != 2 or images.shape[1] == 0 or images.shape[1] % 3:
         raise ValueError("ChemGP HDF5 path images must have shape (n_images, 3*n_atoms)")
 
+    source_metadata = {
+        key: _python_metadata(value)
+        for key, value in result.get("metadata", {}).items()
+    }
+    frame_ids = list(range(images.shape[0]))
+    atom_ids = list(range(images.shape[1] // 3))
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     metadata = {
         "source_format": "ChemGP HDF5 NEB",
         "source_path": str(path),
-        "frame_indices": list(range(images.shape[0])),
+        "frame_indices": frame_ids,
+        "frame_ids": frame_ids,
+        "atom_ids": atom_ids,
+        "length_unit": source_metadata.get("length_unit"),
         "n_atoms": images.shape[1] // 3,
+        "source_metadata": source_metadata,
         "provenance": {
             "schema": "landfold.provenance.v1",
             "run_id": f"chemparseplot:{digest[:16]}",

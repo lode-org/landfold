@@ -116,7 +116,10 @@ HDF5 a required Rust dependency or replace CON as the canonical frame format.
 For ChemGP NEB HDF5 files, the runnable
 [`examples/chemparseplot_hdf5.py`](examples/chemparseplot_hdf5.py) bridge uses
 `chemparseplot.parse.trajectory.hdf5.load_neb_result`, reshapes its image path,
-and forwards source metadata to `embed_euclid_result`.
+and forwards source metadata to `embed_euclid_result`. The bridge records
+explicit frame and atom IDs, preserves optional ChemGP metadata such as atomic
+numbers and cells, and uses `None` when the source does not declare a length
+unit rather than guessing one.
 
 ## License
 
