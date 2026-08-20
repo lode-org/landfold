@@ -385,7 +385,9 @@ mod tests {
             .expect("create images")
             .write_raw(&[0.0; 6])
             .expect("write images");
-        let metadata_group = file.create_group("metadata").expect("create metadata group");
+        let metadata_group = file
+            .create_group("metadata")
+            .expect("create metadata group");
         metadata_group
             .new_dataset::<FixedAscii<1>>()
             .shape(2)
