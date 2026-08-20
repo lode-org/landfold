@@ -55,6 +55,8 @@ jobs:
         run: cargo test --locked --features python --test pyo3_pin
       - name: Strict feature Clippy
         run: cargo clippy --locked --all-targets --features python,readcon-chemfiles,hdf5 -- -D warnings
+      - name: Document the complete feature matrix
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
 
   python-bridge:
     name: Chemparseplot HDF5 bridge
