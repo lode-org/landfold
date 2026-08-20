@@ -3,9 +3,8 @@
 //! HiGHS is the LP / MIP / convex-QP solver of Huangfu and Hall,
 //! *Math. Prog. Comp.* **10**, 119 (2018),
 //! <https://doi.org/10.1007/s12532-017-0130-5>. Each step minimises
-//! `g·p + (1/2) p^T B p` where `B` is the compact L-BFGS Hessian
-//! (Nocedal-Wright 7.19), subject to an L_inf trust region, optional
-//! box bounds on the coordinates, and optional centering
+//! the two-loop L-BFGS direction projected onto an L_inf trust
+//! region, optional box bounds, and optional centering
 //! `sum_i p_{i,h} = 0`. Extra arm: the published default remains
 //! unconstrained Polak-Ribiere CG.
 

@@ -24,7 +24,7 @@ equals 1/2 at =x = σ=.
 | Stochastic | random pair mini-batches | Robbins and Monro 1951 |
 | Anneal | Metropolis SA + CG polish | Kirkpatrick 1983 |
 | Replica | parallel tempering + CG polish | Hukushima and Nemoto 1996 |
-| HiGHS | bound-constrained L-BFGS quadratic model | Huangfu and Hall 2018; Nocedal-Wright 7.19 |
+| HiGHS | L-BFGS two-loop projected by HiGHS | Huangfu and Hall 2018; Nocedal-Wright 7.4 |
 | MDS init | Torgerson double-centre | Torgerson 1952 |
 
 =Solver::Standard= is the published full-pair CG path. Halko rangefinder
