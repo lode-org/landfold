@@ -1017,6 +1017,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_histogram_bounds_that_collapse_internal_edges() {
+        let lo = 1e200;
+        let hi = f64::from_bits(lo.to_bits() + 1);
+        assert!(Histogram1d::new(lo, hi, 2).is_err());
+        assert!(Histogram2d::new(lo, hi, 2, 0.0, 1.0, 2).is_err());
+    }
+
+    #[test]
     fn rejects_overflowing_fes_coordinate_padding() {
         let points = array![[-f64::MAX, 0.0], [f64::MAX, 0.0]];
         assert!(fes_from_points(points.view(), 4, 4, 1.0, 0.05, None).is_err());
