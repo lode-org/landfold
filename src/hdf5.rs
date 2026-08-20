@@ -280,4 +280,65 @@ mod tests {
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert_eq!(batch.frame(0).expect("first frame").row(0).to_vec(), [1.25, 2.5, 3.75]);
     }
+
+    #[test]
+    fn rejects_nonfinite_path_observables() {
+        let path = std::env::temp_dir().join(format!(
+            "landfold-hdf5-nonfinite-observable-{}.h5",
+            std::process::id()
+        ));
+        let file = hdf5::File::create(&path).expect("create HDF5 fixture");
+        let path_group = file.create_group("path").expect("create path group");
+        path_group
+            .new_dataset::<f64>()
+            .shape((1, 3))
+            .create("images")
+            .expect("create images")
+            .write_raw(&[0.0, 1.0, 2.0])
+            .expect("write images");
+        path_group
+            .new_dataset::<f64>()
+            .shape(1)
+            .create("energies")
+            .expect("create energies")
+            .write_raw(&[f64::NAN])
+            .expect("write energies");
+        drop(file);
+
+        let error = read_hdf5_batch(&path).expect_err("non-finite observable must be rejected");
+        std::fs::remove_file(path).expect("remove HDF5 fixture");
+        assert!(error.to_string().contains("observables must be finite"));
+    }
+
+    #[test]
+    fn rejects_invalid_atomic_numbers() {
+        let path = std::env::temp_dir().join(format!(
+            "landfold-hdf5-invalid-atomic-number-{}.h5",
+            std::process::id()
+        ));
+        let file = hdf5::File::create(&path).expect("create HDF5 fixture");
+        let path_group = file.create_group("path").expect("create path group");
+        path_group
+            .new_dataset::<f64>()
+            .shape((1, 3))
+            .create("images")
+            .expect("create images")
+            .write_raw(&[0.0, 1.0, 2.0])
+            .expect("write images");
+        let metadata_group = file
+            .create_group("metadata")
+            .expect("create metadata group");
+        metadata_group
+            .new_dataset::<i64>()
+            .shape(1)
+            .create("atomic_numbers")
+            .expect("create atomic numbers")
+            .write_raw(&[0_i64])
+            .expect("write atomic numbers");
+        drop(file);
+
+        let error = read_hdf5_batch(&path).expect_err("invalid atomic number must be rejected");
+        std::fs::remove_file(path).expect("remove HDF5 fixture");
+        assert!(error.to_string().contains("atomic numbers"));
+    }
 }
