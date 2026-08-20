@@ -46,13 +46,15 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Python development headers
-        run: sudo apt-get update && sudo apt-get install --yes python3-dev
+        run: sudo apt-get update && sudo apt-get install --yes cmake libhdf5-dev pkg-config python3-dev
       - name: Validate metadata and Python pin
         run: |
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
           bash scripts/check_pyo3_pin.sh
       - name: Test Python provenance contract
         run: cargo test --locked --features python --test pyo3_pin
+      - name: Strict feature Clippy
+        run: cargo clippy --locked --all-targets --features python,readcon-chemfiles,hdf5 -- -D warnings
 
   python-bridge:
     name: Chemparseplot HDF5 bridge
