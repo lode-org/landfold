@@ -22,11 +22,13 @@ jobs:
       matrix:
         include:
           - name: default
-            features: ""
+            cargo_args: ""
+          - name: minimal
+            cargo_args: --no-default-features
           - name: readcon
-            features: readcon
+            cargo_args: --features readcon
           - name: chemfiles-hdf5
-            features: readcon-chemfiles,hdf5
+            cargo_args: --features readcon-chemfiles,hdf5
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -34,7 +36,7 @@ jobs:
         if: matrix.name == 'chemfiles-hdf5'
         run: sudo apt-get update && sudo apt-get install --yes cmake libhdf5-dev pkg-config
       - name: Test
-        run: cargo test --locked --all-targets ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
+        run: cargo test --locked --all-targets ${{ matrix.cargo_args }}
       - name: Clippy
         if: matrix.name == 'default'
         run: cargo clippy --locked --all-targets -- -D warnings
