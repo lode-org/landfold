@@ -215,7 +215,12 @@ impl Stress {
                 high: self.n,
             });
         }
-        if coords.len() != self.n * d {
+        let coordinate_len = self.n.checked_mul(d).ok_or_else(|| {
+            crate::error::LandfoldError::Msg(
+                "stress coordinate dimension product overflowed".into(),
+            )
+        })?;
+        if coords.len() != coordinate_len {
             return Err(crate::error::LandfoldError::Shape(
                 "stress coordinates must have length n * d",
             ));
