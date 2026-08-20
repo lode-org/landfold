@@ -27,6 +27,10 @@ pub struct Provenance {
     pub protocol_minor: u16,
     /// Embedded eindir objective layout revision.
     pub abi_layout_revision: u32,
+    /// Embedded eindir objective ABI major revision.
+    pub abi_major: u16,
+    /// Embedded eindir objective ABI minor revision.
+    pub abi_minor: u16,
     /// DLPack major revision used by the source bridge.
     pub dlpack_major: u16,
     /// DLPack minor revision used by the source bridge.
@@ -175,16 +179,19 @@ impl Provenance {
         input_digest: impl Into<String>,
         compatibility: &EngineCompatibility,
     ) -> Result<Self, String> {
-        Self::new(
+        Self::from_fields(
             run_id,
             input_digest,
             &compatibility.engine_id,
+            None,
             &compatibility.protocol_family,
             compatibility.protocol_major,
             compatibility.protocol_minor,
             compatibility.layout_revision,
             compatibility.abi_major,
             compatibility.abi_minor,
+            1,
+            0,
         )
     }
 
@@ -210,6 +217,8 @@ impl Provenance {
             protocol_major,
             protocol_minor,
             abi_layout_revision,
+            1,
+            0,
             dlpack_major,
             dlpack_minor,
         )
@@ -225,6 +234,8 @@ impl Provenance {
         protocol_major: u16,
         protocol_minor: u16,
         abi_layout_revision: u32,
+        abi_major: u16,
+        abi_minor: u16,
         dlpack_major: u16,
         dlpack_minor: u16,
     ) -> Result<Self, String> {
@@ -238,6 +249,8 @@ impl Provenance {
             protocol_major,
             protocol_minor,
             abi_layout_revision,
+            abi_major,
+            abi_minor,
             dlpack_major,
             dlpack_minor,
         };
@@ -268,6 +281,8 @@ impl Provenance {
             protocol_major,
             protocol_minor,
             abi_layout_revision,
+            1,
+            0,
             dlpack_major,
             dlpack_minor,
         )
@@ -295,7 +310,11 @@ impl Provenance {
         } else if self.engine_id == "rgpot" {
             return Err("rgpot provenance must include the eindir revision".into());
         }
-        if self.protocol_major == 0 || self.abi_layout_revision == 0 || self.dlpack_major == 0 {
+        if self.protocol_major == 0
+            || self.abi_major == 0
+            || self.abi_layout_revision == 0
+            || self.dlpack_major == 0
+        {
             return Err("protocol, ABI, and DLPack major revisions must be nonzero".into());
         }
         Ok(())
@@ -343,7 +362,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(provenance.engine_id, "eon");
+        assert_eq!(provenance.abi_major, 1);
+        assert_eq!(provenance.abi_minor, 1);
         assert_eq!(provenance.abi_layout_revision, 3);
+        assert_eq!(provenance.dlpack_major, 1);
+        assert_eq!(provenance.dlpack_minor, 0);
         assert_eq!(compatibility.to_json(), eon_stamp());
     }
 
