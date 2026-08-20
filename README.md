@@ -54,6 +54,10 @@ posterior: pair labels (same class / different) are Bernoulli with
 probability \(F(D(\alpha))\), the same transfer as χ, flat prior on
 \(\alpha\ge 0\). The plug-in median of \((\sigma^2-D_0^2)/p^2\) is
 printed as `plugin` and is biased high. Pass `--alpha` only to override.
+The LJ38 picture of that default is
+[`docs/ceriotti-figs/lj38_map_vs_ceriotti.png`](docs/ceriotti-figs/lj38_map_vs_ceriotti.png)
+(Ceriotti \(\chi\) vs MAP \(\alpha=2.4\)).
+`lj38_stretch_vs_ceriotti.png` is the same panel at a hand-set \(\alpha=8\).
 
 `landfold embed --preopt` / `--grid` / `--gopt` is the C++ `dimred`
 mix-down path (identity MDS, then sigmoid χ, then pointwise grid).
