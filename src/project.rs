@@ -72,6 +72,12 @@ impl ProjOpts {
                 if !g2.is_finite() || *g2 < 1.0 || g2.fract() != 0.0 {
                     return Err(LandfoldError::Parse("-grid g2 must be >= 1".into()));
                 }
+                let usize_limit = usize::MAX as f64;
+                if *g1 >= usize_limit || *g2 >= usize_limit {
+                    return Err(LandfoldError::Parse(
+                        "-grid counts exceed the platform usize range".into(),
+                    ));
+                }
                 Ok(Self {
                     gridw: *w,
                     grid_coarse: *g1 as usize,
@@ -305,6 +311,7 @@ mod tests {
         assert!(ProjOpts::from_cli("1.0,1.5,201").is_err());
         assert!(ProjOpts::from_cli("1.0,21,0").is_err());
         assert!(ProjOpts::from_cli("1.0,NaN,201").is_err());
+        assert!(ProjOpts::from_cli("1.0,18446744073709551616,2").is_err());
         let p = ProjOpts::from_cli("2.5,11,41").unwrap();
         assert_eq!(p.grid_coarse, 11);
         assert!((p.gridw - 2.5).abs() < 1e-15);
