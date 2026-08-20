@@ -414,8 +414,8 @@ pub fn joint_pairwise_hist(
             "joint hist weights must be finite and nonnegative".into(),
         ));
     }
-    let mut mx_d = 0.0;
-    let mut mx_r = 0.0;
+    let mut mx_d: f64 = 0.0;
+    let mut mx_r: f64 = 0.0;
     for i in 0..n {
         for j in 0..i {
             mx_d = mx_d.max(hd[(i, j)]);
