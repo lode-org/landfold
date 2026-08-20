@@ -150,12 +150,13 @@ let embedding = landfold::embed_points(batch.flattened_points()?.view(), &metric
 
 The optional `hdf5` feature reads the chemparseplot interchange layout directly
 in Rust. It consumes `/path/images`, and optionally `/path/frame_ids`,
-`/path/energies`, `/path/f_para`, `/path/rxn_coord`, `/metadata/atom_ids`,
+`/path/energies`, `/path/f_para`, `/path/rxn_coord`, `/path/gradients`, `/metadata/atom_ids`,
 `/metadata/atomic_numbers`, and `/metadata/cell`, returning the same validated
 `FrameBatch`. `/metadata/atom_symbols` is also accepted for stable chemical
 identity. Atomic numbers, symbols, and a finite 3x3 cell are retained as typed
 fields; Chemparseplot’s flattened nine-element cell representation is normalized
-to that same 3x3 field.
+to that same 3x3 field. Per-image gradients are retained as
+`FrameBatch::gradients` with shape `(n_frames, 3 * n_atoms)`.
 `/metadata/length_unit` is retained as `FrameBatch::length_unit` when present;
 per-image path observables are available through
 `FrameBatch::frame_metadata` when present:
