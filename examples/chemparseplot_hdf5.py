@@ -17,10 +17,13 @@ import landfold
 
 
 def _python_metadata(value: object) -> object:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, np.generic):
-        return value.item()
+        scalar = value.item()
+        return scalar.decode("utf-8") if isinstance(scalar, bytes) else scalar
     return value
 
 
