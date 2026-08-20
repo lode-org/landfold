@@ -6,24 +6,33 @@
 
 * Representation stack
 
-Ceriotti (PNAS 2011) showed that *isometric* MDS of raw frame
-distances cannot work: the pairwise histogram is Gaussian at short
-\(r\) and uniform-in-\(D\) at long \(r\). That is a statement about
-isometry, not about the sigmoid being the last filter.
+Ceriotti (PNAS 2011, Appendix / pairwise-distance figure) plotted
+\(P(D)\) for molecular configurations and *observed* a short-\(r\)
+thermal lobe (Gaussian in \(D\)) sitting against a long-\(r\)
+uniform-in-\(D\) tail. From that histogram he treated a globally
+isometric 2-D MDS of the raw distances as a bad fit for those data.
+That is an empirical remark about those histograms, not a theorem
+that isometric MDS is impossible.
 
-PNAS 2011 already asks for a hierarchical map with several \(\sigma\).
-A sum of IMQ generators is still completely monotone, so
-=ms,σ1,σ2,...= is a multi-scale transfer (tensor / multi-resolution
-kernel). =landfold dist --suggest= reads \(\sigma\) off the CDF knee
+The published sketch-map answer is the sigmoid transfer plus the
+=dimred= / =dimproj= / =dimlandmark= / =dimdist= workflow
+(identity MDS preopt, mix-down =-imix=, pointwise =-grid= / =-gopt=,
+Gonzalez landmarks, joint \(P(D,d)\)). Extra transfers (=imq=,
+=ms=) stay in the parser; they are not a replacement until a
+figure beats the Ceriotti panels on the same data.
+
+=landfold dist --suggest= reads \(\sigma\) off the CDF knee
 (JCTC 2013 Appendix A). Torgerson / Halko rangefinder MDS
 (10.1137/090771806) remains the linearised one-shot arm.
 
-| Layer | Ceriotti reproduction | Extra |
-|-------+-----------------------+-------|
-| Transfer \(F\) | =ceriotti,σ,a,b= | =imq,σ= ; =ms,σ1,σ2,...= (multi-scale IMQ) |
-| \(\sigma\) | course numbers | =landfold dist --suggest= |
-| Init | classical MDS | Halko randomised rangefinder |
-| Solver | full-pair CG | =--lbfgs= / =--highs= / =--stoch= / =--anneal= / =--replica= |
+| Layer | C++ sketch-map | landfold |
+|-------+----------------+----------|
+| Transfer \(F\) | identity / \(\sigma,a,b\) / \(\sigma,n\) / warp | same, plus unused =imq= / =ms= |
+| \(\sigma\) | by eye from =dimdist= | =landfold dist --suggest= |
+| Init | classical MDS (=-preopt= identity) | same; Halko optional |
+| Solver | CG, then =-grid= / =-gopt= | same; extra arms stay extra |
+| Landmarks | stride / random / minmax / resample / staged | same |
+| Quality visual | =dimdist= joint \(P(D,d)\) | =landfold dist --low-file= |
 
 * Transfer
 
@@ -33,9 +42,8 @@ Generalised sigmoid (Ceriotti 2011, DOI 10.1073/pnas.1108486108):
 
 equals 1/2 at =x = σ=.
 
-Both transfers are first-class. Ceriotti reproduction is
-=sigma,a,b= or =ceriotti,sigma,a,b= (same =xsigmoid=). The extra
-MethodsX arm is =imq,σ=:
+Ceriotti reproduction is =sigma,a,b= or =ceriotti,sigma,a,b= (same
+=xsigmoid=). The extra MethodsX arm is =imq,σ=:
 
 =F(x) = 1 - c / sqrt(c^2 + x^2)= with =c = σ/√3=, so =F(σ) = 1/2=.
 

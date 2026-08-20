@@ -16,7 +16,8 @@ cargo build --release --bins
 * Python feature
 
 Optional CPython module (=embed_euclid=, =project_euclid=,
-=farthest_euclid=, =fes_xy=). pyo3/numpy stay on 0.29 so the graph
+=farthest_euclid=, =fes_xy=, plus =pairwise_euclid=, =mds_euclid=,
+=suggest_scale=, =joint_hist=). pyo3/numpy stay on 0.29 so the graph
 shares one major with dlpk 0.4.1. Do not enable =dlpk/pyo3= (that
 would add a second =pyo3-ffi= =links = "python"= edge).
 
@@ -55,27 +56,31 @@ landfold mds -D 30 -d 2 --distances < landmarks.dat > landmarks.mds.dist
 
 * Scale and transfers
 
-Isometric MDS of raw distances is the wrong problem. The filter \(F\)
-is not unique. =dist --suggest= reads \(\sigma\) from the pairwise CDF
-knee. =ceriotti,σ,a,b= reproduces PNAS/JCTC. =imq,σ= is one
-completely monotone generator. =ms,σ1,σ2,...= averages several IMQ
-scales (the hierarchical map PNAS 2011 asked for).
+Ceriotti plotted \(P(D)\) and treated a globally isometric 2-D MDS of
+the raw distances as a bad fit for those molecular histograms (PNAS
+2011). That is an observation, not a proof. The C++ answer is the
+sigmoid plus =dimdist= (joint \(P(D,d)\)). =dist --suggest= reads
+\(\sigma\) from the pairwise CDF knee (JCTC 2013 Appendix A).
+=ceriotti,σ,a,b= reproduces PNAS/JCTC.
 
 #+begin_src sh
 landfold dist -D 10 --suggest < ts.cv
-# reproduce
 landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 \
-    --steps 40 -w < landmarks.dat > landmarks.ld
-# multi-scale IMQ (example: q25, q50, knee)
-landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ms,2.8,4.4,6.3 \
-    --steps 40 -w < landmarks.dat > landmarks.ld
+    --preopt 100 --grid 8,21,201 --gopt 10 -w -v < landmarks.dat > landmarks.ld
+landfold dist -D 10 -d 2 --low-file landmarks.ld --nbin 80 < landmarks.hd
 #+end_src
 
 * Embed
 
+The official =sketch-map.sh= path is identity MDS (=-preopt= with
+identity \(F\)), then sigmoid χ with decreasing =-imix=, then
+=-grid gw,21,201= / =-gopt=. =--steps= is the single-phase CG
+shortcut. =-v= writes =# Error in fitting LD points:= on stdout so a
+mix-down script can read the residual the way the C++ tool does.
+
 #+begin_src sh
-landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld imq,5 \
-    --steps 40 -w < landmarks.dat > landmarks.ld
+landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 \
+    --preopt 100 --grid 8,21,201 --gopt 10 -w -v < landmarks.dat > landmarks.ld
 #+end_src
 
 Solvers on that same χ: default full-pair CG, =--lbfgs=, =--highs=,
@@ -84,14 +89,16 @@ and =landfold.solvers()=.
 
 * Landmarks
 
-Gonzalez farthest-point sampling (Gonzalez 1985,
-DOI [[https://doi.org/10.1016/0304-3975(85)90224-5][10.1016/0304-3975(85)90224-5]]). =--seed= picks the first
-index modulo N. =--indices= writes a =# indices ...= comment so the
-point table stays readable by =read_points=. =--voronoi= replaces
-the FPS scores with Voronoi masses (=--wgamma=).
+C++ =dimlandmark= modes: =stride=, =random=, =minmax= (Gonzalez
+farthest-point, DOI [[https://doi.org/10.1016/0304-3975(85)90224-5][10.1016/0304-3975(85)90224-5]]),
+=resample=, =staged=. =--seed= picks the first index modulo N
+(=minmax= / =random= / =resample=). =--indices= writes a
+=# indices ...= comment so the point table stays readable by
+=read_points=. =--voronoi= replaces the scores with Voronoi masses
+(=--wgamma=).
 
 #+begin_src sh
-landfold landmarks -D 30 -n 200 --seed 1 --indices --voronoi \
+landfold landmarks -D 30 -n 200 --mode minmax --seed 1 --indices --voronoi \
     < hd.dat > landmarks.dat
 #+end_src
 

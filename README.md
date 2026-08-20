@@ -15,12 +15,13 @@ Each published kernel cites its paper in rustdoc.
 ## CLI
 
 ```
-landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 < hd.dat
-landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld imq,5 < hd.dat
-landfold landmarks -D 30 -n 200 --seed 1 --indices < hd.dat
+landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 \
+    --preopt 100 --grid 8,21,201 --gopt 10 -v < hd.dat
+landfold landmarks -D 30 -n 200 --mode minmax --seed 1 --indices < hd.dat
 landfold project -D 30 -d 2 --high-file lm.hd --low-file lm.ld \
     --grid 1.0,21,201 --refine 3 < frames.dat
 landfold dist -D 30 < hd.dat
+landfold dist -D 30 -d 2 --low-file lm.ld --nbin 80 < hd.dat
 landfold mds -D 30 -d 2 --distances < hd.dat
 landfold fes --input ld.dat --svg fes.svg --csv fes.csv \
     --frames frames.xyz --cn-csv cn.csv
@@ -47,10 +48,16 @@ value remains absolute.
 initialiser; `--distances` prints pairwise distances of the embedding
 (the C++ Torgerson pairwise invariant).
 
-`landfold project` places new high-D rows by a coarse then fine χ
-grid and optional `--refine` Polak-Ribiere steps; `--print-error`
-appends χ and the nearest-landmark distance. `landfold landmarks` is
-Gonzalez farthest-point sampling (`--voronoi` for Voronoi masses).
+`landfold embed --preopt` / `--grid` / `--gopt` is the C++ `dimred`
+mix-down path (identity MDS, then sigmoid χ, then pointwise grid).
+`-v` writes `# Error in fitting LD points:` on stdout. `landfold
+project` places new high-D rows by a coarse then fine χ grid and
+optional `--refine` Polak-Ribiere steps; `--print-error` appends χ
+and the nearest-landmark distance. `landfold landmarks` is C++
+`dimlandmark` (`--mode stride|random|minmax|resample|staged`;
+`--voronoi` for Voronoi masses). `landfold dist --low-file` is
+`dimdist`: the joint \(P(D,d)\) histogram Ceriotti used as the
+quality picture.
 `landfold fes` writes `F = -kT ln(rho/rhomax)` as CSV/SVG; `--frames`
 plus `--cn-csv` is the coordination histogram of the cluster-FES
 figure class. `--blur`, `--floor`, and `--fmax` match that panel.
@@ -75,7 +82,8 @@ tree (`SKMAP_SRC`). `cargo test --release --test cpp_parity` loads that file.
 ## Python
 
 `--features python` binds `embed_euclid`, `project_euclid`,
-`farthest_euclid`, and `fes_xy`. The corresponding `*_result` functions
+`farthest_euclid`, `fes_xy`, `pairwise_euclid`, `mds_euclid`,
+`suggest_scale`, and `joint_hist`. The corresponding `*_result` functions
 return dictionaries tagged with `landfold.*.v1` schemas and retain stress,
 density, χ, nearest-landmark diagnostics, and caller-supplied source metadata
 for plotting adapters. pyo3/numpy stay on 0.29 so the graph

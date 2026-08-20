@@ -20,11 +20,13 @@ use crate::error::{LandfoldError, Result};
 /// CLI / Python help for `--fun-hd` / `--fun-ld`.
 ///
 /// Ceriotti generalised sigmoid (`sigma,a,b` or `ceriotti,sigma,a,b`)
-/// is the PNAS 2011 / JCTC 2013 reproduction path. `imq,sigma` is the
-/// extra MethodsX inverse-multiquadric transfer. Both are first-class.
+/// is the PNAS 2011 / JCTC 2013 path. `identity`, `sigma`, `sigma,n`,
+/// and warp match the C++ `dimred` parser. `imq` / `ms` stay available
+/// but are not the reproduction default.
 pub const FUN_SPEC_HELP: &str = "\
-Ceriotti sigmoid (reproduce PNAS/JCTC): sigma,a,b or ceriotti,sigma,a,b. \
-IMQ: imq,sigma. Multi-scale IMQ: ms,s1,s2,.... Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd.";
+Ceriotti sigmoid (PNAS/JCTC): sigma,a,b or ceriotti,sigma,a,b. \
+Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd (C++ dimred). \
+imq,sigma and ms,s1,s2,... are extra.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
