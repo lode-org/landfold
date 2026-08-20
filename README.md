@@ -62,7 +62,8 @@ Each includes a `schema` key and a `metadata` dictionary. The `*_result`
 functions require `metadata["provenance"]` with schema `landfold.provenance.v1`,
 `run_id`, a `sha256:`-prefixed
 input digest, `engine_id`, `protocol_family`, protocol major/minor, eindir ABI
-layout, and DLPack major/minor fields. This keeps a low-dimensional plot
+layout, and DLPack major/minor fields. `rgpot` records additionally require
+the exact 40-digit `eindir_revision`. This keeps a low-dimensional plot
 joinable to the exact anneal/rgpot source without making Landfold evaluate the
 objective engine.
 

@@ -58,6 +58,16 @@ fn validated_metadata<'py>(metadata: Option<Bound<'py, PyDict>>) -> PyResult<Bou
             .extract()
             .map_err(|_| PyValueError::new_err(format!("metadata.provenance.{key} must be a string")))
     };
+    let optional_string = |key: &str| -> PyResult<Option<String>> {
+        provenance
+            .get_item(key)?
+            .map(|value| {
+                value.extract().map_err(|_| {
+                    PyValueError::new_err(format!("metadata.provenance.{key} must be a string"))
+                })
+            })
+            .transpose()
+    };
     let integer = |key: &str| -> PyResult<u16> {
         provenance
             .get_item(key)?
@@ -70,18 +80,40 @@ fn validated_metadata<'py>(metadata: Option<Bound<'py, PyDict>>) -> PyResult<Bou
         .ok_or_else(|| PyValueError::new_err("metadata.provenance.abi_layout_revision is required"))?
         .extract()
         .map_err(|_| PyValueError::new_err("metadata.provenance.abi_layout_revision must be an integer"))?;
-    Provenance::new(
-        string("run_id")?,
-        string("input_digest")?,
-        string("engine_id")?,
-        string("protocol_family")?,
-        integer("protocol_major")?,
-        integer("protocol_minor")?,
-        layout,
-        integer("dlpack_major")?,
-        integer("dlpack_minor")?,
-    )
-    .map_err(PyValueError::new_err)?;
+    let engine_id = string("engine_id")?;
+    let run_id = string("run_id")?;
+    let input_digest = string("input_digest")?;
+    let protocol_family = string("protocol_family")?;
+    let protocol_major = integer("protocol_major")?;
+    let protocol_minor = integer("protocol_minor")?;
+    let dlpack_major = integer("dlpack_major")?;
+    let dlpack_minor = integer("dlpack_minor")?;
+    let record = match optional_string("eindir_revision")? {
+        Some(revision) => Provenance::new_with_eindir_revision(
+            run_id,
+            input_digest,
+            engine_id,
+            protocol_family,
+            protocol_major,
+            protocol_minor,
+            layout,
+            dlpack_major,
+            dlpack_minor,
+            revision,
+        ),
+        None => Provenance::new(
+            run_id,
+            input_digest,
+            engine_id,
+            protocol_family,
+            protocol_major,
+            protocol_minor,
+            layout,
+            dlpack_major,
+            dlpack_minor,
+        ),
+    };
+    record.map_err(PyValueError::new_err)?;
     Ok(metadata)
 }
 
