@@ -65,6 +65,15 @@ pub use replica::ReplicaOpts;
 pub use search::StochOpts;
 pub use stress::{Stress, StressEval, query_chi};
 pub use trajectory::FrameBatch;
+#[cfg(feature = "readcon")]
+pub use readcon::{
+    frame_positions, frames_batch, frames_positions, read_con_batch, read_con_frames,
+    read_con_positions,
+};
+#[cfg(feature = "readcon-chemfiles")]
+pub use readcon::{
+    read_trajectory_batch, read_trajectory_frames, read_trajectory_positions,
+};
 pub use transfer::{Transfer, TransferMode};
 
 #[cfg(feature = "python")]

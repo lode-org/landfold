@@ -9,8 +9,8 @@ use std::path::Path;
 use ndarray::Array2;
 use readcon_core::types::ConFrame;
 
-use crate::{LandfoldError, Result};
 use crate::trajectory::FrameBatch;
+use crate::{LandfoldError, Result};
 
 /// Read all frames from a canonical readcon CON or CONVEL file.
 pub fn read_con_frames(path: &Path) -> Result<Vec<ConFrame>> {
@@ -209,9 +209,13 @@ mod tests {
         std::fs::write(&path, xyz).expect("write XYZ fixture");
 
         let positions = read_trajectory_positions(&path).expect("read XYZ fixture");
+        let batch = read_trajectory_batch(&path).expect("read XYZ batch");
         std::fs::remove_file(path).expect("remove XYZ fixture");
         assert_eq!(positions.len(), 2);
         assert_eq!(positions[0][[0, 0]], 0.0);
         assert_eq!(positions[1][[0, 0]], 2.0);
+        assert_eq!(batch.frame_ids, vec![0, 1]);
+        assert_eq!(batch.atom_ids, vec![0, 1]);
+        assert_eq!(batch.length_unit, None);
     }
 }

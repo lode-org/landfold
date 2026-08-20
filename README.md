@@ -96,6 +96,10 @@ input. `read_con_batch` and `read_trajectory_batch` expose the same inputs as a
 format-neutral `FrameBatch`, retaining frame IDs, atom IDs, and the length unit.
 All frames in a trajectory must retain the same atom IDs and count.
 
+The adapter functions are also re-exported at the crate root when their
+feature is enabled, so `landfold::read_con_batch` and
+`landfold::read_trajectory_batch` are available without importing the module.
+
 `FrameBatch::flattened_points` converts that contract to one
 `(n_atoms * 3)` row per frame for distance embedding. The inverse
 `FrameBatch::from_flattened_points` validates HDF5/NumPy-style arrays before

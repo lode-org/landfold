@@ -97,4 +97,26 @@ mod tests {
         assert_eq!(batch.atom_ids, vec![7, 8]);
         assert_eq!(batch.frame(1).expect("second frame").row(0).to_vec(), vec![6.0, 7.0, 8.0]);
     }
+
+    #[test]
+    fn defaults_identity_and_rejects_nonfinite_images() {
+        let path = std::env::temp_dir().join(format!(
+            "landfold-hdf5-invalid-{}.h5",
+            std::process::id()
+        ));
+        let file = hdf5::File::create(&path).expect("create HDF5 fixture");
+        let path_group = file.create_group("path").expect("create path group");
+        path_group
+            .new_dataset::<f64>()
+            .shape((1, 3))
+            .create("images")
+            .expect("create images")
+            .write_raw(&[0.0, f64::NAN, 1.0])
+            .expect("write images");
+        drop(file);
+
+        let error = read_hdf5_batch(&path).expect_err("non-finite images must be rejected");
+        std::fs::remove_file(path).expect("remove HDF5 fixture");
+        assert!(error.to_string().contains("finite"));
+    }
 }
