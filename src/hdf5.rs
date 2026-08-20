@@ -44,9 +44,12 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
 }
 
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
-    let Ok(dataset) = file.dataset(path) else {
+    if !file.link_exists(path) {
         return Ok(None);
-    };
+    }
+    let dataset = file
+        .dataset(path)
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
     if dataset.ndim() != 1 || dataset.shape()[0] != expected {
         return Err(LandfoldError::Shape(
             "HDF5 trajectory identity dataset shape",
