@@ -127,6 +127,45 @@ pub fn write_points<W: Write>(
     Ok(())
 }
 
+/// C++ `dimred -plumed` landmark dump for PLUMED bespoke CVs.
+pub fn write_plumed<W: Write>(
+    w: &mut W,
+    high: &Array2<f64>,
+    low: &Array2<f64>,
+    weights: Option<&Array1<f64>>,
+) -> Result<()> {
+    if high.nrows() != low.nrows() {
+        return Err(LandfoldError::Shape("plumed HD/LD count mismatch"));
+    }
+    if high.nrows() == 0 {
+        return Err(LandfoldError::Empty);
+    }
+    writeln!(w, "DESCRIPTION: results from sketch-map analysis in PLUMED compatible format")?;
+    for i in 0..high.nrows() {
+        let wt = weights.map(|ww| ww[i]).unwrap_or(1.0);
+        write!(w, "REMARK WEIGHT={wt}")?;
+        for h in 0..low.ncols() {
+            write!(w, " SKETCHMAP.{}={}", h + 1, low[(i, h)])?;
+        }
+        writeln!(w)?;
+        write!(w, "REMARK ARG=")?;
+        for h in 0..high.ncols() {
+            if h > 0 {
+                write!(w, ",")?;
+            }
+            write!(w, "d.{}", h + 1)?;
+        }
+        writeln!(w)?;
+        write!(w, "REMARK")?;
+        for h in 0..high.ncols() {
+            write!(w, " d.{}={}", h + 1, high[(i, h)])?;
+        }
+        writeln!(w)?;
+        writeln!(w, "END")?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,6 +186,21 @@ mod tests {
         let points = Array2::zeros((1, 2));
         let mut output = Vec::new();
         assert!(write_points(&mut output, &points, Some(&Array1::from(vec![-1.0]))).is_err());
+    }
+
+    #[test]
+    #[test]
+    fn plumed_dump_has_ceriotti_blocks() {
+        let high = array![[1.0, 2.0], [3.0, 4.0]];
+        let low = array![[0.1, 0.2], [0.3, 0.4]];
+        let w = array![1.0, 2.0];
+        let mut buf = Vec::new();
+        write_plumed(&mut buf, &high, &low, Some(&w)).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+        assert!(s.contains("DESCRIPTION: results from sketch-map analysis"));
+        assert!(s.contains("SKETCHMAP.1=0.1"));
+        assert!(s.contains("WEIGHT=2"));
+        assert!(s.contains("END"));
     }
 
     #[test]

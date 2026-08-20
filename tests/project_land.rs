@@ -68,6 +68,7 @@ fn project_recovers_held_out_corner() {
         grid_coarse: 21,
         grid_fine: 41,
         cg_steps: 12,
+        ..ProjOpts::default()
     };
     let q = project_one(&emb, all.row(3), &Euclid, &po).unwrap();
     let d = |i: usize| {
@@ -182,6 +183,7 @@ fn project_many_matches_project_one() {
         grid_coarse: 11,
         grid_fine: 21,
         cg_steps: 4,
+        ..ProjOpts::default()
     };
     let many = project_many(&emb, pts.view(), &Euclid, &po).unwrap();
     for i in 0..pts.nrows() {
@@ -207,6 +209,7 @@ fn project_without_grid_uses_nearest_landmark() {
         grid_coarse: 1,
         grid_fine: 1,
         cg_steps: 0,
+        ..ProjOpts::default()
     };
     let q = project_one(&emb, pts.row(0), &Euclid, &po).unwrap();
     assert_relative_eq!(q[0], emb.low[(0, 0)], epsilon = 1e-15);

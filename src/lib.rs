@@ -51,11 +51,14 @@ pub use hdf5::read_hdf5_batch;
 pub use highs_slp::HighsOpts;
 pub use hist::{
     FreeEnergy, Histogram1d, Histogram2d, coordination_histogram, coordination_numbers,
-    fes_from_points,
+    fes_from_points, joint_pairwise_hist,
 };
-pub use io::{PointSet, read_points, read_points_path, write_points};
+pub use io::{PointSet, read_points, read_points_path, write_plumed, write_points};
 pub use iter::{Embedding, IterOpts, Solver, embed, embed_points};
-pub use landmark::{Landmarks, farthest_point, farthest_point_ifirst, voronoi_weights};
+pub use landmark::{
+    Landmarks, LandmarkMode, farthest_point, farthest_point_ifirst, select_landmarks,
+    voronoi_weights,
+};
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use metric::{Dot, Euclid, L1, Metric, Periodic, Sphere};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};

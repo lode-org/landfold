@@ -24,6 +24,12 @@ pub struct ProjOpts {
     pub grid_coarse: usize,
     pub grid_fine: usize,
     pub cg_steps: usize,
+    /// Query row is already distances to the n landmarks (`dimproj -similarity`).
+    pub similarity: bool,
+    /// Path-like average of landmark LD coords (`dimproj -path lambda`).
+    pub path_lambda: f64,
+    /// Softmax temperature on the fine grid (`dimproj -gt`). Zero keeps the min.
+    pub gtemp: f64,
 }
 
 impl Default for ProjOpts {
@@ -33,12 +39,15 @@ impl Default for ProjOpts {
             grid_coarse: 21,
             grid_fine: 201,
             cg_steps: 0,
+            similarity: false,
+            path_lambda: -1.0,
+            gtemp: 0.0,
         }
     }
 }
 
 impl ProjOpts {
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         if !self.gridw.is_finite() || self.gridw <= 0.0 {
             return Err(LandfoldError::Msg(
                 "projection grid width must be finite and > 0".into(),
@@ -47,6 +56,16 @@ impl ProjOpts {
         if self.grid_coarse == 0 || self.grid_fine == 0 {
             return Err(LandfoldError::Msg(
                 "projection grid sizes must be > 0".into(),
+            ));
+        }
+        if !self.gtemp.is_finite() || self.gtemp < 0.0 {
+            return Err(LandfoldError::Msg(
+                "projection gtemp must be finite and nonnegative".into(),
+            ));
+        }
+        if !self.path_lambda.is_finite() {
+            return Err(LandfoldError::Msg(
+                "projection path lambda must be finite".into(),
             ));
         }
         Ok(())
@@ -83,6 +102,9 @@ impl ProjOpts {
                     grid_coarse: *g1 as usize,
                     grid_fine: (*g2 as usize).max(1),
                     cg_steps: 0,
+                    similarity: false,
+                    path_lambda: -1.0,
+                    gtemp: 0.0,
                 })
             }
             _ => Err(LandfoldError::Parse("-grid needs gw,g1,g2".into())),
@@ -120,14 +142,21 @@ pub fn project_report(
     opts.validate()?;
     let n = emb.high.nrows();
     let d_hi = emb.high.ncols();
-    if query.len() != d_hi {
+    if n == 0 {
+        return Err(LandfoldError::Empty);
+    }
+    if opts.similarity {
+        if query.len() != n {
+            return Err(LandfoldError::MetricSize {
+                left: query.len(),
+                right: n,
+            });
+        }
+    } else if query.len() != d_hi {
         return Err(LandfoldError::MetricSize {
             left: query.len(),
             right: d_hi,
         });
-    }
-    if n == 0 {
-        return Err(LandfoldError::Empty);
     }
     let qslice: Vec<f64> = query.iter().copied().collect();
     let mut hd_row = Array1::<f64>::zeros(n);
@@ -135,10 +164,19 @@ pub fn project_report(
     let mut nearest = f64::INFINITY;
     let mut nearest_idx = 0usize;
     for i in 0..n {
-        for (h, value) in landmark.iter_mut().enumerate().take(d_hi) {
-            *value = emb.high[(i, h)];
+        let d = if opts.similarity {
+            query[i]
+        } else {
+            for (h, value) in landmark.iter_mut().enumerate().take(d_hi) {
+                *value = emb.high[(i, h)];
+            }
+            metric.dist(&qslice, &landmark)?
+        };
+        if !d.is_finite() || d < 0.0 {
+            return Err(LandfoldError::Msg(
+                "projection distances must be finite and nonnegative".into(),
+            ));
         }
-        let d = metric.dist(&qslice, &landmark)?;
         hd_row[i] = d;
         if d < nearest {
             nearest = d;
@@ -150,6 +188,9 @@ pub fn project_report(
         fhd_row[i] = emb.tfun_hd.try_fdf(hd_row[i])?.0;
     }
     let d = emb.low.ncols();
+    if opts.path_lambda > 0.0 {
+        return path_average(emb, hd_row.view(), nearest, nearest_idx, opts.path_lambda);
+    }
     let mut best = emb.low.row(nearest_idx).to_owned();
     let eval = |x: ArrayView1<f64>| {
         query_chi(
@@ -206,6 +247,27 @@ pub fn project_report(
                 best = q;
             }
         });
+    }
+
+    if opts.gtemp > 0.0 && d == 2 && opts.grid_coarse >= 2 {
+        let w = opts.gridw;
+        let g1 = opts.grid_coarse;
+        let mut tw = 0.0;
+        let mut acc = Array1::<f64>::zeros(d);
+        let reff = best_f_after_grid(&eval, best.view());
+        scan_grid_2d(-w, w, -w, w, g1, |q| {
+            let f = eval(q.view()).0;
+            let ww = ((reff - f) / opts.gtemp).exp();
+            if ww.is_finite() {
+                tw += ww;
+                acc[0] += ww * q[0];
+                acc[1] += ww * q[1];
+            }
+        });
+        if tw > 0.0 && tw.is_finite() {
+            best[0] = acc[0] / tw;
+            best[1] = acc[1] / tw;
+        }
     }
 
     if opts.cg_steps > 0 {
@@ -278,7 +340,61 @@ pub fn project_many_report(
     }
 }
 
-fn scan_grid_2d(x0: f64, x1: f64, y0: f64, y1: f64, n: usize, mut visit: impl FnMut(Array1<f64>)) {
+fn path_average(
+    emb: &Embedding,
+    hd_row: ArrayView1<f64>,
+    nearest: f64,
+    nearest_idx: usize,
+    lambda: f64,
+) -> Result<ProjReport> {
+    let d = emb.low.ncols();
+    let n = emb.low.nrows();
+    let mut acc = Array1::<f64>::zeros(d);
+    let mut tw = 0.0;
+    for i in 0..n {
+        let w = (-hd_row[i] / lambda).exp() * emb.weights[i];
+        if !w.is_finite() {
+            return Err(LandfoldError::Msg("path-average weight overflowed".into()));
+        }
+        tw += w;
+        for h in 0..d {
+            acc[h] += w * emb.low[(i, h)];
+        }
+    }
+    if !(tw > 0.0 && tw.is_finite()) {
+        return Err(LandfoldError::Msg("path-average has no positive mass".into()));
+    }
+    for h in 0..d {
+        acc[h] /= tw;
+        if !acc[h].is_finite() {
+            return Err(LandfoldError::Msg(
+                "path-average coordinate became non-finite".into(),
+            ));
+        }
+    }
+    Ok(ProjReport {
+        coords: acc,
+        chi: 0.0,
+        nearest,
+        nearest_idx,
+    })
+}
+
+fn best_f_after_grid(
+    eval: &impl Fn(ArrayView1<f64>) -> (f64, Array1<f64>),
+    best: ArrayView1<f64>,
+) -> f64 {
+    eval(best).0
+}
+
+pub(crate) fn scan_grid_2d(
+    x0: f64,
+    x1: f64,
+    y0: f64,
+    y1: f64,
+    n: usize,
+    mut visit: impl FnMut(Array1<f64>),
+) {
     let denom = (n.saturating_sub(1) as f64).max(1.0);
     for i in 0..n {
         let x = x0 + (x1 - x0) * (i as f64) / denom;
@@ -289,7 +405,7 @@ fn scan_grid_2d(x0: f64, x1: f64, y0: f64, y1: f64, n: usize, mut visit: impl Fn
     }
 }
 
-fn scan_grid_1d(x0: f64, x1: f64, n: usize, mut visit: impl FnMut(Array1<f64>)) {
+pub(crate) fn scan_grid_1d(x0: f64, x1: f64, n: usize, mut visit: impl FnMut(Array1<f64>)) {
     let denom = (n.saturating_sub(1) as f64).max(1.0);
     for i in 0..n {
         let x = x0 + (x1 - x0) * (i as f64) / denom;
@@ -350,6 +466,7 @@ mod tests {
             grid_coarse: 1,
             grid_fine: 1,
             cg_steps: 0,
+            ..ProjOpts::default()
         };
         let r = project_report(&emb, array![1.0, 0.0].view(), &Euclid, &opts).unwrap();
         assert_eq!(r.nearest_idx, 1);
@@ -376,6 +493,7 @@ mod tests {
             grid_coarse: 1,
             grid_fine: 1,
             cg_steps: 0,
+            ..ProjOpts::default()
         };
         emb.low = array![[0.0, 0.0], [1.0, 0.0]];
         assert!(project_report(&emb, array![0.0, 0.0].view(), &Euclid, &opts).is_err());
@@ -416,6 +534,7 @@ mod tests {
             grid_coarse: 1,
             grid_fine: 1,
             cg_steps: 0,
+            ..ProjOpts::default()
         };
         assert!(project_report(&emb, array![0.0].view(), &HugeMetric, &opts).is_err());
     }

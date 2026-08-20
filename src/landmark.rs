@@ -10,6 +10,50 @@ use std::collections::HashSet;
 use crate::error::{LandfoldError, Result};
 use crate::metric::Metric;
 
+/// C++ `dimlandmark -mode`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LandmarkMode {
+    /// Equally spaced along the input order.
+    Stride,
+    /// Uniform random (optionally unique).
+    Random,
+    /// Gonzalez farthest-point (C++ default).
+    MinMax,
+    /// Mix of random and farthest-point, `gamma -> 0` random, large `gamma` minmax.
+    Resample { gamma: f64 },
+    /// Minmax cover, Voronoi masses, then sample \(P^\gamma\).
+    Staged { gamma: f64 },
+}
+
+impl LandmarkMode {
+    pub fn from_cli(spec: &str, gamma: f64) -> Result<Self> {
+        match spec.trim().to_ascii_lowercase().as_str() {
+            "stride" => Ok(Self::Stride),
+            "random" => Ok(Self::Random),
+            "minmax" | "fps" => Ok(Self::MinMax),
+            "resample" => {
+                if !gamma.is_finite() || gamma <= 0.0 {
+                    return Err(LandfoldError::Msg(
+                        "resample gamma must be finite and > 0".into(),
+                    ));
+                }
+                Ok(Self::Resample { gamma })
+            }
+            "staged" => {
+                if !gamma.is_finite() || gamma <= 0.0 {
+                    return Err(LandfoldError::Msg(
+                        "staged gamma must be finite and > 0".into(),
+                    ));
+                }
+                Ok(Self::Staged { gamma })
+            }
+            _ => Err(LandfoldError::Parse(format!(
+                "landmark mode `{spec}` (stride|random|minmax|resample|staged)"
+            ))),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Landmarks {
     pub index: Vec<usize>,
@@ -115,6 +159,301 @@ pub fn farthest_point_ifirst(
         &mut min_d,
     )?;
     pack_landmarks(points, k, weights, &chosen)
+}
+
+/// C++ `dimlandmark` selection. `MinMax` with `ifirst == 0` is Gonzalez.
+pub fn select_landmarks(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    seed: usize,
+    ifirst: Option<usize>,
+    unique: bool,
+    mode: LandmarkMode,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    if k == 0 || k > n {
+        return Err(LandfoldError::LowDim { low: k, high: n });
+    }
+    validate_landmark_inputs(points, metric, weights)?;
+    match mode {
+        LandmarkMode::MinMax => match ifirst {
+            Some(pin) if pin > 0 => farthest_point_ifirst(points, metric, k, weights, pin),
+            _ => farthest_point(points, metric, k, weights, seed),
+        },
+        LandmarkMode::Stride => landmarks_stride(points, k, weights),
+        LandmarkMode::Random => landmarks_random(points, k, weights, seed, unique),
+        LandmarkMode::Resample { gamma } => {
+            landmarks_resample(points, metric, k, weights, seed, unique, gamma, ifirst)
+        }
+        LandmarkMode::Staged { gamma } => {
+            landmarks_staged(points, metric, k, weights, seed, unique, gamma)
+        }
+    }
+}
+
+fn landmarks_stride(
+    points: ArrayView2<f64>,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    let stride = (n / k).max(1);
+    let mut chosen = Vec::with_capacity(k);
+    let mut seen = HashSet::new();
+    for i in 0..k {
+        let mut idx = (i * stride).min(n - 1);
+        while seen.contains(&idx) {
+            idx = (idx + 1) % n;
+        }
+        seen.insert(idx);
+        chosen.push(idx);
+    }
+    pack_landmarks(points, k, weights, &chosen)
+}
+
+fn landmarks_random(
+    points: ArrayView2<f64>,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    seed: usize,
+    unique: bool,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    if unique && k > n {
+        return Err(LandfoldError::LowDim { low: k, high: n });
+    }
+    let mut rng = Lcg::new(seed);
+    let mut chosen = Vec::with_capacity(k);
+    let mut seen = HashSet::new();
+    let mut guard = 0usize;
+    while chosen.len() < k {
+        let idx = rng.below(n);
+        if unique && !seen.insert(idx) {
+            guard += 1;
+            if guard > n.saturating_mul(32).max(32) {
+                return Err(LandfoldError::Msg(
+                    "unique random landmarks failed to fill k".into(),
+                ));
+            }
+            continue;
+        }
+        chosen.push(idx);
+    }
+    pack_landmarks(points, k, weights, &chosen)
+}
+
+fn landmarks_resample(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    seed: usize,
+    unique: bool,
+    gamma: f64,
+    ifirst: Option<usize>,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    let mut rng = Lcg::new(seed);
+    let start = match ifirst {
+        Some(i) if i < n => i,
+        _ => rng.below(n),
+    };
+    let mut chosen = vec![start];
+    let mut seen = HashSet::from([start]);
+    let mut mdlist = vec![0.0; n];
+    update_inv_pow(points, metric, start, gamma, &mut mdlist)?;
+    let mut guard = 0usize;
+    while chosen.len() < k {
+        let mut tot = 0.0;
+        for (j, acc) in mdlist.iter().enumerate() {
+            let w = weights.map(|ww| ww[j]).unwrap_or(1.0);
+            let term = w * acc.powf(-gamma);
+            if !term.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "resample weight overflowed".into(),
+                ));
+            }
+            tot += term;
+        }
+        if !(tot > 0.0 && tot.is_finite()) {
+            return Err(LandfoldError::Msg("resample has no positive mass".into()));
+        }
+        let mut sel = rng.unit() * tot;
+        let mut pick = 0usize;
+        for j in 0..n {
+            let w = weights.map(|ww| ww[j]).unwrap_or(1.0);
+            sel -= w * mdlist[j].powf(-gamma);
+            if sel < 0.0 {
+                pick = j;
+                break;
+            }
+            pick = j;
+        }
+        if unique && !seen.insert(pick) {
+            guard += 1;
+            if guard > n.saturating_mul(32).max(32) {
+                return Err(LandfoldError::Msg(
+                    "unique resample landmarks failed to fill k".into(),
+                ));
+            }
+            continue;
+        }
+        chosen.push(pick);
+        seen.insert(pick);
+        update_inv_pow(points, metric, pick, gamma, &mut mdlist)?;
+    }
+    pack_landmarks(points, k, weights, &chosen)
+}
+
+fn landmarks_staged(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    k: usize,
+    weights: Option<ArrayView1<f64>>,
+    seed: usize,
+    unique: bool,
+    gamma: f64,
+) -> Result<Landmarks> {
+    let n = points.nrows();
+    let cover = ((k as f64) * (n as f64)).sqrt().ceil() as usize;
+    let cover = cover.clamp(k, n);
+    let cover_lm = farthest_point(points, metric, cover, weights, seed)?;
+    let masses = voronoi_weights(points, &cover_lm, metric, weights, gamma)?;
+    let mut rng = Lcg::new(seed.wrapping_add(1));
+    let mut cells: Vec<Vec<usize>> = vec![Vec::new(); cover];
+    let d = points.ncols();
+    let mut a = vec![0.0; d];
+    let mut b = vec![0.0; d];
+    for j in 0..n {
+        for h in 0..d {
+            b[h] = points[(j, h)];
+        }
+        let mut best_i = 0usize;
+        let mut best_d = f64::INFINITY;
+        for i in 0..cover {
+            for (h, value) in a.iter_mut().enumerate().take(d) {
+                *value = cover_lm.points[(i, h)];
+            }
+            let dist = metric.dist(&a, &b)?;
+            if dist < best_d {
+                best_d = dist;
+                best_i = i;
+            }
+        }
+        cells[best_i].push(j);
+    }
+    let mut tot = 0.0;
+    for &w in masses.iter() {
+        tot += w;
+        if !tot.is_finite() {
+            return Err(LandfoldError::Msg("staged mass overflowed".into()));
+        }
+    }
+    if !(tot > 0.0) {
+        return Err(LandfoldError::Msg("staged has no positive Voronoi mass".into()));
+    }
+    let mut chosen = Vec::with_capacity(k);
+    let mut seen = HashSet::new();
+    let mut guard = 0usize;
+    while chosen.len() < k {
+        let mut sel = rng.unit() * tot;
+        let mut cell = 0usize;
+        for i in 0..cover {
+            sel -= masses[i];
+            if sel < 0.0 {
+                cell = i;
+                break;
+            }
+            cell = i;
+        }
+        if cells[cell].is_empty() {
+            guard += 1;
+            if guard > n.saturating_mul(32).max(32) {
+                return Err(LandfoldError::Msg("staged failed to fill k".into()));
+            }
+            continue;
+        }
+        let pick = cells[cell][rng.below(cells[cell].len())];
+        if unique && !seen.insert(pick) {
+            guard += 1;
+            if guard > n.saturating_mul(32).max(32) {
+                return Err(LandfoldError::Msg("unique staged failed to fill k".into()));
+            }
+            continue;
+        }
+        chosen.push(pick);
+        seen.insert(pick);
+    }
+    pack_landmarks(points, k, weights, &chosen)
+}
+
+fn update_inv_pow(
+    points: ArrayView2<f64>,
+    metric: &dyn Metric,
+    src: usize,
+    gamma: f64,
+    mdlist: &mut [f64],
+) -> Result<()> {
+    let d = points.ncols();
+    let mut a = vec![0.0; d];
+    let mut b = vec![0.0; d];
+    for h in 0..d {
+        a[h] = points[(src, h)];
+    }
+    for i in 0..points.nrows() {
+        for h in 0..d {
+            b[h] = points[(i, h)];
+        }
+        let dist = metric.dist(&a, &b)?;
+        let term = if dist == 0.0 {
+            1.0e200
+        } else {
+            dist.powf(-gamma)
+        };
+        if !term.is_finite() {
+            return Err(LandfoldError::Msg(
+                "resample inverse-distance overflowed".into(),
+            ));
+        }
+        mdlist[i] += term;
+        if !mdlist[i].is_finite() {
+            return Err(LandfoldError::Msg("resample accumulator overflowed".into()));
+        }
+    }
+    Ok(())
+}
+
+struct Lcg {
+    state: u64,
+}
+
+impl Lcg {
+    fn new(seed: usize) -> Self {
+        Self {
+            state: (seed as u64).wrapping_add(0x9E37_79B9_7F4A_7C15),
+        }
+    }
+
+    fn next(&mut self) -> u64 {
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1);
+        self.state
+    }
+
+    fn unit(&mut self) -> f64 {
+        (self.next() >> 11) as f64 / ((1u64 << 53) as f64)
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        if n == 0 {
+            return 0;
+        }
+        (self.unit() * n as f64).floor() as usize % n
+    }
 }
 
 fn farthest_from_chosen(
@@ -389,22 +728,19 @@ mod tests {
     #[test]
     fn pinned_landmarks_validate_metric_and_weight_shapes() {
         let pts = array![[0.0], [1.0], [2.0]];
-        assert!(farthest_point_ifirst(
-            pts.view(),
-            &crate::metric::Periodic::isotropic(2, 1.0).unwrap(),
-            2,
-            None,
-            1,
-        )
-        .is_err());
-        assert!(farthest_point_ifirst(
-            pts.view(),
-            &Euclid,
-            2,
-            Some(array![1.0].view()),
-            1,
-        )
-        .is_err());
+        assert!(
+            farthest_point_ifirst(
+                pts.view(),
+                &crate::metric::Periodic::isotropic(2, 1.0).unwrap(),
+                2,
+                None,
+                1,
+            )
+            .is_err()
+        );
+        assert!(
+            farthest_point_ifirst(pts.view(), &Euclid, 2, Some(array![1.0].view()), 1,).is_err()
+        );
     }
 
     #[test]
@@ -422,27 +758,31 @@ mod tests {
             points: array![[0.0]],
             weights: array![1.0],
         };
-        assert!(voronoi_weights(
-            points.view(),
-            &valid,
-            &Euclid,
-            Some(array![f64::MAX, f64::MAX].view()),
-            1.0,
-        )
-        .is_err());
+        assert!(
+            voronoi_weights(
+                points.view(),
+                &valid,
+                &Euclid,
+                Some(array![f64::MAX, f64::MAX].view()),
+                1.0,
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn farthest_point_rejects_overflowing_weighted_scores() {
         let points = array![[0.0], [f64::MAX]];
-        assert!(farthest_point(
-            points.view(),
-            &crate::metric::L1,
-            2,
-            Some(array![1.0, f64::MAX].view()),
-            0,
-        )
-        .is_err());
+        assert!(
+            farthest_point(
+                points.view(),
+                &crate::metric::L1,
+                2,
+                Some(array![1.0, f64::MAX].view()),
+                0,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -479,5 +819,52 @@ mod tests {
         lm.assign_voronoi(pts.view(), &Euclid, None, 1.0).unwrap();
         assert!((lm.weights[0] - 0.75).abs() < 1e-12);
         assert!((lm.weights[1] - 0.25).abs() < 1e-12);
+    }
+
+    #[test]
+    fn stride_picks_evenly_spaced_rows() {
+        let pts = array![[0.0], [1.0], [2.0], [3.0], [4.0], [5.0]];
+        let lm = select_landmarks(
+            pts.view(),
+            &Euclid,
+            3,
+            None,
+            0,
+            None,
+            true,
+            LandmarkMode::Stride,
+        )
+        .unwrap();
+        assert_eq!(lm.index, vec![0, 2, 4]);
+    }
+
+    #[test]
+    fn random_unique_returns_k_distinct() {
+        let pts = array![[0.0], [1.0], [2.0], [3.0], [4.0]];
+        let lm = select_landmarks(
+            pts.view(),
+            &Euclid,
+            4,
+            None,
+            7,
+            None,
+            true,
+            LandmarkMode::Random,
+        )
+        .unwrap();
+        let mut s = lm.index.clone();
+        s.sort();
+        s.dedup();
+        assert_eq!(s.len(), 4);
+    }
+
+    #[test]
+    fn mode_from_cli_rejects_unknown() {
+        assert!(LandmarkMode::from_cli("voronoi", 1.0).is_err());
+        assert!(LandmarkMode::from_cli("resample", 0.0).is_err());
+        assert_eq!(
+            LandmarkMode::from_cli("minmax", 1.0).unwrap(),
+            LandmarkMode::MinMax
+        );
     }
 }

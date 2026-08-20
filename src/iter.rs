@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::mds::classical_mds;
 use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
+use crate::project::{scan_grid_1d, scan_grid_2d, ProjOpts};
 use crate::replica::{ReplicaOpts, minimize_replica};
 use crate::search::{StochOpts, minimize_stochastic};
 use crate::stress::{Stress, validate_distance_matrix, validate_imix, validate_weights};
@@ -36,6 +37,13 @@ pub struct IterOpts {
     pub cg: CgOpts,
     pub solver: Solver,
     pub center: bool,
+    /// First CG phase (`dimred -preopt`). Zero uses `cg.maxiter` when there
+    /// is no `-grid` phase (the single-loop shortcut).
+    pub preopt: usize,
+    /// CG steps after each successful pointwise move (`dimred -gopt`).
+    pub gopt: usize,
+    /// Pointwise global grid (`dimred -grid`). `None` skips that phase.
+    pub global: Option<ProjOpts>,
 }
 
 impl Default for IterOpts {
@@ -48,6 +56,9 @@ impl Default for IterOpts {
             cg: CgOpts::default(),
             solver: Solver::Standard,
             center: false,
+            preopt: 0,
+            gopt: 0,
+            global: None,
         }
     }
 }
@@ -218,30 +229,28 @@ pub fn embed(
         w1.clone(),
         None,
     )?;
-    let packed = Array1::from_iter(low.iter().copied());
-    let report = match &opts.solver {
-        Solver::Standard => minimize(&stress, packed.view(), opts.lowdim, &opts.cg)?,
-        Solver::Stochastic(so) => minimize_stochastic(&stress, packed.view(), opts.lowdim, so)?,
-        Solver::Anneal(ao) => minimize_anneal(&stress, packed.view(), opts.lowdim, ao, &opts.cg)?,
-        Solver::Replica(ro) => minimize_replica(&stress, packed.view(), opts.lowdim, ro, &opts.cg)?,
-        #[cfg(feature = "highs")]
-        Solver::Highs(ho) => {
-            crate::highs_slp::minimize_highs(&stress, packed.view(), opts.lowdim, ho)?
-        }
-        Solver::Xtsci(method) => crate::cg::minimize_xtsci(
-            &stress,
-            packed.view(),
-            opts.lowdim,
-            &opts.cg,
-            method.clone(),
-        )?,
+    let first_steps = if opts.preopt > 0 {
+        opts.preopt
+    } else if opts.global.is_none() {
+        opts.cg.maxiter
+    } else {
+        0
     };
-    let mut out = Array2::<f64>::zeros((n, opts.lowdim));
-    for i in 0..n {
-        for h in 0..opts.lowdim {
-            out[(i, h)] = report.coords[i * opts.lowdim + h];
-        }
+    let mut report = CgReport {
+        coords: Array1::from_iter(low.iter().copied()),
+        value: 0.0,
+        steps: 0,
+    };
+    if first_steps > 0 {
+        let mut first_cg = opts.cg.clone();
+        first_cg.maxiter = first_steps;
+        report = run_solver(&stress, report.coords.view(), opts, &first_cg)?;
+        unpack_low(&report.coords, n, opts.lowdim, &mut low);
     }
+    if let Some(grid) = &opts.global {
+        report = pointwise_global(&stress, &mut low, w1.as_ref(), grid, opts)?;
+    }
+    let mut out = low;
     if opts.center {
         center_in_place(&mut out, weights)?;
     }
@@ -268,6 +277,138 @@ pub fn embed_points(
     opts: &IterOpts,
 ) -> Result<Embedding> {
     Ok(embed(points, metric, opts, None, None, None)?.0)
+}
+
+fn run_solver(
+    stress: &Stress,
+    packed: ArrayView1<f64>,
+    opts: &IterOpts,
+    cg: &CgOpts,
+) -> Result<CgReport> {
+    match &opts.solver {
+        Solver::Standard => minimize(stress, packed, opts.lowdim, cg),
+        Solver::Stochastic(so) => minimize_stochastic(stress, packed, opts.lowdim, so),
+        Solver::Anneal(ao) => minimize_anneal(stress, packed, opts.lowdim, ao, cg),
+        Solver::Replica(ro) => minimize_replica(stress, packed, opts.lowdim, ro, cg),
+        #[cfg(feature = "highs")]
+        Solver::Highs(ho) => crate::highs_slp::minimize_highs(stress, packed, opts.lowdim, ho),
+        Solver::Xtsci(method) => {
+            crate::cg::minimize_xtsci(stress, packed, opts.lowdim, cg, method.clone())
+        }
+    }
+}
+
+fn unpack_low(coords: &Array1<f64>, n: usize, d: usize, low: &mut Array2<f64>) {
+    for i in 0..n {
+        for h in 0..d {
+            low[(i, h)] = coords[i * d + h];
+        }
+    }
+}
+
+fn pack_low(low: &Array2<f64>) -> Array1<f64> {
+    Array1::from_iter(low.iter().copied())
+}
+
+/// C++ `dimred -grid` / `-gopt`: one-point χ grid, then full-pair CG
+/// after each move that actually improves χ.
+fn pointwise_global(
+    stress: &Stress,
+    low: &mut Array2<f64>,
+    weights: Option<&Array1<f64>>,
+    grid: &ProjOpts,
+    opts: &IterOpts,
+) -> Result<CgReport> {
+    grid.validate()?;
+    let n = low.nrows();
+    let d = low.ncols();
+    let ones = Array1::ones(n);
+    let w = weights.unwrap_or(&ones);
+    if opts.gopt > 0 {
+        let mut gcg = opts.cg.clone();
+        gcg.maxiter = opts.gopt;
+        let report = run_solver(stress, pack_low(low).view(), opts, &gcg)?;
+        unpack_low(&report.coords, n, d, low);
+    }
+    for ip in 0..n {
+        let (best, best_f) = grid_min_chi1(stress, low.view(), ip, w.view(), grid)?;
+        let current = low.row(ip).to_owned();
+        let (init_f, _) = stress.chi1_checked(current.view(), low.view(), ip, w.view())?;
+        if best_f < init_f {
+            for h in 0..d {
+                low[(ip, h)] = best[h];
+            }
+            if opts.gopt > 0 {
+                let mut gcg = opts.cg.clone();
+                gcg.maxiter = opts.gopt;
+                let report = run_solver(stress, pack_low(low).view(), opts, &gcg)?;
+                unpack_low(&report.coords, n, d, low);
+            }
+        }
+    }
+    let packed = pack_low(low);
+    let ev = stress.eval(packed.view(), d);
+    Ok(CgReport {
+        coords: packed,
+        value: ev.value,
+        steps: opts.gopt,
+    })
+}
+
+fn grid_min_chi1(
+    stress: &Stress,
+    low: ArrayView2<f64>,
+    skip: usize,
+    weights: ArrayView1<f64>,
+    opts: &ProjOpts,
+) -> Result<(Array1<f64>, f64)> {
+    let d = low.ncols();
+    let mut best = low.row(skip).to_owned();
+    let (mut best_f, _) = stress.chi1_checked(best.view(), low, skip, weights)?;
+    let eval = |q: ArrayView1<f64>| stress.chi1(q, low, skip, weights).0;
+    if d == 2 && opts.grid_coarse >= 2 {
+        let w = opts.gridw;
+        let g1 = opts.grid_coarse;
+        scan_grid_2d(-w, w, -w, w, g1, |q| {
+            let f = eval(q.view());
+            if f < best_f {
+                best_f = f;
+                best = q;
+            }
+        });
+        let g2 = opts.grid_fine.max(2);
+        let span = 2.0 * w / (g1 as f64);
+        let cx = best[0];
+        let cy = best[1];
+        scan_grid_2d(cx - span, cx + span, cy - span, cy + span, g2, |q| {
+            let f = eval(q.view());
+            if f < best_f {
+                best_f = f;
+                best = q;
+            }
+        });
+    } else if d == 1 && opts.grid_coarse >= 2 {
+        let w = opts.gridw;
+        let g1 = opts.grid_coarse;
+        scan_grid_1d(-w, w, g1, |q| {
+            let f = eval(q.view());
+            if f < best_f {
+                best_f = f;
+                best = q;
+            }
+        });
+        let g2 = opts.grid_fine.max(2);
+        let span = 2.0 * w / (g1 as f64);
+        let cx = best[0];
+        scan_grid_1d(cx - span, cx + span, g2, |q| {
+            let f = eval(q.view());
+            if f < best_f {
+                best_f = f;
+                best = q;
+            }
+        });
+    }
+    Ok((best, best_f))
 }
 
 fn center_in_place(
@@ -384,5 +525,27 @@ mod tests {
     fn rejects_overflowing_embedding_center() {
         let mut low = array![[f64::MAX], [f64::MAX]];
         assert!(center_in_place(&mut low, None).is_err());
+    }
+
+    #[test]
+    fn preopt_then_grid_returns_finite_stress() {
+        let points = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+        let opts = IterOpts {
+            lowdim: 2,
+            preopt: 4,
+            gopt: 2,
+            global: Some(crate::ProjOpts {
+                gridw: 2.0,
+                grid_coarse: 5,
+                grid_fine: 9,
+                cg_steps: 0,
+                ..crate::ProjOpts::default()
+            }),
+            ..IterOpts::default()
+        };
+        let (emb, _) = embed(points.view(), &Euclid, &opts, None, None, None).unwrap();
+        assert!(emb.stress.is_finite());
+        assert_eq!(emb.low.nrows(), 4);
+        assert_eq!(emb.low.ncols(), 2);
     }
 }

@@ -12,9 +12,10 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use landfold::{
     AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, FreeEnergy, Histogram2d, IterOpts, L1,
-    MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Transfer,
-    coordination_histogram, embed, farthest_point, farthest_point_ifirst, mds_from_points, pairwise,
-    pairwise_euclid, project_many_report, read_points, suggest_scale, write_points,
+    LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
+    Transfer, coordination_histogram, embed, joint_pairwise_hist, mds_from_points, pairwise,
+    pairwise_euclid, project_many_report, read_points, select_landmarks, suggest_scale,
+    write_plumed, write_points,
 };
 
 #[derive(Parser, Debug)]
@@ -59,6 +60,21 @@ enum Cmd {
         imix: f64,
         #[arg(long = "steps", default_value_t = 100)]
         steps: usize,
+        /// First CG phase (`dimred -preopt`). Zero keeps `--steps`.
+        #[arg(long = "preopt", default_value_t = 0)]
+        preopt: usize,
+        /// Pointwise global grid after preopt: gw,g1,g2 (`dimred -grid`)
+        #[arg(long = "grid")]
+        grid: Option<String>,
+        /// CG steps after each successful grid move (`dimred -gopt`)
+        #[arg(long = "gopt", default_value_t = 0)]
+        gopt: usize,
+        /// Write `# Error in fitting LD points:` on stdout (`dimred -v`)
+        #[arg(short = 'v', long)]
+        verbose: bool,
+        /// PLUMED landmark dump (`dimred -plumed`)
+        #[arg(long)]
+        plumed: bool,
         #[arg(long = "init")]
         init: Option<PathBuf>,
         /// Random pair mini-batches instead of full-pair CG
@@ -97,10 +113,14 @@ enum Cmd {
         low_file: PathBuf,
         #[arg(long = "pi", default_value_t = 0.0)]
         period: f64,
+        #[arg(long = "spi", default_value_t = 0.0)]
+        sphere: f64,
         #[arg(short = 'w')]
         weighted: bool,
         #[arg(long)]
         dot: bool,
+        #[arg(long)]
+        similarity: bool,
         #[arg(long = "fun-hd", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_hd: String,
         #[arg(long = "fun-ld", default_value = "identity", help = FUN_SPEC_HELP)]
@@ -116,6 +136,12 @@ enum Cmd {
         /// Also print χ and nearest-landmark HD distance
         #[arg(long)]
         print_error: bool,
+        /// Path-like average of landmark LD coords (`dimproj -path`)
+        #[arg(long = "path", default_value_t = -1.0)]
+        path: f64,
+        /// Softmax temperature on the grid (`dimproj -gt`). Zero keeps the min.
+        #[arg(long = "gt", default_value_t = 0.0)]
+        gtemp: f64,
     },
     /// Farthest-point (Gonzalez) landmarks
     Landmarks {
@@ -125,6 +151,8 @@ enum Cmd {
         nland: usize,
         #[arg(long = "pi", default_value_t = 0.0)]
         period: f64,
+        #[arg(long = "spi", default_value_t = 0.0)]
+        sphere: f64,
         #[arg(long)]
         dot: bool,
         #[arg(long)]
@@ -144,21 +172,43 @@ enum Cmd {
         voronoi: bool,
         #[arg(long = "wgamma", default_value_t = 1.0)]
         wgamma: f64,
+        /// C++ `dimlandmark -mode`: stride | random | minmax | resample | staged
+        #[arg(long = "mode", default_value = "minmax")]
+        mode: String,
+        /// `resample` / `staged` temperature (`dimlandmark -gamma`)
+        #[arg(long, default_value_t = 1.0)]
+        gamma: f64,
+        /// Refuse duplicate indices (`dimlandmark -unique`)
+        #[arg(long)]
+        unique: bool,
     },
-    /// Pairwise distance matrix. `--suggest` prints Ceriotti Appendix A
-    /// \(\sigma\) from the CDF knee (use `--l1` on DECAF histograms).
+    /// Pairwise distances, Appendix A σ, or C++ `dimdist` joint P(D,d).
     Dist {
         #[arg(short = 'D', default_value_t = 3)]
         high: usize,
+        #[arg(short = 'd', default_value_t = 0)]
+        low: usize,
         #[arg(long = "pi", default_value_t = 0.0)]
         period: f64,
         #[arg(long)]
         l1: bool,
+        #[arg(long)]
+        dot: bool,
         #[arg(short = 'w')]
         weighted: bool,
         /// Print \(\sigma\) suggestion instead of the distance matrix
         #[arg(long)]
         suggest: bool,
+        /// Low-D coordinates for the joint P(D,d) histogram (`dimdist -p`)
+        #[arg(long = "low-file", visible_alias = "p")]
+        low_file: Option<PathBuf>,
+        #[arg(long = "nbin", default_value_t = 100)]
+        nbin: usize,
+        #[arg(long)]
+        gnuplot: bool,
+        /// HD,LD histogram ceilings (default: observed maxima)
+        #[arg(long = "maxd")]
+        maxd: Option<String>,
     },
     /// Classical Torgerson MDS (Torgerson 1952). Default solver init.
     ///
@@ -234,6 +284,11 @@ fn main() -> landfold::Result<()> {
             fun_ld,
             imix,
             steps,
+            preopt,
+            grid,
+            gopt,
+            verbose,
+            plumed,
             init,
             stoch,
             batch,
@@ -309,6 +364,11 @@ fn main() -> landfold::Result<()> {
                 ..IterOpts::default()
             };
             opts.cg.maxiter = steps;
+            opts.preopt = preopt;
+            opts.gopt = gopt;
+            if let Some(spec) = grid {
+                opts.global = Some(ProjOpts::from_cli(&spec)?);
+            }
             let init = if let Some(p) = init {
                 Some(read_points(
                     std::io::BufReader::new(std::fs::File::open(p)?),
@@ -342,7 +402,15 @@ fn main() -> landfold::Result<()> {
                 set.weights.as_ref().map(|w| w.view()),
                 pre,
             )?;
-            write_points(&mut io::stdout().lock(), &emb.low, None)?;
+            let mut out = io::stdout().lock();
+            if verbose {
+                writeln!(out, " # Error in fitting LD points: {}", emb.stress)?;
+            }
+            if plumed {
+                write_plumed(&mut out, &emb.high, &emb.low, Some(&emb.weights))?;
+            } else {
+                write_points(&mut out, &emb.low, None)?;
+            }
             writeln!(io::stderr(), "# stress {}", emb.stress)?;
             let _ = trust;
         }
@@ -352,14 +420,18 @@ fn main() -> landfold::Result<()> {
             high_file,
             low_file,
             period,
+            sphere,
             weighted,
             dot,
+            similarity,
             fun_hd,
             fun_ld,
             imix,
             grid,
             refine,
             print_error,
+            path,
+            gtemp,
         } => {
             let hi = read_points(
                 std::io::BufReader::new(std::fs::File::open(&high_file)?),
@@ -375,6 +447,8 @@ fn main() -> landfold::Result<()> {
             let t_ld = Transfer::from_cli(&fun_ld)?;
             let metric: Box<dyn Metric> = if dot {
                 Box::new(Dot)
+            } else if sphere != 0.0 {
+                Box::new(Sphere::new(vec![sphere; high])?)
             } else if period != 0.0 {
                 Box::new(Periodic::isotropic(high, period)?)
             } else {
@@ -391,7 +465,11 @@ fn main() -> landfold::Result<()> {
             )?;
             let mut po = ProjOpts::from_cli(&grid)?;
             po.cg_steps = refine;
-            let q = read_points(io::stdin().lock(), high, false)?;
+            po.similarity = similarity;
+            po.path_lambda = path;
+            po.gtemp = gtemp;
+            let qdim = if similarity { emb.high.nrows() } else { high };
+            let q = read_points(io::stdin().lock(), qdim, false)?;
             let reports = project_many_report(&emb, q.points.view(), metric.as_ref(), &po)?;
             let mut out = io::stdout().lock();
             for r in &reports {
@@ -411,6 +489,7 @@ fn main() -> landfold::Result<()> {
             high,
             nland,
             period,
+            sphere,
             dot,
             l1,
             weighted,
@@ -419,34 +498,33 @@ fn main() -> landfold::Result<()> {
             indices,
             voronoi,
             wgamma,
+            mode,
+            gamma,
+            unique,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let metric: Box<dyn Metric> = if l1 {
                 Box::new(L1)
             } else if dot {
                 Box::new(Dot)
+            } else if sphere != 0.0 {
+                Box::new(Sphere::new(vec![sphere; high])?)
             } else if period != 0.0 {
                 Box::new(Periodic::isotropic(high, period)?)
             } else {
                 Box::new(Euclid)
             };
-            let mut lm = if ifirst > 0 {
-                farthest_point_ifirst(
-                    set.points.view(),
-                    metric.as_ref(),
-                    nland,
-                    set.weights.as_ref().map(|w| w.view()),
-                    ifirst,
-                )?
-            } else {
-                farthest_point(
-                    set.points.view(),
-                    metric.as_ref(),
-                    nland,
-                    set.weights.as_ref().map(|w| w.view()),
-                    seed,
-                )?
-            };
+            let mode = LandmarkMode::from_cli(&mode, gamma)?;
+            let mut lm = select_landmarks(
+                set.points.view(),
+                metric.as_ref(),
+                nland,
+                set.weights.as_ref().map(|w| w.view()),
+                seed,
+                (ifirst > 0).then_some(ifirst),
+                unique,
+                mode,
+            )?;
             if voronoi {
                 lm.assign_voronoi(
                     set.points.view(),
@@ -467,25 +545,72 @@ fn main() -> landfold::Result<()> {
         }
         Cmd::Dist {
             high,
+            low,
             period,
             l1,
+            dot,
             weighted,
             suggest,
+            low_file,
+            nbin,
+            gnuplot,
+            maxd,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let metric: Box<dyn Metric> = if l1 {
                 Box::new(L1)
+            } else if dot {
+                Box::new(Dot)
             } else if period != 0.0 {
                 Box::new(Periodic::isotropic(high, period)?)
             } else {
                 Box::new(Euclid)
             };
-            let d = if l1 || period != 0.0 {
+            let d = if l1 || period != 0.0 || dot {
                 pairwise(set.points.view(), metric.as_ref())?
             } else {
                 pairwise_euclid(set.points.view())?
             };
-            if suggest {
+            if let Some(p) = low_file {
+                let ld_dim = if low > 0 { low } else { 2 };
+                let lo = read_points(
+                    std::io::BufReader::new(std::fs::File::open(p)?),
+                    ld_dim,
+                    false,
+                )?;
+                let ld = pairwise_euclid(lo.points.view())?;
+                let (max_d, max_r) = match maxd.as_deref() {
+                    None => (None, None),
+                    Some(spec) => {
+                        let parts: Vec<f64> = spec
+                            .split(',')
+                            .map(|s| s.trim().parse::<f64>())
+                            .collect::<std::result::Result<Vec<_>, _>>()
+                            .map_err(|e| landfold::LandfoldError::Parse(e.to_string()))?;
+                        match parts.as_slice() {
+                            [a] => (Some(*a), Some(*a)),
+                            [a, b] => (Some(*a), Some(*b)),
+                            _ => {
+                                return Err(landfold::LandfoldError::Parse(
+                                    "--maxd needs maxD or maxD,maxd".into(),
+                                ));
+                            }
+                        }
+                    }
+                };
+                let (hist, frac) = joint_pairwise_hist(
+                    d.view(),
+                    ld.view(),
+                    nbin,
+                    nbin,
+                    max_d,
+                    max_r,
+                    set.weights.as_ref().map(|w| w.view()),
+                )?;
+                let mut out = io::stdout().lock();
+                writeln!(out, "# Fraction outside: {frac}")?;
+                hist.write_joint(&mut out, gnuplot)?;
+            } else if suggest {
                 let n = d.nrows();
                 let mut pairs = Vec::with_capacity(n.saturating_mul(n.saturating_sub(1)) / 2);
                 for i in 0..n {

@@ -11,8 +11,9 @@ use pyo3::types::PyDict;
 
 use crate::provenance::{PROVENANCE_SCHEMA, Provenance};
 use crate::{
-    Euclid, IterOpts, ProjOpts, Transfer, embed_points, farthest_point, fes_from_points,
-    project_one,
+    Euclid, IterOpts, LandmarkMode, MdsMode, ProjOpts, Transfer, embed_points, farthest_point,
+    fes_from_points, joint_pairwise_hist, mds_from_points, pairwise_euclid, project_one,
+    select_landmarks, suggest_scale,
 };
 use ndarray::Array2;
 
@@ -222,6 +223,7 @@ fn project_euclid<'py>(
         grid_coarse,
         grid_fine,
         cg_steps: refine,
+        ..ProjOpts::default()
     };
     let nq = query.nrows();
     let d = emb.low.ncols();
@@ -273,6 +275,7 @@ fn project_euclid_result<'py>(
         grid_coarse,
         grid_fine,
         cg_steps: refine,
+        ..ProjOpts::default()
     };
     let reports = crate::project_many_report(&emb, query.view(), &Euclid, &opts)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -374,8 +377,8 @@ fn fes_xy_result<'py>(
     Ok(result)
 }
 
-/// Named transfer families. Ceriotti sigmoid reproduces PNAS/JCTC;
-/// `imq` is the extra MethodsX arm. Specs go to `fun_hd` / `fun_ld`.
+/// Named transfer families. Ceriotti sigmoid is the PNAS/JCTC path.
+/// Specs go to `fun_hd` / `fun_ld`.
 #[pyfunction]
 fn transfers() -> Vec<(String, String)> {
     vec![
@@ -383,20 +386,20 @@ fn transfers() -> Vec<(String, String)> {
             "ceriotti".into(),
             "PNAS 2011 generalised sigmoid. Spec: ceriotti,sigma,a,b or sigma,a,b".into(),
         ),
-        (
-            "imq".into(),
-            "MethodsX inverse-multiquadric. Spec: imq,sigma".into(),
-        ),
-        (
-            "multiscale".into(),
-            "Mean of IMQ at several scales (PNAS 2011 hierarchical). Spec: ms,s1,s2,...".into(),
-        ),
         ("identity".into(), "F(x)=x. Spec: identity".into()),
         ("sigmoid".into(), "1-1/(1+(x/sigma)^2). Spec: sigma".into()),
         ("gamma".into(), "Incomplete-gamma sigmoid. Spec: sigma,n".into()),
         (
             "warp".into(),
             "F_LD^{-1}(F_HD(x)). Spec: sigma,aD,bD,ad,bd".into(),
+        ),
+        (
+            "imq".into(),
+            "Extra MethodsX inverse-multiquadric. Spec: imq,sigma".into(),
+        ),
+        (
+            "multiscale".into(),
+            "Extra mean of IMQ at several scales. Spec: ms,s1,s2,...".into(),
         ),
     ]
 }
@@ -420,6 +423,82 @@ fn solvers() -> Vec<(String, String)> {
     ]
 }
 
+#[pyfunction]
+#[pyo3(name = "pairwise_euclid", signature = (points))]
+fn pairwise_euclid_py<'py>(
+    py: Python<'py>,
+    points: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let pts = copy_f64_2d(points);
+    let d = pairwise_euclid(pts.view()).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(to_pyarray2(py, d))
+}
+
+#[pyfunction]
+#[pyo3(name = "suggest_scale", signature = (points))]
+fn suggest_scale_py(points: PyReadonlyArray2<'_, f64>) -> PyResult<(usize, f64, f64, f64, f64)> {
+    let pts = copy_f64_2d(points);
+    let d = pairwise_euclid(pts.view()).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let n = d.nrows();
+    let mut pairs = Vec::with_capacity(n.saturating_mul(n.saturating_sub(1)) / 2);
+    for i in 0..n {
+        for j in 0..i {
+            pairs.push(d[(i, j)]);
+        }
+    }
+    let s = suggest_scale(&pairs).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((s.n_pairs, s.q25, s.q50, s.q75, s.knee))
+}
+
+#[pyfunction]
+#[pyo3(signature = (points, lowdim=2))]
+fn mds_euclid<'py>(
+    py: Python<'py>,
+    points: PyReadonlyArray2<'py, f64>,
+    lowdim: usize,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let pts = copy_f64_2d(points);
+    let (emb, _) = mds_from_points(pts.view(), &Euclid, lowdim, MdsMode::Classical)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(to_pyarray2(py, emb))
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low, nbin=80))]
+fn joint_hist<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray2<'py, f64>,
+    low: PyReadonlyArray2<'py, f64>,
+    nbin: usize,
+) -> PyResult<(f64, Bound<'py, PyArray2<f64>>)> {
+    let hd = pairwise_euclid(copy_f64_2d(high).view())
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let ld = pairwise_euclid(copy_f64_2d(low).view())
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let (hist, frac) = joint_pairwise_hist(hd.view(), ld.view(), nbin, nbin, None, None, None)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((frac, to_pyarray2(py, hist.counts)))
+}
+
+#[pyfunction]
+#[pyo3(signature = (points, k, mode="minmax", seed=0, gamma=1.0, unique=true))]
+fn landmarks_euclid<'py>(
+    py: Python<'py>,
+    points: PyReadonlyArray2<'py, f64>,
+    k: usize,
+    mode: &str,
+    seed: usize,
+    gamma: f64,
+    unique: bool,
+) -> PyResult<(Vec<usize>, Bound<'py, PyArray2<f64>>)> {
+    let pts = copy_f64_2d(points);
+    let mode = LandmarkMode::from_cli(mode, gamma)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let lm = select_landmarks(pts.view(), &Euclid, k, None, seed, None, unique, mode)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((lm.index, to_pyarray2(py, lm.points)))
+}
+
 #[pymodule]
 fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(embed_euclid, m)?)?;
@@ -429,6 +508,11 @@ fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(farthest_euclid, m)?)?;
     m.add_function(wrap_pyfunction!(fes_xy, m)?)?;
     m.add_function(wrap_pyfunction!(fes_xy_result, m)?)?;
+    m.add_function(wrap_pyfunction!(pairwise_euclid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(suggest_scale_py, m)?)?;
+    m.add_function(wrap_pyfunction!(mds_euclid, m)?)?;
+    m.add_function(wrap_pyfunction!(joint_hist, m)?)?;
+    m.add_function(wrap_pyfunction!(landmarks_euclid, m)?)?;
     m.add_function(wrap_pyfunction!(transfers, m)?)?;
     m.add_function(wrap_pyfunction!(solvers, m)?)?;
     m.add("version", crate::VERSION)?;

@@ -355,6 +355,117 @@ impl Histogram2d {
         }
         blur_separable(&self.counts, sigma_bins)
     }
+
+    /// C++ `dimdist -gnuplot`: `D d n` rows, blank line after each D bin.
+    pub fn write_joint(
+        &self,
+        w: &mut impl std::io::Write,
+        gnuplot: bool,
+    ) -> std::io::Result<()> {
+        self.validate_state().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid 2d histogram state",
+            )
+        })?;
+        let nx = self.counts.ncols();
+        let ny = self.counts.nrows();
+        writeln!(w, "# D d n")?;
+        for ix in 0..nx {
+            let cx = 0.5 * (self.x_edges[ix] + self.x_edges[ix + 1]);
+            for iy in 0..ny {
+                let cy = 0.5 * (self.y_edges[iy] + self.y_edges[iy + 1]);
+                writeln!(w, "{cx}\t{cy}\t{}", self.counts[(iy, ix)])?;
+            }
+            if gnuplot {
+                writeln!(w)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Joint \(P(D_{ij}, d_{ij})\) of high-D vs low-D pairwise distances
+/// (C++ `dimdist`, the PNAS quality histogram).
+pub fn joint_pairwise_hist(
+    hd: ArrayView2<f64>,
+    ld: ArrayView2<f64>,
+    nbin_d: usize,
+    nbin_r: usize,
+    max_d: Option<f64>,
+    max_r: Option<f64>,
+    weights: Option<ArrayView1<f64>>,
+) -> Result<(Histogram2d, f64)> {
+    if hd.nrows() != ld.nrows() {
+        return Err(LandfoldError::Shape("joint hist HD/LD count mismatch"));
+    }
+    let n = hd.nrows();
+    if n < 2 {
+        return Err(LandfoldError::Empty);
+    }
+    if nbin_d == 0 || nbin_r == 0 {
+        return Err(LandfoldError::Shape("joint hist needs nbin > 0"));
+    }
+    if weights.is_some_and(|w| w.len() != n) {
+        return Err(LandfoldError::Shape("joint hist weight length"));
+    }
+    if weights.is_some_and(|w| w.iter().any(|&v| !v.is_finite() || v < 0.0)) {
+        return Err(LandfoldError::Msg(
+            "joint hist weights must be finite and nonnegative".into(),
+        ));
+    }
+    let mut mx_d = 0.0;
+    let mut mx_r = 0.0;
+    for i in 0..n {
+        for j in 0..i {
+            mx_d = mx_d.max(hd[(i, j)]);
+            mx_r = mx_r.max(ld[(i, j)]);
+        }
+    }
+    if !mx_d.is_finite() || !mx_r.is_finite() {
+        return Err(LandfoldError::Msg(
+            "joint hist pairwise distances must be finite".into(),
+        ));
+    }
+    let hi_d = max_d.unwrap_or(mx_d);
+    let hi_r = max_r.unwrap_or(mx_r);
+    if !hi_d.is_finite() || !hi_r.is_finite() || hi_d <= 0.0 || hi_r <= 0.0 {
+        return Err(LandfoldError::Msg(
+            "joint hist maxd must be finite and > 0".into(),
+        ));
+    }
+    let mut hist = Histogram2d::new(0.0, hi_d, nbin_d, 0.0, hi_r, nbin_r)?;
+    let mut outliers = 0.0;
+    let mut kept = 0.0;
+    for i in 0..n {
+        for j in 0..i {
+            let w = match weights {
+                Some(ww) => ww[i] * ww[j],
+                None => 1.0,
+            };
+            if !w.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "joint hist pair weight overflowed".into(),
+                ));
+            }
+            let d = hd[(i, j)];
+            let r = ld[(i, j)];
+            if d < 0.0 || r < 0.0 || d >= hi_d || r >= hi_r {
+                outliers += w;
+            } else {
+                hist.add(d, r, w)?;
+                kept += w;
+            }
+            if !outliers.is_finite() || !kept.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "joint hist weight accumulation overflowed".into(),
+                ));
+            }
+        }
+    }
+    let total = kept + outliers;
+    let frac = if total > 0.0 { outliers / total } else { 0.0 };
+    Ok((hist, frac))
 }
 
 #[derive(Clone, Debug)]
@@ -1307,6 +1418,29 @@ mod tests {
         assert!(s.starts_with("# cn count\n"));
         assert!(s.contains("0 1\n"));
         assert!(s.contains("1 2\n"));
+    }
+
+    #[test]
+    fn joint_hist_bins_identity_pairs_on_the_diagonal() {
+        let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
+        let d = crate::pairwise_euclid(pts.view()).unwrap();
+        let (h, frac) = joint_pairwise_hist(d.view(), d.view(), 4, 4, Some(2.0), Some(2.0), None)
+            .unwrap();
+        assert!(frac < 1e-12);
+        assert!(h.samples > 0.0);
+        let mut off = 0.0;
+        for ix in 0..4 {
+            for iy in 0..4 {
+                if ix != iy {
+                    off += h.counts[(iy, ix)];
+                }
+            }
+        }
+        assert!(off < 1e-12);
+        let mut buf = Vec::new();
+        h.write_joint(&mut buf, true).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+        assert!(s.starts_with("# D d n\n"));
     }
 
     #[test]
