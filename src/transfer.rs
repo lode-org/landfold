@@ -114,12 +114,17 @@ impl Transfer {
         if !(sigma.is_finite() && sigma > 0.0) {
             return Err(LandfoldError::TransferParams("warp sigma must be > 0"));
         }
-        if ![a_d, b_d, a_ld, b_ld]
-            .into_iter()
-            .all(|p| p.is_finite() && p > 0.0)
+        if !(a_d.is_finite()
+            && a_d >= 1.0
+            && b_d.is_finite()
+            && b_d > 0.0
+            && a_ld.is_finite()
+            && a_ld >= 1.0
+            && b_ld.is_finite()
+            && b_ld > 0.0)
         {
             return Err(LandfoldError::TransferParams(
-                "warp shape parameters must be finite and > 0",
+                "warp a exponents must be finite and >= 1; b exponents must be finite and > 0",
             ));
         }
         Self::from_parts(
@@ -458,6 +463,8 @@ mod tests {
     #[test]
     fn rejects_invalid_warp_parameters() {
         assert!(Transfer::warp(1.0, 0.0, 1.0, 2.0, 1.0).is_err());
+        assert!(Transfer::warp(1.0, 0.5, 1.0, 2.0, 1.0).is_err());
+        assert!(Transfer::warp(1.0, 2.0, 1.0, 0.5, 1.0).is_err());
         assert!(Transfer::warp(1.0, 2.0, 1.0, 2.0, 0.0).is_err());
         assert!(Transfer::warp(1.0, 2.0, f64::NAN, 2.0, 1.0).is_err());
     }
