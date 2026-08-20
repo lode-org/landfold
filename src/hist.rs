@@ -1018,7 +1018,7 @@ mod tests {
 
     #[test]
     fn rejects_histogram_bounds_that_collapse_internal_edges() {
-        let lo = 1e200;
+        let lo: f64 = 1e200;
         let hi = f64::from_bits(lo.to_bits() + 1);
         assert!(Histogram1d::new(lo, hi, 2).is_err());
         assert!(Histogram2d::new(lo, hi, 2, 0.0, 1.0, 2).is_err());
