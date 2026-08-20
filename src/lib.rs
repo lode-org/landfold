@@ -17,6 +17,8 @@ pub mod cg;
 pub mod chi_obj;
 pub mod error;
 pub mod floor;
+#[cfg(feature = "hdf5")]
+pub mod hdf5;
 #[cfg(feature = "highs")]
 pub mod highs_slp;
 pub mod hist;
@@ -42,6 +44,8 @@ pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use error::{LandfoldError, Result};
 pub use floor::occupancy_map_floor;
+#[cfg(feature = "hdf5")]
+pub use hdf5::read_hdf5_batch;
 #[cfg(feature = "highs")]
 pub use highs_slp::HighsOpts;
 pub use hist::{

@@ -107,11 +107,19 @@ let batch = landfold::FrameBatch::from_flattened_points(
 let embedding = landfold::embed_points(batch.flattened_points()?.view(), &metric, &opts)?;
 ```
 
-HDF5 trajectory loading belongs at the Python integration boundary: use
-`readcon-chemfiles` or `chemparseplot` to ingest the trajectory, pass NumPy
-coordinate arrays to landfold's existing Python functions, and retain source
-frame IDs and units in the surrounding result object. Landfold does not make
-HDF5 a required Rust dependency or replace CON as the canonical frame format.
+The optional `hdf5` feature reads the chemparseplot interchange layout directly
+in Rust. It consumes `/path/images`, and optionally `/path/frame_ids` and
+`/metadata/atom_ids`, returning the same validated `FrameBatch`:
+
+```rust
+let batch = landfold::read_hdf5_batch(path)?;
+```
+
+HDF5 is an optional native dependency. `readcon` remains the canonical CON
+reader, `readcon-chemfiles` remains the broad foreign-format ingress, and all
+three adapters converge on `FrameBatch` before embedding. Python users can
+continue to use `chemparseplot` and retain richer source metadata around the
+same coordinate contract.
 
 For ChemGP NEB HDF5 files, the runnable
 [`examples/chemparseplot_hdf5.py`](examples/chemparseplot_hdf5.py) bridge uses
