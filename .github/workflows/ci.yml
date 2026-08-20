@@ -64,11 +64,12 @@ jobs:
         with:
           python-version: "3.x"
       - name: Install bridge dependencies
-        run: python -m pip install --disable-pip-version-check maturin numpy h5py chemparseplot ase polars pytest
+        run: python -m pip install --disable-pip-version-check maturin pytest
       - name: Build and install Python wheel
         run: |
           python -m maturin build --locked --release --out dist
-          python -m pip install dist/*.whl
+          wheel=$(find dist -name '*.whl' -print -quit)
+          python -m pip install "${wheel}[chemparseplot]"
       - name: Test Chemparseplot HDF5 bridge
         run: python -m pytest -q tests/python/test_chemparseplot_hdf5.py
 
