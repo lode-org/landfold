@@ -1018,6 +1018,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unrepresentable_fes_density_normalization() {
+        let mut overflowing = Histogram2d::new(-1e150, 1e150, 2, -1e150, 1e150, 2).unwrap();
+        overflowing.samples = f64::MAX;
+        assert!(FreeEnergy::from_histogram(&overflowing, 1.0).is_err());
+
+        let mut underflowing = Histogram2d::new(0.0, 1e-150, 2, 0.0, 1e-150, 2).unwrap();
+        underflowing.samples = 1e-100;
+        assert!(FreeEnergy::from_histogram(&underflowing, 1.0).is_err());
+    }
+
+    #[test]
     fn fes_handles_constant_axes_without_padding() {
         let points = array![[1.0, 2.0], [1.0, 2.0], [1.0, 2.0]];
         let fes = fes_from_points(points.view(), 4, 4, 1.0, 0.0, None)
