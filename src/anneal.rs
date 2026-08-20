@@ -39,6 +39,20 @@ impl Default for AnnealOpts {
 }
 
 impl AnnealOpts {
+    fn schedule_factor(&self) -> crate::error::Result<f64> {
+        if self.steps == 0 {
+            return Ok(1.0);
+        }
+        let log_factor = (self.temp_final.ln() - self.temp_init.ln()) / self.steps as f64;
+        let factor = log_factor.exp();
+        if !factor.is_finite() || factor == 0.0 {
+            return Err(crate::error::LandfoldError::Msg(
+                "annealing temperature schedule factor is not representable".into(),
+            ));
+        }
+        Ok(factor)
+    }
+
     pub(crate) fn validate(&self) -> crate::error::Result<()> {
         if !self.temp_init.is_finite()
             || !self.temp_final.is_finite()
@@ -59,6 +73,7 @@ impl AnnealOpts {
                 "annealing adaptation must be finite and > 0".into(),
             ));
         }
+        self.schedule_factor()?;
         Ok(())
     }
 }
@@ -86,12 +101,7 @@ pub fn minimize_anneal(
     let mut tstep = vec![0u64; nv];
     let mut rng = opts.seed | 1;
     let t0 = opts.temp_init.max(1e-300);
-    let t1 = opts.temp_final.max(1e-300);
-    let ts = if opts.steps == 0 {
-        1.0
-    } else {
-        (t1 / t0).ln() / opts.steps as f64
-    };
+    let ts = opts.schedule_factor()?;
     let mut temp = t0;
     let nsteps = opts.steps.max(1);
 
@@ -117,7 +127,7 @@ pub fn minimize_anneal(
                 step[iu] /= opts.adapt;
             }
         }
-        temp *= ts.exp();
+        temp *= ts;
     }
 
     if opts.polish {
@@ -182,6 +192,22 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_unrepresentable_temperature_schedule() {
+        for (temp_init, temp_final) in [(1e-308, 1e308), (1e308, 1e-308)] {
+            assert!(
+                AnnealOpts {
+                    steps: 1,
+                    temp_init,
+                    temp_final,
+                    ..AnnealOpts::default()
+                }
+                .validate()
+                .is_err()
+            );
+        }
     }
 
     #[test]
