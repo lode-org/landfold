@@ -242,7 +242,10 @@ fn main() -> landfold::Result<()> {
                 solver: if highs {
                     #[cfg(feature = "highs")]
                     {
-                        let mut ho = landfold::HighsOpts::default();
+                        let mut ho = landfold::HighsOpts {
+                            maxiter: steps,
+                            ..landfold::HighsOpts::default()
+                        };
                         if let Some(spec) = box_bounds {
                             let parts: Vec<f64> = spec
                                 .split(',')
