@@ -93,12 +93,18 @@ impl Transfer {
                 "gamma needs sigma > 0 and n > 0",
             ));
         }
+        let normalizer = 2.0 / gamma_half(n * 0.5);
+        if !normalizer.is_finite() || normalizer <= 0.0 {
+            return Err(LandfoldError::TransferParams(
+                "gamma shape has no finite positive normalization",
+            ));
+        }
         Self::from_parts(
             TransferMode::Gamma,
             vec![
                 1.0 / (sigma * std::f64::consts::SQRT_2),
                 n,
-                2.0 / gamma_half(n * 0.5),
+                normalizer,
             ],
         )
     }
@@ -412,6 +418,11 @@ mod tests {
         assert!(t.f(1.0) > 0.0);
         assert!(t.f(2.0) > t.f(1.0));
         assert!(t.df(1.0) > 0.0);
+    }
+
+    #[test]
+    fn rejects_gamma_shapes_without_finite_normalization() {
+        assert!(Transfer::gamma(1.0, 1_000.0).is_err());
     }
 
     #[test]
