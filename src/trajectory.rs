@@ -87,6 +87,29 @@ impl FrameBatch {
         Self::new(frames, (0..n_atoms as u64).collect(), frame_ids, None)
     }
 
+    /// Reconstruct a batch from one flattened `(n_atoms * 3)` row per frame.
+    pub fn from_flattened_points(
+        points: Array2<f64>,
+        atom_ids: Vec<u64>,
+        frame_ids: Vec<u64>,
+        length_unit: Option<String>,
+    ) -> Result<Self> {
+        if points.ncols() % 3 != 0 {
+            return Err(LandfoldError::Shape(
+                "trajectory flattened width must be divisible by three",
+            ));
+        }
+        let n_atoms = points.ncols() / 3;
+        let frames = points
+            .outer_iter()
+            .map(|row| {
+                Array2::from_shape_vec((n_atoms, 3), row.to_vec())
+                    .map_err(|_| LandfoldError::Shape("trajectory frame reconstruction"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Self::new(frames, atom_ids, frame_ids, length_unit)
+    }
+
     pub fn n_frames(&self) -> usize {
         self.frames.len()
     }
@@ -181,5 +204,24 @@ mod tests {
         assert_eq!(points.dim(), (2, 6));
         assert_eq!(points.row(0).to_vec(), vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(points.row(1).to_vec(), vec![6.0, 7.0, 8.0, 9.0, 10.0, 11.0]);
+    }
+
+    #[test]
+    fn reconstructs_a_batch_from_flattened_points() {
+        let points = array![[0.0, 1.0, 2.0, 3.0, 4.0, 5.0]];
+        let batch = FrameBatch::from_flattened_points(
+            points,
+            vec![10, 11],
+            vec![20],
+            Some("angstrom".into()),
+        )
+        .expect("valid flattened points should reconstruct a batch");
+
+        assert_eq!(
+            batch.frame(0).unwrap().to_owned(),
+            array![[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]]
+        );
+        assert_eq!(batch.atom_ids, vec![10, 11]);
+        assert_eq!(batch.frame_ids, vec![20]);
     }
 }

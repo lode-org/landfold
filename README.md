@@ -92,6 +92,21 @@ input. `read_con_batch` and `read_trajectory_batch` expose the same inputs as a
 format-neutral `FrameBatch`, retaining frame IDs, atom IDs, and the length unit.
 All frames in a trajectory must retain the same atom IDs and count.
 
+`FrameBatch::flattened_points` converts that contract to one
+`(n_atoms * 3)` row per frame for distance embedding. The inverse
+`FrameBatch::from_flattened_points` validates HDF5/NumPy-style arrays before
+restoring frame and atom identity:
+
+```rust
+let batch = landfold::FrameBatch::from_flattened_points(
+    points,
+    atom_ids,
+    frame_ids,
+    Some("angstrom".into()),
+)?;
+let embedding = landfold::embed_points(batch.flattened_points()?.view(), &metric, &opts)?;
+```
+
 HDF5 trajectory loading belongs at the Python integration boundary: use
 `readcon-chemfiles` or `chemparseplot` to ingest the trajectory, pass NumPy
 coordinate arrays to landfold's existing Python functions, and retain source
