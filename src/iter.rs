@@ -206,7 +206,7 @@ pub fn embed(
         classical_mds(hd.view(), opts.lowdim)?.0
     };
     if opts.center {
-        center_in_place(&mut low, weights);
+        center_in_place(&mut low, weights)?;
     }
 
     let w1 = weights.map(|w| w.to_owned());
@@ -243,7 +243,7 @@ pub fn embed(
         }
     }
     if opts.center {
-        center_in_place(&mut out, weights);
+        center_in_place(&mut out, weights)?;
     }
     let weights = w1.unwrap_or_else(|| Array1::ones(n));
     Ok((
@@ -270,7 +270,10 @@ pub fn embed_points(
     Ok(embed(points, metric, opts, None, None, None)?.0)
 }
 
-fn center_in_place(low: &mut Array2<f64>, weights: Option<ArrayView1<f64>>) {
+fn center_in_place(
+    low: &mut Array2<f64>,
+    weights: Option<ArrayView1<f64>>,
+) -> crate::error::Result<()> {
     let n = low.nrows();
     let d = low.ncols();
     let mut mass = 0.0;
@@ -278,21 +281,42 @@ fn center_in_place(low: &mut Array2<f64>, weights: Option<ArrayView1<f64>>) {
     for i in 0..n {
         let w = weights.map(|ww| ww[i]).unwrap_or(1.0);
         mass += w;
+        if !mass.is_finite() {
+            return Err(crate::error::LandfoldError::Msg(
+                "embedding center-of-mass mass overflowed".into(),
+            ));
+        }
         for h in 0..d {
             com[h] += w * low[(i, h)];
+            if !com[h].is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "embedding center-of-mass coordinate overflowed".into(),
+                ));
+            }
         }
     }
     if mass == 0.0 {
-        return;
+        return Ok(());
     }
     for value in com.iter_mut().take(d) {
         *value /= mass;
+        if !value.is_finite() {
+            return Err(crate::error::LandfoldError::Msg(
+                "embedding center-of-mass coordinate became non-finite".into(),
+            ));
+        }
     }
     for i in 0..n {
         for h in 0..d {
             low[(i, h)] -= com[h];
+            if !low[(i, h)].is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "centered embedding coordinate became non-finite".into(),
+                ));
+            }
         }
     }
+    Ok(())
 }
 
 /// Re-export so callers that only want classical MDS do not touch `mds`.
@@ -354,5 +378,11 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_overflowing_embedding_center() {
+        let mut low = array![[f64::MAX], [f64::MAX]];
+        assert!(center_in_place(&mut low, None).is_err());
     }
 }
