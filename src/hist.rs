@@ -420,6 +420,11 @@ impl FreeEnergy {
             }
             rho.mapv_inplace(|c| c / normalization);
         }
+        if rho.iter().any(|&density| !density.is_finite() || density < 0.0) {
+            return Err(LandfoldError::Msg(
+                "FES densities must be finite and nonnegative".into(),
+            ));
+        }
         let mut rmax = 0.0;
         for v in rho.iter() {
             if *v > rmax {
