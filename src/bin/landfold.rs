@@ -14,7 +14,7 @@ use landfold::{
     AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, FreeEnergy, Histogram2d, IterOpts, L1,
     MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Transfer,
     coordination_histogram, embed, farthest_point, farthest_point_ifirst, mds_from_points, pairwise,
-    pairwise_euclid, project_many_report, read_points, write_points,
+    pairwise_euclid, project_many_report, read_points, suggest_scale, write_points,
 };
 
 #[derive(Parser, Debug)]
@@ -145,12 +145,20 @@ enum Cmd {
         #[arg(long = "wgamma", default_value_t = 1.0)]
         wgamma: f64,
     },
-    /// Pairwise distance matrix
+    /// Pairwise distance matrix. `--suggest` prints Ceriotti Appendix A
+    /// \(\sigma\) from the CDF knee (use `--l1` on DECAF histograms).
     Dist {
         #[arg(short = 'D', default_value_t = 3)]
         high: usize,
         #[arg(long = "pi", default_value_t = 0.0)]
         period: f64,
+        #[arg(long)]
+        l1: bool,
+        #[arg(short = 'w')]
+        weighted: bool,
+        /// Print \(\sigma\) suggestion instead of the distance matrix
+        #[arg(long)]
+        suggest: bool,
     },
     /// Classical Torgerson MDS (Torgerson 1952). Default solver init.
     ///
@@ -457,14 +465,48 @@ fn main() -> landfold::Result<()> {
             }
             write_points(&mut out, &lm.points, Some(&lm.weights))?;
         }
-        Cmd::Dist { high, period } => {
-            let set = read_points(io::stdin().lock(), high, false)?;
-            let d = if period == 0.0 {
-                pairwise_euclid(set.points.view())?
+        Cmd::Dist {
+            high,
+            period,
+            l1,
+            weighted,
+            suggest,
+        } => {
+            let set = read_points(io::stdin().lock(), high, weighted)?;
+            let metric: Box<dyn Metric> = if l1 {
+                Box::new(L1)
+            } else if period != 0.0 {
+                Box::new(Periodic::isotropic(high, period)?)
             } else {
-                pairwise(set.points.view(), &Periodic::isotropic(high, period)?)?
+                Box::new(Euclid)
             };
-            write_points(&mut io::stdout().lock(), &d, None)?;
+            let d = if l1 || period != 0.0 {
+                pairwise(set.points.view(), metric.as_ref())?
+            } else {
+                pairwise_euclid(set.points.view())?
+            };
+            if suggest {
+                let n = d.nrows();
+                let mut pairs = Vec::with_capacity(n.saturating_mul(n.saturating_sub(1)) / 2);
+                for i in 0..n {
+                    for j in 0..i {
+                        pairs.push(d[(i, j)]);
+                    }
+                }
+                let s = suggest_scale(&pairs)?;
+                let mut out = io::stdout().lock();
+                writeln!(out, "# pairs {}", s.n_pairs)?;
+                writeln!(
+                    out,
+                    "# q25 {:.8} q50 {:.8} q75 {:.8}",
+                    s.q25, s.q50, s.q75
+                )?;
+                writeln!(out, "# knee {:.8}", s.knee)?;
+                writeln!(out, "ceriotti,{:.6},8,1", s.knee)?;
+                writeln!(out, "imq,{:.6}", s.knee)?;
+            } else {
+                write_points(&mut io::stdout().lock(), &d, None)?;
+            }
         }
         Cmd::Mds {
             high,

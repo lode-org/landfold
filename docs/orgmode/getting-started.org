@@ -53,6 +53,26 @@ invariant (full matrix) from the Rust Torgerson path.
 landfold mds -D 30 -d 2 --distances < landmarks.dat > landmarks.mds.dist
 #+end_src
 
+* High-D points: Ceriotti counts or DECAF histograms
+
+Course LJ38 uses the 10-D coordination-count vector. Packing families
+use anneal DECAF histograms (SOAP class counts, L1). Write those
+histograms from xyz with anneal =decaf_local_classes=, then embed with
+=-l1=.
+
+#+begin_src sh
+# σ from the pairwise histogram (JCTC 2013 Appendix A)
+landfold dist -D 10 --suggest < ts.cv
+landfold dist -D N --l1 --suggest < decaf.hist
+
+# Ceriotti HD, extra IMQ LD
+landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld imq,5 -w
+
+# DECAF histograms, L1 metric, Ceriotti or IMQ transfer
+landfold embed -D N -d 2 -l1 --fun-hd ceriotti,SIGMA,8,1 --fun-ld ceriotti,SIGMA,2,2 \
+    < decaf.hist
+#+end_src
+
 * Embed
 
 Transfers are a choice. Ceriotti's generalised sigmoid
