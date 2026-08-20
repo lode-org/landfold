@@ -59,7 +59,8 @@ The structured dictionaries use `coordinates` plus `stress` for embeddings,
 `coordinates` plus `chi`, `nearest_distance`, and `nearest_index` for
 projections, and `x`, `y`, `free_energy`, and `density` for FES results.
 Each includes a `schema` key and a `metadata` dictionary. The `*_result`
-functions require `metadata["provenance"]` with `run_id`, a `sha256:`-prefixed
+functions require `metadata["provenance"]` with schema `landfold.provenance.v1`,
+`run_id`, a `sha256:`-prefixed
 input digest, `engine_id`, `protocol_family`, protocol major/minor, eindir ABI
 layout, and DLPack major/minor fields. This keeps a low-dimensional plot
 joinable to the exact anneal/rgpot source without making Landfold evaluate the

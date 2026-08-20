@@ -29,6 +29,7 @@ def embed_hdf5(path: Path, *, lowdim: int = 2) -> dict:
         "frame_indices": list(range(images.shape[0])),
         "n_atoms": images.shape[1] // 3,
         "provenance": {
+            "schema": "landfold.provenance.v1",
             "run_id": f"chemparseplot:{digest[:16]}",
             "input_digest": f"sha256:{digest}",
             "engine_id": "chemparseplot",
