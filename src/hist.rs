@@ -642,9 +642,30 @@ pub fn fes_from_points(
         ymin = ymin.min(xy[(i, 1)]);
         ymax = ymax.max(xy[(i, 1)]);
     }
-    let px = pad * (xmax - xmin).max(1e-6);
-    let py = pad * (ymax - ymin).max(1e-6);
-    let mut h = Histogram2d::new(xmin - px, xmax + px, nx, ymin - py, ymax + py, ny)?;
+    let xspan = xmax - xmin;
+    let yspan = ymax - ymin;
+    if !xspan.is_finite() || !yspan.is_finite() {
+        return Err(LandfoldError::Msg(
+            "fes coordinate span overflowed".into(),
+        ));
+    }
+    let px = pad * xspan.max(1e-6);
+    let py = pad * yspan.max(1e-6);
+    if !px.is_finite() || !py.is_finite() {
+        return Err(LandfoldError::Msg(
+            "fes coordinate padding overflowed".into(),
+        ));
+    }
+    let xlo = xmin - px;
+    let xhi = xmax + px;
+    let ylo = ymin - py;
+    let yhi = ymax + py;
+    if !xlo.is_finite() || !xhi.is_finite() || !ylo.is_finite() || !yhi.is_finite() {
+        return Err(LandfoldError::Msg(
+            "fes padded coordinate bounds overflowed".into(),
+        ));
+    }
+    let mut h = Histogram2d::new(xlo, xhi, nx, ylo, yhi, ny)?;
     h.add_points(xy, weights)?;
     FreeEnergy::from_histogram(&h, kt)
 }
@@ -912,6 +933,12 @@ mod tests {
         assert!(Histogram1d::new(-f64::MAX, f64::MAX, 2).is_err());
         assert!(Histogram2d::new(-f64::MAX, f64::MAX, 2, 0.0, 1.0, 2).is_err());
         assert!(Histogram2d::new(0.0, 1.0, 2, -f64::MAX, f64::MAX, 2).is_err());
+    }
+
+    #[test]
+    fn rejects_overflowing_fes_coordinate_padding() {
+        let points = array![[-f64::MAX, 0.0], [f64::MAX, 0.0]];
+        assert!(fes_from_points(points.view(), 4, 4, 1.0, 0.05, None).is_err());
     }
 
     #[test]
