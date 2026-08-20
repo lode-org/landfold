@@ -1539,6 +1539,7 @@ dependencies = [
 [[package]]
 name = "readcon-core"
 version = "0.14.7"
+source = "git+https://github.com/HaoZeke/readcon-core.git?tag=v0.14.7#f0be34ea2c46df7de262d6f2d00dd29b1f22cec7"
 dependencies = [
  "chemfiles",
  "dlpk 0.1.5",
