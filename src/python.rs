@@ -387,6 +387,10 @@ fn transfers() -> Vec<(String, String)> {
             "imq".into(),
             "MethodsX inverse-multiquadric. Spec: imq,sigma".into(),
         ),
+        (
+            "multiscale".into(),
+            "Mean of IMQ at several scales (PNAS 2011 hierarchical). Spec: ms,s1,s2,...".into(),
+        ),
         ("identity".into(), "F(x)=x. Spec: identity".into()),
         ("sigmoid".into(), "1-1/(1+(x/sigma)^2). Spec: sigma".into()),
         ("gamma".into(), "Incomplete-gamma sigmoid. Spec: sigma,n".into()),

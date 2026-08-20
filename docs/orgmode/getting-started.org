@@ -53,39 +53,27 @@ invariant (full matrix) from the Rust Torgerson path.
 landfold mds -D 30 -d 2 --distances < landmarks.dat > landmarks.mds.dist
 #+end_src
 
-* High-D points: Ceriotti counts or DECAF histograms
+* Scale and transfers
 
-Course LJ38 uses the 10-D coordination-count vector. Packing families
-use anneal DECAF histograms (SOAP class counts, L1). Write those
-histograms from xyz with anneal =decaf_local_classes=, then embed with
-=-l1=.
+Isometric MDS of raw distances is the wrong problem. The filter \(F\)
+is not unique. =dist --suggest= reads \(\sigma\) from the pairwise CDF
+knee. =ceriotti,σ,a,b= reproduces PNAS/JCTC. =imq,σ= is one
+completely monotone generator. =ms,σ1,σ2,...= averages several IMQ
+scales (the hierarchical map PNAS 2011 asked for).
 
 #+begin_src sh
-# σ from the pairwise histogram (JCTC 2013 Appendix A)
 landfold dist -D 10 --suggest < ts.cv
-landfold dist -D N --l1 --suggest < decaf.hist
-
-# Ceriotti HD, extra IMQ LD
-landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld imq,5 -w
-
-# DECAF histograms, L1 metric, Ceriotti or IMQ transfer
-landfold embed -D N -d 2 -l1 --fun-hd ceriotti,SIGMA,8,1 --fun-ld ceriotti,SIGMA,2,2 \
-    < decaf.hist
+# reproduce
+landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 \
+    --steps 40 -w < landmarks.dat > landmarks.ld
+# multi-scale IMQ (example: q25, q50, knee)
+landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ms,2.8,4.4,6.3 \
+    --steps 40 -w < landmarks.dat > landmarks.ld
 #+end_src
 
 * Embed
 
-Transfers are a choice. Ceriotti's generalised sigmoid
-(=sigma,a,b= or =ceriotti,sigma,a,b=) is the PNAS/JCTC
-reproduction. =imq,sigma= is the extra MethodsX inverse-multiquadric
-arm. Same =χ= objective; pick the =F= and the solver.
-
 #+begin_src sh
-# reproduce Ceriotti (course / JCTC 2013 numbers)
-landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld ceriotti,5,2,2 \
-    --steps 40 -w < landmarks.dat > landmarks.ld
-
-# extra method: MethodsX IMQ on the low-D side
 landfold embed -D 10 -d 2 --fun-hd ceriotti,5,8,1 --fun-ld imq,5 \
     --steps 40 -w < landmarks.dat > landmarks.ld
 #+end_src

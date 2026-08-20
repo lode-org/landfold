@@ -24,7 +24,7 @@ use crate::error::{LandfoldError, Result};
 /// extra MethodsX inverse-multiquadric transfer. Both are first-class.
 pub const FUN_SPEC_HELP: &str = "\
 Ceriotti sigmoid (reproduce PNAS/JCTC): sigma,a,b or ceriotti,sigma,a,b. \
-MethodsX IMQ: imq,sigma. Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd.";
+IMQ: imq,sigma. Multi-scale IMQ: ms,s1,s2,.... Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
@@ -35,6 +35,7 @@ pub enum TransferMode {
     Gamma,
     Warp,
     Imq,
+    Multiscale,
 }
 
 /// High-D or low-D distance transfer function with analytic derivative.
@@ -141,6 +142,29 @@ impl Transfer {
         Self::from_parts(TransferMode::Imq, vec![c])
     }
 
+    /// Mean of IMQ transfers at several scales (PNAS 2011 hierarchical map).
+    pub fn multiscale(sigmas: &[f64]) -> Result<Self> {
+        if sigmas.len() < 2 {
+            return Err(LandfoldError::TransferParams(
+                "ms needs at least two positive sigmas",
+            ));
+        }
+        let mut cs = Vec::with_capacity(sigmas.len());
+        for &sigma in sigmas {
+            if !(sigma.is_finite() && sigma > 0.0) {
+                return Err(LandfoldError::TransferParams(
+                    "ms sigmas must be finite and > 0",
+                ));
+            }
+            let c = sigma / 3.0_f64.sqrt();
+            if !c.is_finite() || c <= 0.0 {
+                return Err(LandfoldError::TransferParams("ms scale is not finite"));
+            }
+            cs.push(c);
+        }
+        Self::from_parts(TransferMode::Multiscale, cs)
+    }
+
     /// `F_LD^{-1}(F_HD(x))` warp. Arguments `(sigma, a_D, b_D, a_d, b_d)`.
     pub fn warp(sigma: f64, a_d: f64, b_d: f64, a_ld: f64, b_ld: f64) -> Result<Self> {
         if !(sigma.is_finite() && sigma > 0.0) {
@@ -195,6 +219,25 @@ impl Transfer {
             })?;
             return Self::imq(sigma);
         }
+        if lower == "ms" || lower == "multi" {
+            return Err(LandfoldError::TransferParams(
+                "ms needs at least two sigmas (example: ms,2.8,4.4,6.3)",
+            ));
+        }
+        if let Some(rest) = lower
+            .strip_prefix("ms,")
+            .or_else(|| lower.strip_prefix("multi,"))
+        {
+            let sigmas: Result<Vec<f64>> = rest
+                .split(',')
+                .map(|s| {
+                    s.trim()
+                        .parse::<f64>()
+                        .map_err(|e| LandfoldError::Parse(format!("fun spec `{spec}`: {e}")))
+                })
+                .collect();
+            return Self::multiscale(&sigmas?);
+        }
         if lower == "ceriotti" {
             return Err(LandfoldError::TransferParams(
                 "ceriotti needs sigma,a,b (example: ceriotti,5,8,1)",
@@ -238,6 +281,7 @@ impl Transfer {
             TransferMode::Compress => "compress",
             TransferMode::Gamma => "gamma",
             TransferMode::Warp => "warp",
+            TransferMode::Multiscale => "multiscale",
         }
     }
 
@@ -269,6 +313,17 @@ impl Transfer {
                 let c = self.pars[0];
                 let inv = 1.0 / (c * c + x * x).sqrt();
                 (1.0 - c * inv, c * x * inv * inv * inv)
+            }
+            TransferMode::Multiscale => {
+                let n = self.pars.len() as f64;
+                let mut value = 0.0;
+                let mut deriv = 0.0;
+                for &c in &self.pars {
+                    let inv = 1.0 / (c * c + x * x).sqrt();
+                    value += 1.0 - c * inv;
+                    deriv += c * x * inv * inv * inv;
+                }
+                (value / n, deriv / n)
             }
             TransferMode::Warp => {
                 let (fx, dfx) = xsigmoid_fdf(&self.pars, x);
@@ -547,6 +602,20 @@ mod tests {
         assert_relative_eq!(named.f(5.0), 0.5, epsilon = 1e-14);
         assert_relative_eq!(named.f(1.0), numeric.f(1.0), epsilon = 1e-14);
         assert!(Transfer::from_cli("ceriotti").is_err());
+    }
+
+    #[test]
+    fn multiscale_is_the_mean_of_imq_scales() {
+        let t = Transfer::from_cli("ms,2,6").unwrap();
+        assert_eq!(t.family(), "multiscale");
+        let a = Transfer::imq(2.0).unwrap();
+        let b = Transfer::imq(6.0).unwrap();
+        let x = 3.0;
+        assert_relative_eq!(t.f(x), 0.5 * (a.f(x) + b.f(x)), epsilon = 1e-14);
+        assert_relative_eq!(t.df(x), 0.5 * (a.df(x) + b.df(x)), epsilon = 1e-14);
+        assert!(t.f(6.0) > t.f(2.0));
+        assert!(Transfer::from_cli("ms,1").is_err());
+        assert!(Transfer::multiscale(&[1.0]).is_err());
     }
 
     #[test]
