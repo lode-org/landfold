@@ -116,7 +116,8 @@ chemfiles conversion layer. Use `read_con_frames` or
 `read_trajectory_frames` when frame metadata is needed, and the corresponding
 `*_positions` helpers when a validated `(n_atoms, 3)` array is the algorithm
 input. `read_con_batch` and `read_trajectory_batch` expose the same inputs as a
-format-neutral `FrameBatch`, retaining frame IDs, atom IDs, and the length unit.
+format-neutral `FrameBatch`, retaining frame IDs, atom IDs, the length unit, and
+typed per-frame JSON metadata in `FrameBatch::metadata`.
 All frames in a trajectory must retain the same atom IDs and count.
 
 This feature links the native Chemfiles library. On systems whose CMake
@@ -153,9 +154,9 @@ let batch = landfold::read_hdf5_batch(path)?;
 
 HDF5 is an optional native dependency. `readcon` remains the canonical CON
 reader, `readcon-chemfiles` remains the broad foreign-format ingress, and all
-three adapters converge on `FrameBatch` before embedding. Python users can
-continue to use `chemparseplot` and retain richer source metadata around the
-same coordinate contract.
+three adapters converge on `FrameBatch` before embedding. The Rust HDF5
+adapter currently retains coordinate identity; the Python ChemGP bridge also
+forwards richer source metadata around the same coordinate contract.
 
 For ChemGP NEB HDF5 files, the runnable
 [`examples/chemparseplot_hdf5.py`](examples/chemparseplot_hdf5.py) bridge uses
