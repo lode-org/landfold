@@ -17,6 +17,8 @@ pub struct FrameBatch {
     pub atom_ids: Vec<u64>,
     pub frame_ids: Vec<u64>,
     pub length_unit: Option<String>,
+    pub atomic_numbers: Option<Vec<u64>>,
+    pub cell: Option<Array2<f64>>,
     /// Per-frame JSON metadata. An empty vector means the source supplied no metadata.
     pub metadata: Vec<BTreeMap<String, Value>>,
 }
@@ -45,6 +47,8 @@ impl FrameBatch {
             atom_ids,
             frame_ids,
             length_unit,
+            atomic_numbers: None,
+            cell: None,
             metadata,
         };
         batch.validate()?;
@@ -58,13 +62,20 @@ impl FrameBatch {
         let frame_ids = &self.frame_ids;
         let length_unit = &self.length_unit;
         let metadata = &self.metadata;
+        let atomic_numbers = &self.atomic_numbers;
+        let cell = &self.cell;
         if length_unit.as_deref().is_some_and(str::is_empty) {
             return Err(LandfoldError::Msg(
                 "trajectory length unit must not be empty".into(),
             ));
         }
         if frames.is_empty() {
-            if !atom_ids.is_empty() || !frame_ids.is_empty() || !metadata.is_empty() {
+            if !atom_ids.is_empty()
+                || !frame_ids.is_empty()
+                || !metadata.is_empty()
+                || atomic_numbers.is_some()
+                || cell.is_some()
+            {
                 return Err(LandfoldError::Shape(
                     "empty trajectory batches cannot have IDs or metadata",
                 ));
@@ -73,6 +84,16 @@ impl FrameBatch {
         }
         if !metadata.is_empty() && metadata.len() != frames.len() {
             return Err(LandfoldError::Shape("trajectory metadata length"));
+        }
+        if let Some(numbers) = atomic_numbers
+            && numbers.len() != atom_ids.len()
+        {
+            return Err(LandfoldError::Shape("trajectory atomic number length"));
+        }
+        if let Some(cell) = cell
+            && (cell.dim() != (3, 3) || cell.iter().any(|&value| !value.is_finite()))
+        {
+            return Err(LandfoldError::Shape("trajectory cell must be finite 3x3"));
         }
         let shape = frames[0].dim();
         if shape.1 != 3 || shape.0 != atom_ids.len() {

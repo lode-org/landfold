@@ -36,11 +36,37 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
         .map_err(|error| LandfoldError::Parse(error.to_string()))?;
     let points = Array2::from_shape_vec((shape[0], shape[1]), values)
         .map_err(|_| LandfoldError::Shape("HDF5 /path/images data shape"))?;
-    let atom_ids = read_ids(&file, "/metadata/atom_ids", shape[1] / 3)?
+    let n_atoms = shape[1] / 3;
+    let atom_ids = read_ids(&file, "/metadata/atom_ids", n_atoms)?
         .unwrap_or_else(|| (0..shape[1] as u64 / 3).collect());
     let frame_ids = read_ids(&file, "/path/frame_ids", shape[0])?
         .unwrap_or_else(|| (0..shape[0] as u64).collect());
-    FrameBatch::from_flattened_points(points, atom_ids, frame_ids, None)
+    let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, None)?;
+    batch.atomic_numbers = read_ids(&file, "/metadata/atomic_numbers", n_atoms)?;
+    if let Some(numbers) = &batch.atomic_numbers {
+        if numbers.iter().any(|&number| number == 0 || number > 118) {
+            return Err(LandfoldError::Msg(
+                "HDF5 atomic numbers must be in the range 1..=118",
+            ));
+        }
+    }
+    if file.link_exists("/metadata/cell") {
+        let dataset = file
+            .dataset("/metadata/cell")
+            .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+        if dataset.shape() != [3, 3] {
+            return Err(LandfoldError::Shape("HDF5 cell must be a 3x3 dataset"));
+        }
+        let values = dataset
+            .read_raw::<f64>()
+            .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+        batch.cell = Some(
+            Array2::from_shape_vec((3, 3), values)
+                .map_err(|_| LandfoldError::Shape("HDF5 cell data shape"))?,
+        );
+    }
+    batch.validate()?;
+    Ok(batch)
 }
 
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
@@ -93,12 +119,28 @@ mod tests {
             .expect("create atom IDs")
             .write_raw(&[7_u64, 8])
             .expect("write atom IDs");
+        metadata_group
+            .new_dataset::<u64>()
+            .shape(2)
+            .create("atomic_numbers")
+            .expect("create atomic numbers")
+            .write_raw(&[6_u64, 1])
+            .expect("write atomic numbers");
+        metadata_group
+            .new_dataset::<f64>()
+            .shape((3, 3))
+            .create("cell")
+            .expect("create cell")
+            .write_raw(&[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0])
+            .expect("write cell");
         drop(file);
 
         let batch = read_hdf5_batch(&path).expect("read HDF5 fixture");
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert_eq!(batch.frame_ids, vec![41, 42]);
         assert_eq!(batch.atom_ids, vec![7, 8]);
+        assert_eq!(batch.atomic_numbers, Some(vec![6, 1]));
+        assert_eq!(batch.cell.as_ref().expect("cell").dim(), (3, 3));
         assert_eq!(
             batch.frame(1).expect("second frame").row(0).to_vec(),
             vec![6.0, 7.0, 8.0]
