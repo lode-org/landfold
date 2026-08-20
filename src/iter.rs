@@ -10,7 +10,7 @@ use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
 use crate::replica::{ReplicaOpts, minimize_replica};
 use crate::search::{StochOpts, minimize_stochastic};
-use crate::stress::{Stress, validate_imix, validate_weights};
+use crate::stress::{Stress, validate_distance_matrix, validate_imix, validate_weights};
 use crate::transfer::Transfer;
 
 /// Solver arm. `Standard` is the published full-pair CG path.
@@ -95,10 +95,13 @@ impl Embedding {
             || self.stress < 0.0
         {
             return Err(crate::error::LandfoldError::Msg(
-                "embedding coordinates and distances must be finite; distances must be nonnegative".into(),
+                "embedding coordinates and distances must be finite; distances must be nonnegative"
+                    .into(),
             ));
         }
         validate_weights(Some(self.weights.view()), n)?;
+        validate_distance_matrix(&self.hd, "high-D")?;
+        validate_distance_matrix(&self.fhd, "transformed high-D")?;
         validate_imix(self.imix)
     }
 
