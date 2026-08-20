@@ -138,6 +138,7 @@ pub fn minimize_highs(
                 let y = &ev1.grad - &ev.grad;
                 lbfgs.record(s, y);
                 pos.assign(&trial);
+                trial.assign(&pos);
                 ev = ev1;
                 accepted = true;
                 steps += 1;
