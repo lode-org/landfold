@@ -162,7 +162,15 @@ impl Stress {
             weights,
             pair_weights,
         );
-        stress.validate_state()?;
+        if stress.weights.as_ref().is_some_and(|weights| {
+            weights
+                .iter()
+                .any(|&value| !value.is_finite() || value < 0.0)
+        }) {
+            return Err(crate::error::LandfoldError::Msg(
+                "stress assembled pair weights must be finite and nonnegative".into(),
+            ));
+        }
         Ok(stress)
     }
 
