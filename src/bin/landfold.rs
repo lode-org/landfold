@@ -248,6 +248,7 @@ fn main() -> landfold::Result<()> {
                     {
                         let mut ho = landfold::HighsOpts {
                             maxiter: steps,
+                            adaptive_trust: trust.is_none(),
                             ..landfold::HighsOpts::default()
                         };
                         if let Some(t) = trust {
