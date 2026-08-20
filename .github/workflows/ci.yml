@@ -71,7 +71,7 @@ jobs:
           wheel=$(find dist -name '*.whl' -print -quit)
           python -m pip install "${wheel}[chemparseplot]"
       - name: Test Chemparseplot HDF5 bridge
-        run: python -m pytest -q tests/python/test_chemparseplot_hdf5.py
+        run: python -m pytest -q tests/python
 
   workflow-schema:
     name: Workflow schema
