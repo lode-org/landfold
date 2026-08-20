@@ -70,6 +70,7 @@ pub use readcon::{
 pub use readcon::{
     read_trajectory_batch, read_trajectory_frames, read_trajectory_positions,
 };
+pub use provenance::{EON_COMPATIBILITY_SCHEMA, EngineCompatibility, PROVENANCE_SCHEMA, Provenance};
 pub use replica::ReplicaOpts;
 pub use search::StochOpts;
 pub use stress::{Stress, StressEval, query_chi};
