@@ -28,6 +28,7 @@ pub mod landmark;
 pub mod mds;
 pub mod metric;
 pub mod pairwise;
+pub mod phate;
 pub mod project;
 pub mod provenance;
 #[cfg(feature = "readcon")]
@@ -62,6 +63,7 @@ pub use landmark::{
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
+pub use phate::{PhateModel, PhateOpts, phate_embed, phate_project};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
 };

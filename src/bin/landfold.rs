@@ -15,9 +15,9 @@ use landfold::{
     L1, Stretch,
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
     Transfer, coordination_histogram, embed, embed_sigma_schedule, joint_pairwise_hist,
-    mds_from_points, pairwise, suggest_alpha,
+    mds_from_points, pairwise, phate_embed, phate_project, suggest_alpha,
     pairwise_euclid, project_many_report, read_points, select_landmarks, suggest_scale,
-    write_plumed, write_points,
+    write_plumed, write_points, PhateOpts,
 };
 
 #[derive(Parser, Debug)]
@@ -120,6 +120,18 @@ enum Cmd {
         /// Per-site trust radius for `--highs` (default 0.5)
         #[arg(long = "trust")]
         trust: Option<f64>,
+        /// PHATE (Moon et al., Nat. Biotechnol. 2019) instead of χ
+        #[arg(long)]
+        phate: bool,
+        /// PHATE k-NN bandwidth (Moon default 5)
+        #[arg(long = "phate-knn", default_value_t = 5)]
+        phate_knn: usize,
+        /// PHATE alpha-decay (Moon default 40)
+        #[arg(long = "phate-decay", default_value_t = 40.0)]
+        phate_decay: f64,
+        /// PHATE diffusion time. Default: von Neumann entropy knee
+        #[arg(long = "phate-t")]
+        phate_t: Option<usize>,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -168,6 +180,15 @@ enum Cmd {
         /// Softmax temperature on the grid (`dimproj -gt`). Zero keeps the min.
         #[arg(long = "gt", default_value_t = 0.0)]
         gtemp: f64,
+        /// PHATE OOS (Nyström potential + metric MDS) instead of χ grid
+        #[arg(long)]
+        phate: bool,
+        #[arg(long = "phate-knn", default_value_t = 5)]
+        phate_knn: usize,
+        #[arg(long = "phate-decay", default_value_t = 40.0)]
+        phate_decay: f64,
+        #[arg(long = "phate-t")]
+        phate_t: Option<usize>,
     },
     /// Farthest-point (Gonzalez) landmarks
     Landmarks {
@@ -330,8 +351,30 @@ fn main() -> landfold::Result<()> {
             lbfgs,
             box_bounds,
             trust,
+            phate,
+            phate_knn,
+            phate_decay,
+            phate_t,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
+            if phate {
+                let popts = PhateOpts {
+                    knn: phate_knn,
+                    decay: phate_decay,
+                    t: phate_t,
+                    lowdim: low,
+                    ..PhateOpts::default()
+                };
+                let (coords, model) = phate_embed(set.points.view(), &Euclid, &popts)?;
+                let mut out = io::stdout().lock();
+                write_points(&mut out, &coords, None)?;
+                writeln!(
+                    io::stderr(),
+                    "# PHATE t {} knn {} decay {} gamma {}",
+                    model.t, model.knn, model.decay, model.gamma
+                )?;
+                return Ok(());
+            }
             let mut opts = IterOpts {
                 lowdim: low,
                 imix,
@@ -515,6 +558,10 @@ fn main() -> landfold::Result<()> {
             print_error,
             path,
             gtemp,
+            phate,
+            phate_knn,
+            phate_decay,
+            phate_t,
         } => {
             let hi = read_points(
                 std::io::BufReader::new(std::fs::File::open(&high_file)?),
@@ -526,6 +573,25 @@ fn main() -> landfold::Result<()> {
                 low,
                 false,
             )?;
+            if phate {
+                let popts = PhateOpts {
+                    knn: phate_knn,
+                    decay: phate_decay,
+                    t: phate_t,
+                    lowdim: low,
+                    ..PhateOpts::default()
+                };
+                let query = read_points(io::stdin().lock(), high, weighted)?;
+                let proj = phate_project(
+                    hi.points.view(),
+                    lo.points.view(),
+                    query.points.view(),
+                    &Euclid,
+                    &popts,
+                )?;
+                write_points(&mut io::stdout().lock(), &proj, None)?;
+                return Ok(());
+            }
             let t_hd = Transfer::from_cli(&fun_hd)?;
             let t_ld = Transfer::from_cli(&fun_ld)?;
             let metric: Box<dyn Metric> = if let Some(path) = stretch {

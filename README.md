@@ -55,6 +55,15 @@ probability \(F(D(\alpha))\), the same transfer as χ, flat prior on
 \(\alpha\ge 0\). The plug-in median of \((\sigma^2-D_0^2)/p^2\) is
 printed as `plugin` and is biased high. Pass `--alpha` only to override.
 
+`landfold embed --phate` is Moon et al., *Nat. Biotechnol.* **37**, 1482
+(2019), [10.1038/s41587-019-0336-3](https://doi.org/10.1038/s41587-019-0336-3):
+locally scaled diffusion (Rohrdanz, Zheng, Maggioni, Clementi,
+*J. Chem. Phys.* **134**, 124116 (2011)) raised to a von Neumann
+entropy time, then Torgerson MDS of the information-potential
+distance. `landfold project --phate` places new rows by a Nyström
+potential and a metric MDS fit against the stored landmark map.
+This is not a Ceriotti transfer and does not use χ.
+
 `landfold embed --preopt` / `--grid` / `--gopt` is the C++ `dimred`
 mix-down path (identity MDS, then sigmoid χ, then pointwise grid).
 `-v` writes `# Error in fitting LD points:` on stdout. `landfold

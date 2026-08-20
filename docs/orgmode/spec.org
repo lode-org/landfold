@@ -37,6 +37,7 @@ is biased high. Torgerson / Halko rangefinder MDS
 | Solver | CG, then =-grid= / =-gopt= | same; extra arms stay extra |
 | Landmarks | stride / random / minmax / resample / staged | same |
 | Quality visual | =dimdist= joint \(P(D,d)\) | =landfold dist --low-file= |
+| Trajectory map | (none) | =landfold embed --phate= (Moon 2019; Rohrdanz 2011 kernel) |
 
 * Transfer
 
