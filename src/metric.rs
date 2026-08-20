@@ -94,6 +94,10 @@ fn periodic_delta(a: f64, b: f64, period: f64) -> f64 {
     delta
 }
 
+fn periodic_phase(value: f64, period: f64) -> f64 {
+    value.rem_euclid(period) / period * std::f64::consts::TAU
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Euclid;
 
@@ -175,15 +179,16 @@ impl Metric for Sphere {
 
     fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
         let n = a.len();
-        let twopi = std::f64::consts::TAU;
         let mut xs = 1.0;
         let mut ys = 1.0;
         let mut xy = 0.0;
         for i in 0..n {
-            let xi = xs * (a[i] * twopi / self.periods[i]).cos();
-            let yi = ys * (b[i] * twopi / self.periods[i]).cos();
-            xs *= (a[i] * twopi / self.periods[i]).sin();
-            ys *= (b[i] * twopi / self.periods[i]).sin();
+            let a_phase = periodic_phase(a[i], self.periods[i]);
+            let b_phase = periodic_phase(b[i], self.periods[i]);
+            let xi = xs * a_phase.cos();
+            let yi = ys * b_phase.cos();
+            xs *= a_phase.sin();
+            ys *= b_phase.sin();
             xy += xi * yi;
         }
         xy += xs * ys;
@@ -306,6 +311,13 @@ mod tests {
             0.0,
             epsilon = 1e-14
         );
+    }
+
+    #[test]
+    fn sphere_accepts_finite_coordinates_with_small_periods() {
+        let m = Sphere::new(vec![1.0e-300, 1.0e-300]).unwrap();
+        let distance = m.dist(&[f64::MAX, f64::MAX], &[-f64::MAX, -f64::MAX]);
+        assert!(distance.is_ok_and(|value| value.is_finite()));
     }
 
     #[test]
