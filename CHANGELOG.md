@@ -12,3 +12,7 @@ Low Dimensions).
   landmarks, FES invert
 - C++ oracle goldens (`cpp_parity`), CPython `python` feature on
   pyo3 0.29
+- Format-neutral `FrameBatch` ingestion through optional readcon,
+  readcon-chemfiles, and Chemparseplot-compatible HDF5 adapters, with
+  stable identities, units, cells, metadata, path observables, and gradients
+- Runnable Python Chemparseplot HDF5 bridge with versioned Landfold results
