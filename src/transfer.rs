@@ -88,9 +88,9 @@ impl Transfer {
     ///
     /// `P(n/2, (x/(sigma sqrt(2)))^2)` via a series / continued-fraction Q.
     pub fn gamma(sigma: f64, n: f64) -> Result<Self> {
-        if !(sigma.is_finite() && sigma > 0.0) || !(n.is_finite() && n > 0.0) {
+        if !(sigma.is_finite() && sigma > 0.0) || !(n.is_finite() && n >= 1.0) {
             return Err(LandfoldError::TransferParams(
-                "gamma needs sigma > 0 and n > 0",
+                "gamma needs sigma > 0 and n >= 1",
             ));
         }
         let normalizer = 2.0 / gamma_half(n * 0.5);
@@ -260,7 +260,11 @@ fn gamma_fdf(pars: &[f64], x: f64) -> (f64, f64) {
     let sx = x * pars[0];
     let rf = 1.0 - regularised_gamma_q(pars[1] * 0.5, sx * sx);
     let rdf = if x == 0.0 {
-        0.0
+        if pars[1] == 1.0 {
+            pars[2] * pars[0]
+        } else {
+            0.0
+        }
     } else {
         pars[2] * sx.powf(pars[1] - 1.0) * (-sx * sx).exp() * pars[0]
     };
@@ -418,6 +422,13 @@ mod tests {
         assert!(t.f(1.0) > 0.0);
         assert!(t.f(2.0) > t.f(1.0));
         assert!(t.df(1.0) > 0.0);
+    }
+
+    #[test]
+    fn gamma_handles_the_finite_unit_shape_slope_at_zero() {
+        let t = Transfer::gamma(2.0, 1.0).unwrap();
+        assert_relative_eq!(t.df(0.0), (2.0 / std::f64::consts::PI).sqrt() / 2.0);
+        assert!(Transfer::gamma(2.0, 0.5).is_err());
     }
 
     #[test]
