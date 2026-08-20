@@ -42,14 +42,7 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     let frame_ids = read_ids(&file, "/path/frame_ids", shape[0])?
         .unwrap_or_else(|| (0..shape[0] as u64).collect());
     let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, None)?;
-    batch.atomic_numbers = read_ids(&file, "/metadata/atomic_numbers", n_atoms)?;
-    if let Some(numbers) = &batch.atomic_numbers
-        && numbers.iter().any(|&number| number == 0 || number > 118)
-    {
-        return Err(LandfoldError::Msg(
-            "HDF5 atomic numbers must be in the range 1..=118".into(),
-        ));
-    }
+    batch.atomic_numbers = read_atomic_numbers(&file, "/metadata/atomic_numbers", n_atoms)?;
     if file.link_exists("/metadata/cell") {
         let dataset = file
             .dataset("/metadata/cell")
@@ -67,6 +60,41 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     }
     batch.validate()?;
     Ok(batch)
+}
+
+fn read_atomic_numbers(
+    file: &hdf5::File,
+    path: &str,
+    expected: usize,
+) -> Result<Option<Vec<u64>>> {
+    if !file.link_exists(path) {
+        return Ok(None);
+    }
+    let dataset = file
+        .dataset(path)
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if dataset.ndim() != 1 || dataset.shape()[0] != expected {
+        return Err(LandfoldError::Shape(
+            "HDF5 atomic number dataset shape",
+        ));
+    }
+    let values = dataset
+        .read_raw::<i64>()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    values
+        .into_iter()
+        .map(|number| {
+            u64::try_from(number)
+                .ok()
+                .filter(|&number| (1..=118).contains(&number))
+                .ok_or_else(|| {
+                    LandfoldError::Msg(
+                        "HDF5 atomic numbers must be in the range 1..=118".into(),
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(Some)
 }
 
 fn read_ids(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
@@ -103,7 +131,7 @@ mod tests {
             .write_raw(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
             .expect("write images");
         path_group
-            .new_dataset::<u64>()
+            .new_dataset::<i64>()
             .shape(2)
             .create("frame_ids")
             .expect("create frame IDs")
@@ -124,7 +152,7 @@ mod tests {
             .shape(2)
             .create("atomic_numbers")
             .expect("create atomic numbers")
-            .write_raw(&[6_u64, 1])
+            .write_raw(&[6_i64, 1])
             .expect("write atomic numbers");
         metadata_group
             .new_dataset::<f64>()
