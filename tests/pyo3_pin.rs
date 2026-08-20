@@ -184,7 +184,7 @@ fn python_feature_matches_dlpk_pyo3_major() {
 fn xtsci_dependency_is_immutably_pinned() {
     let manifest = std::fs::read_to_string(crate_root().join("Cargo.toml")).unwrap();
     assert!(manifest.contains("git = \"https://github.com/HaoZeke/xtsci-optimize.git\""));
-    assert!(manifest.contains("rev = \"5aeb315af819bce40ec56f9e76b862fab64447fc\""));
+    assert!(manifest.contains("rev = \"d7849538b85fa25a1118f9a22c379e311cb26a3c\""));
 }
 
 #[test]
