@@ -7,6 +7,13 @@
 //! which equals 1/2 at `x = σ` (Ceriotti, Tribello, Parrinello,
 //! *Proc. Natl. Acad. Sci. U.S.A.* **108**, 13023 (2011),
 //! <https://doi.org/10.1073/pnas.1108486108>).
+//!
+//! `imq` is the MethodsX inverse-multiquadric generator
+//! `k = (c^2 + r^2)^{-1/2}` rewritten as an increasing distance
+//! transfer `F(x) = 1 - c / sqrt(c^2 + x^2)` with `c = σ/√3` so
+//! `F(σ) = 1/2`. Completely monotone in `r^2` (Schoenberg 1938),
+//! hence strictly positive definite on every `R^d`
+//! (Buhmann, *Radial Basis Functions*, 2003).
 
 use crate::error::{LandfoldError, Result};
 
@@ -18,6 +25,7 @@ pub enum TransferMode {
     XSigmoid,
     Gamma,
     Warp,
+    Imq,
 }
 
 /// High-D or low-D distance transfer function with analytic derivative.
@@ -109,6 +117,21 @@ impl Transfer {
         )
     }
 
+    /// Inverse-multiquadric transfer. Argument `sigma`.
+    ///
+    /// `F(x) = 1 - c / sqrt(c^2 + x^2)` with `c = σ/√3`, so `F(σ) = 1/2`.
+    /// The generator `(c^2 + r^2)^{-1/2}` is the MethodsX IMQ kernel.
+    pub fn imq(sigma: f64) -> Result<Self> {
+        if !(sigma.is_finite() && sigma > 0.0) {
+            return Err(LandfoldError::TransferParams("imq sigma must be > 0"));
+        }
+        let c = sigma / 3.0_f64.sqrt();
+        if !c.is_finite() || c <= 0.0 {
+            return Err(LandfoldError::TransferParams("imq scale is not finite"));
+        }
+        Self::from_parts(TransferMode::Imq, vec![c])
+    }
+
     /// `F_LD^{-1}(F_HD(x))` warp. Arguments `(sigma, a_D, b_D, a_d, b_d)`.
     pub fn warp(sigma: f64, a_d: f64, b_d: f64, a_ld: f64, b_ld: f64) -> Result<Self> {
         if !(sigma.is_finite() && sigma > 0.0) {
@@ -144,11 +167,22 @@ impl Transfer {
         )
     }
 
-    /// Parse `identity`, `sigma`, `sigma,n`, `sigma,a,b`, or `sigma,aD,bD,ad,bd`.
+    /// Parse `identity`, `imq,sigma`, `sigma`, `sigma,n`, `sigma,a,b`,
+    /// or `sigma,aD,bD,ad,bd`.
     pub fn from_cli(spec: &str) -> Result<Self> {
         let spec = spec.trim();
         if spec.is_empty() || spec.eq_ignore_ascii_case("identity") {
             return Ok(Self::identity());
+        }
+        let lower = spec.to_ascii_lowercase();
+        if lower == "imq" {
+            return Self::imq(1.0);
+        }
+        if let Some(rest) = lower.strip_prefix("imq,") {
+            let sigma: f64 = rest.trim().parse().map_err(|e| {
+                LandfoldError::Parse(format!("fun spec `{spec}`: {e}"))
+            })?;
+            return Self::imq(sigma);
         }
         let parts: Vec<f64> = spec
             .split(',')
@@ -164,7 +198,7 @@ impl Transfer {
             [s, a, b] => Self::xsigmoid(*s, *a, *b),
             [s, a, b, al, bl] => Self::warp(*s, *a, *b, *al, *bl),
             _ => Err(LandfoldError::TransferParams(
-                "fun spec must be identity | sigma | sigma,n | sigma,a,b | sigma,aD,bD,ad,bd",
+                "fun spec must be identity | imq[,sigma] | sigma | sigma,n | sigma,a,b | sigma,aD,bD,ad,bd",
             )),
         }
     }
@@ -197,6 +231,11 @@ impl Transfer {
             }
             TransferMode::XSigmoid => xsigmoid_fdf(&self.pars, x),
             TransferMode::Gamma => gamma_fdf(&self.pars, x),
+            TransferMode::Imq => {
+                let c = self.pars[0];
+                let inv = 1.0 / (c * c + x * x).sqrt();
+                (1.0 - c * inv, c * x * inv * inv * inv)
+            }
             TransferMode::Warp => {
                 let (fx, dfx) = xsigmoid_fdf(&self.pars, x);
                 let gx = warp_g(&self.pars, fx);
@@ -431,6 +470,36 @@ mod tests {
         assert_eq!(ld.mode(), TransferMode::XSigmoid);
         assert_relative_eq!(hd.f(6.0), 0.5, epsilon = 1e-14);
         assert_relative_eq!(ld.f(6.0), 0.5, epsilon = 1e-14);
+    }
+
+    #[test]
+    fn imq_half_at_sigma_and_zero_at_origin() {
+        let t = Transfer::imq(6.0).unwrap();
+        assert_eq!(t.mode(), TransferMode::Imq);
+        assert_relative_eq!(t.f(0.0), 0.0, epsilon = 1e-15);
+        assert_relative_eq!(t.f(6.0), 0.5, epsilon = 1e-14);
+        assert!(t.f(100.0) > t.f(6.0));
+        assert!(t.f(100.0) < 1.0);
+        assert_relative_eq!(t.df(0.0), 0.0, epsilon = 1e-15);
+        assert!(t.df(6.0) > 0.0);
+    }
+
+    #[test]
+    fn imq_finite_difference() {
+        let t = Transfer::imq(2.0).unwrap();
+        let x = 1.3;
+        let h = 1e-7;
+        let fd = (t.f(x + h) - t.f(x - h)) / (2.0 * h);
+        assert_relative_eq!(t.df(x), fd, epsilon = 1e-7);
+    }
+
+    #[test]
+    fn from_cli_imq() {
+        let t = Transfer::from_cli("imq,5").unwrap();
+        assert_eq!(t.mode(), TransferMode::Imq);
+        assert_relative_eq!(t.f(5.0), 0.5, epsilon = 1e-14);
+        assert!(Transfer::from_cli("imq,0").is_err());
+        assert!(Transfer::imq(f64::NAN).is_err());
     }
 
     #[test]

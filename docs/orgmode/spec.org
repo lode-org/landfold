@@ -12,6 +12,15 @@ Generalised sigmoid (Ceriotti 2011, DOI 10.1073/pnas.1108486108):
 
 equals 1/2 at =x = σ=.
 
+=imq,σ= is the MethodsX inverse-multiquadric generator as a
+distance transfer:
+
+=F(x) = 1 - c / sqrt(c^2 + x^2)= with =c = σ/√3=, so =F(σ) = 1/2=.
+
+The generator =(c^2 + r^2)^{-1/2}= is completely monotone
+(Schoenberg 1938); the kernel is strictly positive definite on every
+=R^d=. CLI: =--fun-ld imq,6= (high-D may stay a Ceriotti sigmoid).
+
 * Stress
 
 χ = (1/Z) Σ_{i<j} w_ij [ (1-imix)(F_HD(D_ij)-F_LD(d_ij))^2 + imix (D_ij-d_ij)^2 ]

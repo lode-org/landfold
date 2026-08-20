@@ -15,7 +15,7 @@ Each published kernel cites its paper in rustdoc.
 ## CLI
 
 ```
-landfold embed -D 30 -d 2 --fun-hd 6,8,8 --fun-ld 6,2,8 --steps 50 < hd.dat
+landfold embed -D 30 -d 2 --fun-hd 6,8,8 --fun-ld imq,6 --steps 50 < hd.dat
 landfold landmarks -D 30 -n 200 --seed 1 --indices < hd.dat
 landfold project -D 30 -d 2 --high-file lm.hd --low-file lm.ld \
     --grid 1.0,21,201 --refine 3 < frames.dat

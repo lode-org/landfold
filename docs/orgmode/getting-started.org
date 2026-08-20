@@ -56,7 +56,7 @@ landfold mds -D 30 -d 2 --distances < landmarks.dat > landmarks.mds.dist
 * Embed
 
 #+begin_src sh
-landfold embed -D 30 -d 2 --fun-hd 6,8,8 --fun-ld 6,2,8 --steps 50 \
+landfold embed -D 30 -d 2 --fun-hd 6,8,8 --fun-ld imq,6 --steps 50 \
     --pi 6.283185 -w < landmarks.dat > landmarks.ld
 #+end_src
 
