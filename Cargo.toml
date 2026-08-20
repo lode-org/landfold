@@ -51,6 +51,10 @@ readcon-core = { path = "../readcon-core", version = "0.14.0", optional = true }
 approx = "0.5"
 criterion = "0.5"
 
+[[example]]
+name = "highs_only"
+required-features = ["highs"]
+
 [[bench]]
 name = "chi"
 harness = false
