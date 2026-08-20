@@ -729,7 +729,11 @@ fn uniform_edges(edges: &Array1<f64>) -> bool {
     let width = second - first;
     rest.windows(2).all(|pair| {
         let actual = pair[1] - pair[0];
-        let scale = width.abs().max(actual.abs());
+        let scale = width
+            .abs()
+            .max(actual.abs())
+            .max(pair[0].abs())
+            .max(pair[1].abs());
         (actual - width).abs() <= 16.0 * f64::EPSILON * scale
     })
 }
