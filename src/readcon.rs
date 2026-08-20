@@ -95,11 +95,21 @@ pub fn frames_batch(frames: &[ConFrame]) -> Result<FrameBatch> {
         .as_slice()
         .ok_or(LandfoldError::Shape("readcon atom IDs must be contiguous"))?
         .to_vec();
-    let frame_ids = frames
+    let explicit_frame_ids = frames
         .iter()
-        .enumerate()
-        .map(|(index, frame)| frame.header.frame_index().unwrap_or(index as u64))
-        .collect();
+        .map(|frame| frame.header.frame_index())
+        .collect::<Vec<_>>();
+    let has_explicit_frame_ids = explicit_frame_ids.iter().any(Option::is_some);
+    if has_explicit_frame_ids && explicit_frame_ids.iter().any(Option::is_none) {
+        return Err(LandfoldError::Msg(
+            "readcon frames mix explicit and implicit frame IDs".into(),
+        ));
+    }
+    let frame_ids = if has_explicit_frame_ids {
+        explicit_frame_ids.into_iter().flatten().collect()
+    } else {
+        (0..frames.len() as u64).collect()
+    };
     let length_unit = first.header.length_unit().map(str::to_owned);
     if frames
         .iter()
@@ -196,6 +206,15 @@ mod tests {
         assert_eq!(batch.atom_ids, vec![0, 1]);
         assert_eq!(batch.n_frames(), 2);
         assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
+    }
+
+    #[test]
+    fn rejects_mixed_explicit_and_implicit_frame_ids() {
+        let mut first = frame(0.0);
+        first.header.set_frame_index(41);
+        let error = frames_batch(&[first, frame(2.0)])
+            .expect_err("mixed frame identity must be rejected");
+        assert!(error.to_string().contains("mix explicit and implicit"));
     }
 
     #[cfg(feature = "readcon-chemfiles")]
