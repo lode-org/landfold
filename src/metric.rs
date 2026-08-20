@@ -81,6 +81,19 @@ pub(crate) fn stable_euclid<'a, 'b>(
     scale * sum.sqrt()
 }
 
+fn periodic_delta(a: f64, b: f64, period: f64) -> f64 {
+    let a_mod = a.rem_euclid(period);
+    let b_mod = b.rem_euclid(period);
+    let mut delta = b_mod - a_mod;
+    let half_period = 0.5 * period;
+    if delta > half_period {
+        delta -= period;
+    } else if delta < -half_period {
+        delta += period;
+    }
+    delta
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Euclid;
 
@@ -120,10 +133,7 @@ impl Metric for Periodic {
     fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
         let mut acc = 0.0;
         for i in 0..a.len() {
-            let mut dx = b[i] - a[i];
-            dx /= self.periods[i];
-            dx -= dx.round();
-            dx *= self.periods[i];
+            let dx = periodic_delta(a[i], b[i], self.periods[i]);
             acc += dx * dx;
         }
         acc.sqrt()
@@ -131,11 +141,7 @@ impl Metric for Periodic {
 
     fn diff(&self, a: &[f64], b: &[f64], c: &mut [f64]) {
         for i in 0..a.len() {
-            let mut dx = b[i] - a[i];
-            dx /= self.periods[i];
-            dx -= dx.round();
-            dx *= self.periods[i];
-            c[i] = dx;
+            c[i] = periodic_delta(a[i], b[i], self.periods[i]);
         }
     }
 }
@@ -279,6 +285,17 @@ mod tests {
     fn pbc_wraps() {
         let m = Periodic::isotropic(1, 1.0).unwrap();
         assert_relative_eq!(m.dist(&[0.05], &[0.95]).unwrap(), 0.1, epsilon = 1e-14);
+    }
+
+    #[test]
+    fn pbc_accepts_finite_extreme_coordinates() {
+        let m = Periodic::isotropic(1, 3.0).unwrap();
+        let distance = m.dist(&[f64::MAX], &[-f64::MAX]).unwrap();
+        assert!(distance.is_finite());
+        let mut diff = [0.0];
+        m.diff(&[f64::MAX], &[-f64::MAX], &mut diff);
+        assert!(diff[0].is_finite());
+        assert!(diff[0].abs() <= 1.5);
     }
 
     #[test]
