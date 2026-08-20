@@ -11,7 +11,8 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, FreeEnergy, Histogram2d, IterOpts, L1, Stretch,
+    AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, Fisher, FreeEnergy, Histogram2d, IterOpts,
+    L1, Stretch,
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
     Transfer, coordination_histogram, embed, embed_sigma_schedule, joint_pairwise_hist,
     mds_from_points, pairwise,
@@ -90,6 +91,9 @@ enum Cmd {
         stretch: Option<PathBuf>,
         #[arg(long = "alpha", default_value_t = 3.0)]
         alpha: f64,
+        /// Pooled within-class Mahalanobis using the two `--stretch` refs
+        #[arg(long)]
+        fisher: bool,
         #[arg(long = "init")]
         init: Option<PathBuf>,
         /// Random pair mini-batches instead of full-pair CG
@@ -140,6 +144,8 @@ enum Cmd {
         stretch: Option<PathBuf>,
         #[arg(long = "alpha", default_value_t = 3.0)]
         alpha: f64,
+        #[arg(long)]
+        fisher: bool,
         #[arg(long = "fun-hd", default_value = "identity", help = FUN_SPEC_HELP)]
         fun_hd: String,
         #[arg(long = "fun-ld", default_value = "identity", help = FUN_SPEC_HELP)]
@@ -313,6 +319,7 @@ fn main() -> landfold::Result<()> {
             continue_sigma,
             stretch,
             alpha,
+            fisher,
             init,
             stoch,
             batch,
@@ -417,7 +424,21 @@ fn main() -> landfold::Result<()> {
                 }
                 let a: Vec<f64> = refs.points.row(0).iter().copied().collect();
                 let b: Vec<f64> = refs.points.row(1).iter().copied().collect();
-                Box::new(Stretch::from_refs(&a, &b, alpha)?)
+                if fisher {
+                    let pts: Vec<Vec<f64>> = set
+                        .points
+                        .rows()
+                        .into_iter()
+                        .map(|r| r.iter().copied().collect())
+                        .collect();
+                    Box::new(Fisher::from_refs(&pts, &a, &b, 1e-3)?)
+                } else {
+                    Box::new(Stretch::from_refs(&a, &b, alpha)?)
+                }
+            } else if fisher {
+                return Err(landfold::LandfoldError::Parse(
+                    "--fisher needs --stretch refs".into(),
+                ));
             } else if l1 {
                 Box::new(L1)
             } else if dot {
@@ -483,6 +504,7 @@ fn main() -> landfold::Result<()> {
             similarity,
             stretch,
             alpha,
+            fisher,
             fun_hd,
             fun_ld,
             imix,
@@ -517,7 +539,21 @@ fn main() -> landfold::Result<()> {
                 }
                 let a: Vec<f64> = refs.points.row(0).iter().copied().collect();
                 let b: Vec<f64> = refs.points.row(1).iter().copied().collect();
-                Box::new(Stretch::from_refs(&a, &b, alpha)?)
+                if fisher {
+                    let pts: Vec<Vec<f64>> = hi
+                        .points
+                        .rows()
+                        .into_iter()
+                        .map(|r| r.iter().copied().collect())
+                        .collect();
+                    Box::new(Fisher::from_refs(&pts, &a, &b, 1e-3)?)
+                } else {
+                    Box::new(Stretch::from_refs(&a, &b, alpha)?)
+                }
+            } else if fisher {
+                return Err(landfold::LandfoldError::Parse(
+                    "--fisher needs --stretch refs".into(),
+                ));
             } else if dot {
                 Box::new(Dot)
             } else if sphere != 0.0 {

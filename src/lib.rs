@@ -60,7 +60,7 @@ pub use landmark::{
     voronoi_weights,
 };
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
-pub use metric::{Dot, Euclid, L1, Metric, Periodic, Sphere, Stretch};
+pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,

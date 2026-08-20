@@ -180,6 +180,135 @@ impl Metric for Stretch {
     }
 }
 
+/// Pooled within-class Mahalanobis metric.
+///
+/// Points are labelled by the nearer of two named references. Distances
+/// are `sqrt((x-y)^T (S_w + ridge I)^{-1} (x-y))`, so the thermal
+/// directions inside each class are down-weighted and the fcc–ico
+/// contrast is the long axis.
+#[derive(Clone, Debug)]
+pub struct Fisher {
+    dim: usize,
+    prec: Vec<f64>,
+}
+
+impl Fisher {
+    pub fn from_refs(points: &[Vec<f64>], ref_a: &[f64], ref_b: &[f64], ridge: f64) -> Result<Self> {
+        let d = ref_a.len();
+        if d == 0 || ref_b.len() != d {
+            return Err(LandfoldError::MetricSize {
+                left: d,
+                right: ref_b.len(),
+            });
+        }
+        if !ridge.is_finite() || ridge < 0.0 {
+            return Err(LandfoldError::Msg(
+                "fisher ridge must be finite and nonnegative".into(),
+            ));
+        }
+        if points
+            .iter()
+            .any(|p| p.len() != d || p.iter().any(|v| !v.is_finite()))
+            || ref_a.iter().chain(ref_b).any(|v| !v.is_finite())
+        {
+            return Err(LandfoldError::Msg(
+                "fisher points and references must be finite and of one dimension".into(),
+            ));
+        }
+        let mut a: Vec<&[f64]> = Vec::new();
+        let mut b: Vec<&[f64]> = Vec::new();
+        for p in points {
+            let da: f64 = p.iter().zip(ref_a).map(|(x, y)| (x - y) * (x - y)).sum();
+            let db: f64 = p.iter().zip(ref_b).map(|(x, y)| (x - y) * (x - y)).sum();
+            if da <= db {
+                a.push(p);
+            } else {
+                b.push(p);
+            }
+        }
+        if a.len() < 2 || b.len() < 2 {
+            return Err(LandfoldError::Msg(
+                "fisher needs at least two points on each side of the references".into(),
+            ));
+        }
+        let mean = |cls: &[&[f64]]| -> Vec<f64> {
+            let n = cls.len() as f64;
+            let mut m = vec![0.0; d];
+            for p in cls {
+                for k in 0..d {
+                    m[k] += p[k] / n;
+                }
+            }
+            m
+        };
+        let ma = mean(&a);
+        let mb = mean(&b);
+        let mut sw = nalgebra::DMatrix::<f64>::zeros(d, d);
+        for (cls, mu) in [(&a, &ma), (&b, &mb)] {
+            for p in cls {
+                for i in 0..d {
+                    let di = p[i] - mu[i];
+                    for j in 0..d {
+                        sw[(i, j)] += di * (p[j] - mu[j]);
+                    }
+                }
+            }
+        }
+        let denom = (a.len() + b.len() - 2) as f64;
+        if denom <= 0.0 {
+            return Err(LandfoldError::Msg("fisher class counts underflowed".into()));
+        }
+        sw /= denom;
+        for i in 0..d {
+            sw[(i, i)] += ridge;
+        }
+        let prec = sw.try_inverse().ok_or_else(|| {
+            LandfoldError::Msg("fisher pooled covariance is singular".into())
+        })?;
+        if prec.iter().any(|v| !v.is_finite()) {
+            return Err(LandfoldError::Msg(
+                "fisher precision is non-finite".into(),
+            ));
+        }
+        let mut packed = vec![0.0; d * d];
+        for i in 0..d {
+            for j in 0..d {
+                packed[i * d + j] = prec[(i, j)];
+            }
+        }
+        Ok(Self {
+            dim: d,
+            prec: packed,
+        })
+    }
+}
+
+impl Metric for Fisher {
+    fn dim(&self) -> Option<usize> {
+        Some(self.dim)
+    }
+
+    fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
+        let d = self.dim;
+        let mut diff = vec![0.0; d];
+        for i in 0..d {
+            diff[i] = a[i] - b[i];
+        }
+        let mut acc = 0.0;
+        for i in 0..d {
+            let mut s = 0.0;
+            for j in 0..d {
+                s += self.prec[i * d + j] * diff[j];
+            }
+            acc += diff[i] * s;
+        }
+        if !acc.is_finite() || acc < 0.0 {
+            return f64::INFINITY;
+        }
+        acc.sqrt()
+    }
+}
+
 /// Hypertoroidal (minimum-image) Euclidean metric. `periods[i]` is the
 /// period of coordinate `i`.
 #[derive(Clone, Debug)]
@@ -353,6 +482,20 @@ mod tests {
         assert!(along > 1.9);
         assert_relative_eq!(across, 1.0, epsilon = 1e-14);
         assert!(Stretch::new(vec![0.0, 0.0], 1.0).is_err());
+    }
+
+    #[test]
+    fn fisher_shrinks_the_long_in_class_direction() {
+        let mut pts = Vec::new();
+        for i in 0..6 {
+            pts.push(vec![i as f64 * 0.1, 0.0]);
+            pts.push(vec![10.0 + i as f64 * 0.1, 0.0]);
+        }
+        let m = Fisher::from_refs(&pts, &[0.2, 0.0], &[10.2, 0.0], 1e-3).unwrap();
+        let along_class = m.dist(&[0.0, 0.0], &[0.5, 0.0]).unwrap();
+        let between = m.dist(&[0.2, 0.0], &[10.2, 0.0]).unwrap();
+        assert!(between > 5.0 * along_class);
+        assert!(Fisher::from_refs(&pts[..2], &[0.0, 0.0], &[10.0, 0.0], 1e-3).is_err());
     }
 
     #[test]
