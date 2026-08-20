@@ -154,14 +154,16 @@ impl Stress {
                 "stress pair weight shape",
             ));
         }
-        Ok(Self::from_parts(
+        let stress = Self::from_parts(
             hd,
             fhd,
             tfun_ld,
             imix,
             weights,
             pair_weights,
-        ))
+        );
+        stress.validate_state()?;
+        Ok(stress)
     }
 
     pub fn new(
@@ -752,6 +754,29 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_invalid_assembled_pair_weights() {
+        let hd = Array2::zeros((2, 2));
+        assert!(Stress::new(
+            hd.clone(),
+            hd.clone(),
+            Transfer::identity(),
+            0.0,
+            Some(array![f64::MAX, f64::MAX]),
+            None,
+        )
+        .is_err());
+        assert!(Stress::new(
+            hd.clone(),
+            hd,
+            Transfer::identity(),
+            0.0,
+            None,
+            Some(Array2::from_elem((2, 2), f64::NAN)),
+        )
+        .is_err());
     }
 
     #[test]
