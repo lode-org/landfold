@@ -98,6 +98,24 @@ impl FrameBatch {
     pub fn frame(&self, index: usize) -> Option<ArrayView2<'_, f64>> {
         self.frames.get(index).map(|frame| frame.view())
     }
+
+    /// Flatten each `(n_atoms, 3)` frame into one solver input row.
+    pub fn flattened_points(&self) -> Result<Array2<f64>> {
+        let width = self
+            .n_atoms()
+            .checked_mul(3)
+            .ok_or(LandfoldError::Shape("trajectory flattened width overflow"))?;
+        let mut values = Vec::with_capacity(
+            self.n_frames()
+                .checked_mul(width)
+                .ok_or(LandfoldError::Shape("trajectory flattened size overflow"))?,
+        );
+        for frame in &self.frames {
+            values.extend(frame.iter().copied());
+        }
+        Array2::from_shape_vec((self.n_frames(), width), values)
+            .map_err(|_| LandfoldError::Shape("trajectory flattened points"))
+    }
 }
 
 #[cfg(test)]
@@ -144,5 +162,24 @@ mod tests {
         assert!(
             FrameBatch::new(vec![array![[0.0, 0.0, 0.0]]], vec![0, 1], vec![0], None,).is_err()
         );
+    }
+
+    #[test]
+    fn flattens_frames_in_frame_and_atom_order() {
+        let batch = FrameBatch::new(
+            vec![
+                array![[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]],
+                array![[6.0, 7.0, 8.0], [9.0, 10.0, 11.0]],
+            ],
+            vec![10, 11],
+            vec![20, 21],
+            Some("angstrom".into()),
+        )
+        .unwrap();
+
+        let points = batch.flattened_points().expect("valid flattened points");
+        assert_eq!(points.dim(), (2, 6));
+        assert_eq!(points.row(0).to_vec(), vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(points.row(1).to_vec(), vec![6.0, 7.0, 8.0, 9.0, 10.0, 11.0]);
     }
 }
