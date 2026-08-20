@@ -72,7 +72,7 @@ enum Cmd {
         /// Replica-exchange (parallel tempering) then CG polish
         #[arg(long)]
         replica: bool,
-        /// Bound-constrained HiGHS sequential LP (needs --features highs)
+        /// L-BFGS two-loop with trust/center projection (needs --features highs)
         #[arg(long)]
         highs: bool,
         /// xtsci-optimize L-BFGS (extra arm; same ChiObjective)
@@ -81,6 +81,9 @@ enum Cmd {
         /// Box bounds `lo,hi` for `--highs`
         #[arg(long = "box")]
         box_bounds: Option<String>,
+        /// Per-site trust radius for `--highs` (default 0.5)
+        #[arg(long = "trust")]
+        trust: Option<f64>,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -231,6 +234,7 @@ fn main() -> landfold::Result<()> {
             highs,
             lbfgs,
             box_bounds,
+            trust,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             let mut opts = IterOpts {
@@ -246,6 +250,9 @@ fn main() -> landfold::Result<()> {
                             maxiter: steps,
                             ..landfold::HighsOpts::default()
                         };
+                        if let Some(t) = trust {
+                            ho.trust = t;
+                        }
                         if let Some(spec) = box_bounds {
                             let parts: Vec<f64> = spec
                                 .split(',')
@@ -264,7 +271,7 @@ fn main() -> landfold::Result<()> {
                     }
                     #[cfg(not(feature = "highs"))]
                     {
-                        let _ = box_bounds;
+                        let _ = (box_bounds, trust);
                         return Err(landfold::LandfoldError::Msg(
                             "rebuild with --features highs for the HiGHS arm".into(),
                         ));
@@ -328,6 +335,7 @@ fn main() -> landfold::Result<()> {
             )?;
             write_points(&mut io::stdout().lock(), &emb.low, None)?;
             writeln!(io::stderr(), "# stress {}", emb.stress)?;
+            let _ = trust;
         }
         Cmd::Project {
             high,
