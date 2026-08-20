@@ -46,6 +46,7 @@ pub fn read_hdf5_batch(path: &Path) -> Result<FrameBatch> {
     let mut batch = FrameBatch::from_flattened_points(points, atom_ids, frame_ids, length_unit)?;
     batch.atomic_numbers = read_atomic_numbers(&file, "/metadata/atomic_numbers", n_atoms)?;
     batch.atom_symbols = read_atom_symbols(&file, "/metadata/atom_symbols", n_atoms)?;
+    batch.gradients = read_frame_gradients(&file, "/path/gradients", shape[0], shape[1])?;
     if file.link_exists("/metadata/cell") {
         let dataset = file
             .dataset("/metadata/cell")
@@ -127,6 +128,34 @@ fn read_frame_scalars(file: &hdf5::File, path: &str, expected: usize) -> Result<
         ));
     }
     Ok(Some(values))
+}
+
+fn read_frame_gradients(
+    file: &hdf5::File,
+    path: &str,
+    expected_frames: usize,
+    expected_width: usize,
+) -> Result<Option<Array2<f64>>> {
+    if !file.link_exists(path) {
+        return Ok(None);
+    }
+    let dataset = file
+        .dataset(path)
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if dataset.shape() != [expected_frames, expected_width] {
+        return Err(LandfoldError::Shape("HDF5 path gradients dataset shape"));
+    }
+    let values = dataset
+        .read_raw::<f64>()
+        .map_err(|error| LandfoldError::Parse(error.to_string()))?;
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "HDF5 path gradients must be finite".into(),
+        ));
+    }
+    Array2::from_shape_vec((expected_frames, expected_width), values)
+        .map(Some)
+        .map_err(|_| LandfoldError::Shape("HDF5 path gradients data shape"))
 }
 
 fn read_atomic_numbers(file: &hdf5::File, path: &str, expected: usize) -> Result<Option<Vec<u64>>> {
@@ -224,6 +253,13 @@ mod tests {
             .write_raw(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
             .expect("write images");
         path_group
+            .new_dataset::<f64>()
+            .shape((2, 6))
+            .create("gradients")
+            .expect("create gradients")
+            .write_raw(&[0.0; 12])
+            .expect("write gradients");
+        path_group
             .new_dataset::<i64>()
             .shape(2)
             .create("frame_ids")
@@ -292,6 +328,7 @@ mod tests {
         assert_eq!(batch.length_unit.as_deref(), Some("angstrom"));
         assert_eq!(batch.atomic_numbers, Some(vec![6, 1]));
         assert_eq!(batch.atom_symbols, Some(vec!["C".into(), "H".into()]));
+        assert_eq!(batch.gradients.as_ref().expect("gradients").dim(), (2, 6));
         assert_eq!(batch.cell.as_ref().expect("cell").dim(), (3, 3));
         assert_eq!(
             batch.frame_metadata(1).and_then(|m| m.get("energies")),
@@ -381,6 +418,35 @@ mod tests {
         let error = read_hdf5_batch(&path).expect_err("non-finite observable must be rejected");
         std::fs::remove_file(path).expect("remove HDF5 fixture");
         assert!(error.to_string().contains("observables must be finite"));
+    }
+
+    #[test]
+    fn rejects_nonfinite_path_gradients() {
+        let path = std::env::temp_dir().join(format!(
+            "landfold-hdf5-nonfinite-gradients-{}.h5",
+            std::process::id()
+        ));
+        let file = hdf5::File::create(&path).expect("create HDF5 fixture");
+        let path_group = file.create_group("path").expect("create path group");
+        path_group
+            .new_dataset::<f64>()
+            .shape((1, 3))
+            .create("images")
+            .expect("create images")
+            .write_raw(&[0.0, 1.0, 2.0])
+            .expect("write images");
+        path_group
+            .new_dataset::<f64>()
+            .shape((1, 3))
+            .create("gradients")
+            .expect("create gradients")
+            .write_raw(&[0.0, f64::INFINITY, 0.0])
+            .expect("write gradients");
+        drop(file);
+
+        let error = read_hdf5_batch(&path).expect_err("non-finite gradients must be rejected");
+        std::fs::remove_file(path).expect("remove HDF5 fixture");
+        assert!(error.to_string().contains("path gradients must be finite"));
     }
 
     #[test]

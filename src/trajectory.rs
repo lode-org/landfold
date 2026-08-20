@@ -19,6 +19,9 @@ pub struct FrameBatch {
     pub length_unit: Option<String>,
     pub atomic_numbers: Option<Vec<u64>>,
     pub atom_symbols: Option<Vec<String>>,
+    /// Optional per-frame flattened Cartesian gradients with shape
+    /// `(n_frames, 3 * n_atoms)`.
+    pub gradients: Option<Array2<f64>>,
     pub cell: Option<Array2<f64>>,
     /// Per-frame JSON metadata. An empty vector means the source supplied no metadata.
     pub metadata: Vec<BTreeMap<String, Value>>,
@@ -50,6 +53,7 @@ impl FrameBatch {
             length_unit,
             atomic_numbers: None,
             atom_symbols: None,
+            gradients: None,
             cell: None,
             metadata,
         };
@@ -77,6 +81,7 @@ impl FrameBatch {
                 || !metadata.is_empty()
                 || atomic_numbers.is_some()
                 || self.atom_symbols.is_some()
+                || self.gradients.is_some()
                 || cell.is_some()
             {
                 return Err(LandfoldError::Shape(
@@ -103,6 +108,22 @@ impl FrameBatch {
             return Err(LandfoldError::Msg(
                 "trajectory atom symbols must match atoms and be nonempty".into(),
             ));
+        }
+        if let Some(gradients) = &self.gradients {
+            let width = atom_ids
+                .len()
+                .checked_mul(3)
+                .ok_or(LandfoldError::Shape("trajectory gradient width overflow"))?;
+            if gradients.dim() != (frames.len(), width) {
+                return Err(LandfoldError::Shape(
+                    "trajectory gradients must match frame coordinate shape",
+                ));
+            }
+            if gradients.iter().any(|value| !value.is_finite()) {
+                return Err(LandfoldError::Msg(
+                    "trajectory gradients must be finite".into(),
+                ));
+            }
         }
         if let Some(cell) = cell
             && (cell.dim() != (3, 3) || cell.iter().any(|&value| !value.is_finite()))
@@ -329,6 +350,11 @@ mod tests {
         assert!(batch.validate().is_err());
 
         batch.atomic_numbers = Some(vec![1]);
+        batch.gradients = Some(array![[0.0, 0.0]]);
+        assert!(batch.validate().is_err());
+        batch.gradients = Some(array![[0.0, f64::NAN, 0.0]]);
+        assert!(batch.validate().is_err());
+        batch.gradients = None;
         batch.cell = Some(array![
             [1.0, 0.0, 0.0],
             [0.0, f64::NAN, 0.0],
