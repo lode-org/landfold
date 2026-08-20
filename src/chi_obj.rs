@@ -17,6 +17,7 @@ pub const UNBOUNDED: f64 = 1e12;
 pub struct ChiObjective<'a> {
     stress: &'a Stress,
     d: usize,
+    dim: usize,
     bounds: Bounds<f64>,
 }
 
@@ -40,10 +41,13 @@ impl<'a> ChiObjective<'a> {
                 "objective bounds must be finite with lo <= hi".into(),
             ));
         }
-        let dim = stress.n * d;
+        let dim = stress.n.checked_mul(d).ok_or_else(|| {
+            LandfoldError::Msg("objective coordinate dimension product overflowed".into())
+        })?;
         Ok(Self {
             stress,
             d,
+            dim,
             bounds: Bounds::new(Array1::from_elem(dim, lo), Array1::from_elem(dim, hi), 0.0),
         })
     }
@@ -61,7 +65,7 @@ impl<'a> ChiObjective<'a> {
 
 impl Objective<f64> for ChiObjective<'_> {
     fn dim(&self) -> usize {
-        self.stress.n * self.d
+        self.dim
     }
 
     fn bounds(&self) -> &Bounds<f64> {
@@ -75,7 +79,7 @@ impl Objective<f64> for ChiObjective<'_> {
 
 impl Gradient<f64> for ChiObjective<'_> {
     fn dim(&self) -> usize {
-        self.stress.n * self.d
+        self.dim
     }
 
     fn grad(&self, x: ArrayView1<f64>) -> Array1<f64> {
@@ -127,6 +131,7 @@ mod tests {
         assert!(ChiObjective::with_box(&s, 2, 1.0, -1.0).is_err());
         assert!(ChiObjective::with_box(&s, 2, f64::NAN, 1.0).is_err());
         assert!(ChiObjective::with_box(&s, 2, -1.0, f64::INFINITY).is_err());
+        assert!(ChiObjective::with_box(&s, usize::MAX, -1.0, 1.0).is_err());
     }
 
     #[test]
