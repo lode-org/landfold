@@ -196,6 +196,18 @@ impl Stress {
 
     /// Evaluate χ and ∇χ on packed low-D coordinates (`n * d`).
     pub fn eval(&self, coords: ArrayView1<f64>, d: usize) -> StressEval {
+        let Some(expected_len) = self.n.checked_mul(d) else {
+            return StressEval {
+                value: OPTIMIZER_PENALTY,
+                grad: Array1::zeros(coords.len()),
+            };
+        };
+        if d == 0 || coords.len() != expected_len || coords.as_slice().is_none() {
+            return StressEval {
+                value: OPTIMIZER_PENALTY,
+                grad: Array1::zeros(coords.len()),
+            };
+        }
         #[cfg(feature = "parallel")]
         {
             self.eval_parallel(coords, d)
