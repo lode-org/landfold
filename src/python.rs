@@ -9,12 +9,12 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+use crate::provenance::{PROVENANCE_SCHEMA, Provenance};
 use crate::{
-    Euclid, IterOpts, ProjOpts, Transfer, embed_points, farthest_point,
-    fes_from_points, project_one,
+    Euclid, IterOpts, ProjOpts, Transfer, embed_points, farthest_point, fes_from_points,
+    project_one,
 };
 use ndarray::Array2;
-use crate::provenance::Provenance;
 
 fn copy_f64_2d(points: PyReadonlyArray2<'_, f64>) -> Array2<f64> {
     points.as_array().to_owned()
@@ -24,16 +24,33 @@ fn to_pyarray2<'py>(py: Python<'py>, mat: Array2<f64>) -> Bound<'py, PyArray2<f6
     PyArray2::from_owned_array(py, mat)
 }
 
+fn validate_provenance_schema(schema: &str) -> Result<(), &'static str> {
+    if schema == PROVENANCE_SCHEMA {
+        Ok(())
+    } else {
+        Err("metadata.provenance.schema has an incompatible version")
+    }
+}
+
 #[allow(dead_code)]
 fn validated_metadata<'py>(metadata: Option<Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyDict>> {
-    let metadata = metadata
-        .ok_or_else(|| PyValueError::new_err("metadata with provenance is required for result artifacts"))?;
+    let metadata = metadata.ok_or_else(|| {
+        PyValueError::new_err("metadata with provenance is required for result artifacts")
+    })?;
     let provenance = metadata
         .get_item("provenance")?
-        .ok_or_else(|| PyValueError::new_err("metadata.provenance is required for result artifacts"))?
+        .ok_or_else(|| {
+            PyValueError::new_err("metadata.provenance is required for result artifacts")
+        })?
         .cast::<PyDict>()
         .map_err(|_| PyValueError::new_err("metadata.provenance must be a dictionary"))?
         .to_owned();
+    let schema = provenance
+        .get_item("schema")?
+        .ok_or_else(|| PyValueError::new_err("metadata.provenance.schema is required"))?
+        .extract::<String>()
+        .map_err(|_| PyValueError::new_err("metadata.provenance.schema must be a string"))?;
+    validate_provenance_schema(&schema).map_err(PyValueError::new_err)?;
     let string = |key: &str| -> PyResult<String> {
         provenance
             .get_item(key)?
@@ -336,4 +353,16 @@ fn landfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fes_xy_result, m)?)?;
     m.add("version", crate::VERSION)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provenance_schema_is_required_and_versioned() {
+        assert!(validate_provenance_schema(PROVENANCE_SCHEMA).is_ok());
+        assert!(validate_provenance_schema("landfold.provenance.v2").is_err());
+        assert!(validate_provenance_schema("").is_err());
+    }
 }
