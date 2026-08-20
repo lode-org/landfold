@@ -31,6 +31,7 @@ pub mod pairwise;
 pub mod project;
 pub mod provenance;
 #[cfg(feature = "readcon")]
+#[cfg(feature = "readcon")]
 pub mod readcon;
 pub mod replica;
 pub mod search;
