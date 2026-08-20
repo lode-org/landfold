@@ -49,6 +49,7 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
             "MDS distance matrix must be finite and nonnegative".into(),
         ));
     }
+    validate_distance_matrix(dist)?;
     let matrix_len = n
         .checked_mul(n)
         .ok_or(LandfoldError::Msg("MDS matrix dimension overflowed".into()))?;
@@ -79,11 +80,7 @@ fn torgerson_b(dist: ArrayView2<f64>) -> Result<(usize, Vec<f64>)> {
             )?;
         }
         row_mean[i] = s * inv_n;
-        grand = checked_add(
-            grand,
-            s,
-            "MDS grand-centering accumulation overflowed",
-        )?;
+        grand = checked_add(grand, s, "MDS grand-centering accumulation overflowed")?;
     }
     grand *= inv_n * inv_n;
     if !grand.is_finite() {
@@ -166,6 +163,27 @@ fn coords_from_eigen(
         ));
     }
     Ok((coords, kept, ld_error))
+}
+
+fn validate_distance_matrix(dist: ArrayView2<f64>) -> Result<()> {
+    for i in 0..dist.nrows() {
+        if dist[(i, i)] != 0.0 {
+            return Err(LandfoldError::Msg(
+                "MDS distance matrix diagonal must be zero".into(),
+            ));
+        }
+        for j in 0..i {
+            let left = dist[(i, j)];
+            let right = dist[(j, i)];
+            let scale = left.abs().max(right.abs()).max(1.0);
+            if (left - right).abs() > 64.0 * f64::EPSILON * scale {
+                return Err(LandfoldError::Msg(
+                    "MDS distance matrix must be symmetric".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Classical Torgerson MDS from a symmetric distance matrix.
@@ -318,6 +336,7 @@ fn spherical_from_dist(dist: ArrayView2<f64>, lowdim: usize) -> Result<(Array2<f
             "spherical MDS distance matrix must be finite and nonnegative".into(),
         ));
     }
+    validate_distance_matrix(dist)?;
     if lowdim == 0 || lowdim >= n {
         return Err(LandfoldError::LowDim {
             low: lowdim,
@@ -475,9 +494,7 @@ fn toroidal_mds(
         }
         sr /= std::f64::consts::PI;
         if !sr.is_finite() {
-            return Err(LandfoldError::Msg(
-                "toroidal MDS scale overflowed".into(),
-            ));
+            return Err(LandfoldError::Msg("toroidal MDS scale overflowed".into()));
         }
         for i in 0..n {
             for j in 0..i {
@@ -558,6 +575,10 @@ mod tests {
         assert!(classical_mds(array![[0.0, f64::NAN], [f64::NAN, 0.0]].view(), 1).is_err());
         assert!(randomized_mds(array![[0.0, f64::INFINITY], [1.0, 0.0]].view(), 1, 2, 0).is_err());
         assert!(classical_mds(array![[0.0, -1.0], [-1.0, 0.0]].view(), 1).is_err());
+        let asymmetric = array![[0.0, 1.0], [2.0, 0.0]];
+        assert!(classical_mds(asymmetric.view(), 1).is_err());
+        assert!(randomized_mds(asymmetric.view(), 1, 2, 0).is_err());
+        assert!(spherical_from_dist(asymmetric.view(), 1).is_err());
         assert!(randomized_mds(array![[0.0, 1.0e200], [1.0e200, 0.0]].view(), 1, 2, 0).is_err());
     }
 
