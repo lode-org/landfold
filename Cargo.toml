@@ -45,7 +45,7 @@ eindir-core = {
 xtsci-optimize = {
     version = "0.1.0",
     git = "https://github.com/HaoZeke/xtsci-optimize.git",
-    rev = "d96686d38749f6e4c0f5e933b0f07d49fe3e8897",
+    rev = "5aeb315af819bce40ec56f9e76b862fab64447fc",
 }
 # clap is used only by the landfold binary in this single package.
 clap = { version = "4.5", features = ["derive"] }
