@@ -352,7 +352,8 @@ mod tests {
 
     #[test]
     fn reads_ascii_atom_symbols() {
-        let path = std::env::temp_dir().join(format!("landfold-hdf5-ascii-{}.h5", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("landfold-hdf5-ascii-{}.h5", std::process::id()));
         let file = hdf5::File::create(&path).expect("create HDF5 fixture");
         file.create_group("path")
             .expect("create path group")
