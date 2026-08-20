@@ -54,6 +54,21 @@ fn validate_distance_matrix(matrix: &Array2<f64>, label: &str) -> crate::error::
     Ok(())
 }
 
+fn validate_pair_weight_mass(weights: &Array2<f64>) -> crate::error::Result<()> {
+    let mut total = 0.0;
+    for i in 0..weights.nrows() {
+        for j in 0..i {
+            total += weights[(i, j)];
+            if !total.is_finite() {
+                return Err(crate::error::LandfoldError::Msg(
+                    "stress pair-weight mass overflowed".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 pub struct Stress {
     pub n: usize,
@@ -140,6 +155,9 @@ impl Stress {
                 "stress distances and weights must be finite and nonnegative".into(),
             ));
         }
+        if let Some(weights) = self.weights.as_ref() {
+            validate_pair_weight_mass(weights)?;
+        }
         validate_distance_matrix(&self.hd, "high-D")?;
         validate_distance_matrix(&self.fhd, "transformed high-D")?;
         validate_imix(self.imix)
@@ -196,6 +214,9 @@ impl Stress {
             return Err(crate::error::LandfoldError::Msg(
                 "stress assembled pair weights must be finite and nonnegative".into(),
             ));
+        }
+        if let Some(weights) = stress.weights.as_ref() {
+            validate_pair_weight_mass(weights)?;
         }
         Ok(stress)
     }
@@ -809,6 +830,21 @@ mod tests {
             0.0,
             None,
             Some(Array2::from_elem((2, 2), f64::NAN)),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejects_overflowing_pair_weight_mass() {
+        let hd = Array2::zeros((3, 3));
+        let pair_weights = Array2::from_elem((3, 3), f64::MAX);
+        assert!(Stress::new(
+            hd.clone(),
+            hd,
+            Transfer::identity(),
+            0.0,
+            None,
+            Some(pair_weights),
         )
         .is_err());
     }
