@@ -650,7 +650,7 @@ pub fn fes_from_points(
         ));
     }
     let (xlo, xhi) = if xspan == 0.0 {
-        degenerate_axis_bounds(xmin, pad)?
+        degenerate_axis_bounds(xmin, pad, nx)?
     } else {
         let px = pad * xspan.max(1e-6);
         if !px.is_finite() {
@@ -661,7 +661,7 @@ pub fn fes_from_points(
         (xmin - px, xmax + px)
     };
     let (ylo, yhi) = if yspan == 0.0 {
-        degenerate_axis_bounds(ymin, pad)?
+        degenerate_axis_bounds(ymin, pad, ny)?
     } else {
         let py = pad * yspan.max(1e-6);
         if !py.is_finite() {
@@ -688,8 +688,9 @@ fn validate_fes_kt(kt: f64) -> Result<()> {
     Ok(())
 }
 
-fn degenerate_axis_bounds(value: f64, pad: f64) -> Result<(f64, f64)> {
-    let half = pad * 1e-6;
+fn degenerate_axis_bounds(value: f64, pad: f64, bins: usize) -> Result<(f64, f64)> {
+    let scale = value.abs().max(1.0);
+    let half = (pad * 1e-6).max(scale * 1e-6);
     if half.is_finite() && half > 0.0 {
         let lo = value - half;
         let hi = value + half;
@@ -697,8 +698,17 @@ fn degenerate_axis_bounds(value: f64, pad: f64) -> Result<(f64, f64)> {
             return Ok((lo, hi));
         }
     }
-    let lo = next_down(value);
-    let hi = next_up(value);
+    let mut lo = value;
+    let mut hi = value;
+    if value.is_sign_positive() {
+        for _ in 0..bins {
+            lo = next_down(lo);
+        }
+    } else {
+        for _ in 0..bins {
+            hi = next_up(hi);
+        }
+    }
     if lo < hi {
         Ok((lo, hi))
     } else {
