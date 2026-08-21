@@ -14,10 +14,11 @@ use landfold::{
     AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, Fisher, FreeEnergy, Histogram2d, IterOpts,
     L1, Stretch,
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
-    Transfer, basin_coordinate, coordination_histogram, embed, embed_sigma_schedule,
-    fit_imq_map, joint_pairwise_hist, mds_from_points, pairwise, phate_embed, phate_project,
-    predict_imq, suggest_alpha, pairwise_euclid, project_many_report, read_points,
-    select_landmarks, suggest_scale, write_plumed, write_points, PhateOpts, gap_split_embed,
+    Transfer, Wasserstein1, basin_coordinate, coordination_histogram, embed,
+    embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
+    mds_from_points, pairwise, pacmap_embed, phate_embed, phate_project, predict_imq,
+    suggest_alpha, pairwise_euclid, project_many_report, read_points, select_landmarks,
+    suggest_scale, write_plumed, write_points, PacmapOpts, PhateOpts,
 };
 
 #[derive(Parser, Debug)]
@@ -139,6 +140,15 @@ enum Cmd {
         /// Gap cut on |Δψ|. Default: 0.35 of the ψ range
         #[arg(long = "gap-tau")]
         gap_tau: Option<f64>,
+        /// PaCMAP: near-to-near, mid-near, far-to-far (Wang et al. 2021)
+        #[arg(long)]
+        pacmap: bool,
+        /// 1-Wasserstein metric on histogram rows (n4..n13)
+        #[arg(long = "w1")]
+        w1: bool,
+        /// Rank-uniform each low-D axis (empirical CDF)
+        #[arg(long)]
+        uniform: bool,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -196,6 +206,12 @@ enum Cmd {
         phate_decay: f64,
         #[arg(long = "phate-t")]
         phate_t: Option<usize>,
+        #[arg(long)]
+        pacmap: bool,
+        #[arg(long = "w1")]
+        w1: bool,
+        #[arg(long = "knn", default_value_t = 10)]
+        knn: usize,
     },
     /// Farthest-point (Gonzalez) landmarks
     Landmarks {
@@ -380,8 +396,31 @@ fn main() -> landfold::Result<()> {
             phate_t,
             gapsplit,
             gap_tau,
+            pacmap,
+            w1,
+            uniform,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
+            if pacmap {
+                let metric: Box<dyn Metric> = if w1 {
+                    Box::new(Wasserstein1)
+                } else {
+                    Box::new(Euclid)
+                };
+                let popts = PacmapOpts {
+                    lowdim: low,
+                    uniform,
+                    ..PacmapOpts::default()
+                };
+                let coords = pacmap_embed(set.points.view(), metric.as_ref(), &popts)?;
+                write_points(&mut io::stdout().lock(), &coords, None)?;
+                writeln!(
+                    io::stderr(),
+                    "# PaCMAP neighbors {} uniform {} w1 {}",
+                    popts.n_neighbors, uniform, w1
+                )?;
+                return Ok(());
+            }
             if gapsplit {
                 let mut opts = IterOpts {
                     lowdim: 1,
@@ -613,6 +652,9 @@ fn main() -> landfold::Result<()> {
             phate_knn,
             phate_decay,
             phate_t,
+            pacmap,
+            w1,
+            knn,
         } => {
             let hi = read_points(
                 std::io::BufReader::new(std::fs::File::open(&high_file)?),
@@ -624,6 +666,23 @@ fn main() -> landfold::Result<()> {
                 low,
                 false,
             )?;
+            if pacmap {
+                let metric: Box<dyn Metric> = if w1 {
+                    Box::new(Wasserstein1)
+                } else {
+                    Box::new(Euclid)
+                };
+                let query = read_points(io::stdin().lock(), high, false)?;
+                let proj = knn_project(
+                    hi.points.view(),
+                    lo.points.view(),
+                    query.points.view(),
+                    metric.as_ref(),
+                    knn,
+                )?;
+                write_points(&mut io::stdout().lock(), &proj, None)?;
+                return Ok(());
+            }
             if phate {
                 let popts = PhateOpts {
                     knn: phate_knn,

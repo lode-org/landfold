@@ -439,6 +439,47 @@ impl Metric for L1 {
     }
 }
 
+/// 1-Wasserstein distance of two histograms on equally spaced bins.
+///
+/// For probability masses on `{1,...,m}` the closed form is the L1
+/// distance of the cumulative distribution functions
+/// (Villani, *Topics in Optimal Transportation*, AMS 2003).
+/// Coordination-count rows n4..n13 are such histograms.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Wasserstein1;
+
+impl Metric for Wasserstein1 {
+    fn dist_unchecked(&self, a: &[f64], b: &[f64]) -> f64 {
+        let n = a.len().max(b.len());
+        let mut sa = 0.0;
+        let mut sb = 0.0;
+        for i in 0..n {
+            if i < a.len() {
+                sa += a[i].max(0.0);
+            }
+            if i < b.len() {
+                sb += b[i].max(0.0);
+            }
+        }
+        if !(sa > 0.0 && sb > 0.0) {
+            return f64::INFINITY;
+        }
+        let mut ca = 0.0;
+        let mut cb = 0.0;
+        let mut w = 0.0;
+        for i in 0..n {
+            if i < a.len() {
+                ca += a[i].max(0.0) / sa;
+            }
+            if i < b.len() {
+                cb += b[i].max(0.0) / sb;
+            }
+            w += (ca - cb).abs();
+        }
+        w
+    }
+}
+
 /// `d(a,b) = -log(a·b)`. Used for SOAP-like unit-sphere descriptors.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Dot;
@@ -462,6 +503,16 @@ mod tests {
     fn l1_pads_the_shorter_histogram() {
         let m = L1;
         assert_relative_eq!(m.dist(&[0.5, 0.5], &[1.0]).unwrap(), 1.0, epsilon = 1e-15);
+    }
+
+    #[test]
+    fn w1_is_l1_of_the_cdfs() {
+        let m = Wasserstein1;
+        let a = [1.0, 0.0, 0.0];
+        let b = [0.0, 0.0, 1.0];
+        // CDF gap is 1+1 = 2 on unit bins
+        assert_relative_eq!(m.dist(&a, &b).unwrap(), 2.0, epsilon = 1e-12);
+        assert_relative_eq!(m.dist(&a, &a).unwrap(), 0.0, epsilon = 1e-12);
     }
 
     #[test]

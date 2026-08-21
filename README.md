@@ -64,6 +64,12 @@ distance. `landfold project --phate` places new rows by a Nyström
 potential and a metric MDS fit against the stored landmark map.
 This is not a Ceriotti transfer and does not use χ.
 
+`landfold embed --pacmap --w1 --uniform` is near-to-near / far-to-far
+(Wang, Huang, Rudin, Shaposhnik, *JMLR* **22**, 2021) on the
+1-Wasserstein metric of the coordination histograms, then a
+rank-uniform map of each axis. `landfold project --pacmap` is k-NN
+interpolation of that landmark map.
+
 `landfold field --refs a,b --low-file chi.ld` is the MethodsX field
 on that plane: the basin coordinate
 \(\xi=d(x,a)/(d(x,a)+d(x,b))\) of the high-D descriptors, with a
