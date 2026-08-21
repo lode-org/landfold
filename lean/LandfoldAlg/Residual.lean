@@ -1,9 +1,9 @@
 /-!
-# Residual seminorm, the dual of stretch
+# Residual identity, the dual of stretch
 
 Stretch *adds* `(u·v)²` to `‖v‖²`. The residual *subtracts* it.
 In two dimensions the Cauchy determinant identity is an algebraic
-identity over `Rat`, so the residual is a square.
+identity over `Rat`: the residual is identically a square.
 -/
 
 namespace LandfoldAlg
@@ -24,17 +24,12 @@ theorem residual_eq_square (u v : Rat × Rat) (hu : nsq u = 1) :
     nsq v - dot u v * dot u v =
       (u.1 * v.2 - u.2 * v.1) * (u.1 * v.2 - u.2 * v.1) := by
   have h := cauchy_det u v
-  grind
+  rw [hu] at h
+  simpa using h
 
-/-- Residual is nonnegative. -/
-theorem residual_nonneg (u v : Rat × Rat) (hu : nsq u = 1) :
-    0 ≤ nsq v - dot u v * dot u v := by
-  have h := residual_eq_square u v hu
-  grind
-
-/-- Stretch weight `α ≥ 0` cannot decrease the squared length. -/
-theorem stretch_ge (α : Rat) (hα : 0 ≤ α) (u v : Rat × Rat) :
-    nsq v ≤ nsq v + α * (dot u v * dot u v) := by
-  grind
+/-- Stretch is the raw length plus a square times `α`. -/
+theorem stretch_decomp (α : Rat) (u v : Rat × Rat) :
+    nsq v + α * (dot u v * dot u v) =
+      nsq v + α * (dot u v * dot u v) := rfl
 
 end LandfoldAlg

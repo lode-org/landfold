@@ -9,7 +9,7 @@
 //! those blocks. This is the dual of stretch: stretch inserts a named
 //! axis, gap-split removes the axis the sample already has.
 
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
+use ndarray::{Array2, ArrayView1, ArrayView2};
 
 use crate::error::{LandfoldError, Result};
 use crate::iter::{embed, IterOpts};
