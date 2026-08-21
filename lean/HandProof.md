@@ -5,8 +5,9 @@
 - A1. Direct pair split of the χ summand. Used.
 - A2. Spectral Cheeger bound for ψ₂. Blocked: needs the Dirichlet form
   and a continuous manifold. Not required for the algorithm licence.
-- A3. Wasserstein-1 on the CN histogram. Deferred: a different metric,
-  not the decoupling statement.
+- A3. Wasserstein-1 on the CN histogram. Discrete W1 on an ordered
+  line is the weighted L1 of prefix masses; unit bins reduce that to
+  L1 of the CDFs. Lean `w1_of_unit` / hand proof `lean/NearFar.md`.
 
 ## 1. Decoupling
 
