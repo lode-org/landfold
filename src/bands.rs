@@ -9,14 +9,18 @@
 //!
 //! `L = (1/N_≤σ) Σ_{D≤σ} (d-D)²
 //!    + (λ/N_mid) Σ_{σ<D<τ} (F(D)-f(d))²
-//!    + (ν/N_≥τ) Σ_{D≥τ} (d-D)²
+//!    + (ν/N_≥τ) Σ_{D≥τ} 1/(1+d²)
+//!    + (1/K) Σ_{K largest D} (d-D)²
 //!    + (μ/N_≤σ) Σ_{D≤σ} 1/(d²+ε)`
 //!
 //! Near is Kruskal local isometry. Mid is Ceriotti χ on the
-//! transfer-sensitive window. Far is an isometry of the diameter
-//! (Lean `id_stress_separates`). Riesz `s=2` spaces *inside* the
-//! near band only (Saff-Kuijlaars). A global Riesz sum sphericalizes
-//! the map. No rank-CDF flatten.
+//! transfer-sensitive window. Far is PaCMAP repulsion
+//! `1/(1+d²)` (Wang et al., *JMLR* **22**, 2021): a target `d=D` on
+//! every far pair is isometric MDS of the tail, which 2-D cannot
+//! satisfy and shrinks the TSE tip gap. Identity is kept only on the
+//! `K` largest-`D` pairs (the diameter). Riesz `s=2` spaces *inside*
+//! the near band only. The first `warm` steps set far weight to zero
+//! so the mid χ can form the lobes. No rank-CDF flatten.
 
 use ndarray::{Array2, ArrayView2};
 
@@ -37,6 +41,8 @@ pub struct BandOpts {
     pub mid_weight: f64,
     pub far_weight: f64,
     pub riesz: f64,
+    pub pin_k: usize,
+    pub warm: usize,
     pub steps: usize,
     pub lr: f64,
 }
@@ -52,6 +58,8 @@ impl Default for BandOpts {
             mid_weight: 1.0,
             far_weight: 1.0,
             riesz: 0.05,
+            pin_k: 256,
+            warm: 100,
             steps: 500,
             lr: 0.08,
         }
@@ -65,6 +73,7 @@ pub struct BandReport {
     pub n_near: usize,
     pub n_mid: usize,
     pub n_far: usize,
+    pub n_pin: usize,
 }
 
 fn resolve_mid(t: &Transfer, knee: f64, high: bool) -> Result<Transfer> {
@@ -78,11 +87,12 @@ fn resolve_mid(t: &Transfer, knee: f64, high: bool) -> Result<Transfer> {
     }
 }
 
-/// Identity near, Ceriotti χ mid, identity far, Riesz `s=2`.
+/// Identity near, Ceriotti χ mid, PaCMAP far repulsion, diameter pins.
 pub fn bands_embed(
     points: ArrayView2<f64>,
     metric: &dyn Metric,
     opts: &BandOpts,
+    init: Option<ArrayView2<f64>>,
 ) -> Result<(Array2<f64>, BandReport)> {
     let n = points.nrows();
     if n < 3 {
@@ -158,7 +168,39 @@ pub fn bands_embed(
     } else {
         0.0
     };
-    let (mut y, _) = classical_mds(hd.view(), opts.lowdim)?;
+    let pin_k = opts.pin_k.min(n_far);
+    let mut far_rank: Vec<(f64, usize, usize)> = Vec::with_capacity(n_far);
+    if pin_k > 0 {
+        for i in 0..n {
+            for j in 0..i {
+                let d = hd[(i, j)];
+                if d >= tau {
+                    far_rank.push((d, i, j));
+                }
+            }
+        }
+        far_rank.sort_by(|a, b| b.0.total_cmp(&a.0));
+        far_rank.truncate(pin_k);
+    }
+    let mut pin = vec![false; n * n];
+    for &(_, i, j) in &far_rank {
+        pin[i * n + j] = true;
+        pin[j * n + i] = true;
+    }
+    let w_pin = if pin_k > 0 { 1.0 / pin_k as f64 } else { 0.0 };
+    let mut y = if let Some(z) = init {
+        if z.nrows() != n || z.ncols() != opts.lowdim {
+            return Err(LandfoldError::Shape(
+                "three-band init must match n and lowdim",
+            ));
+        }
+        if z.iter().any(|v| !v.is_finite()) {
+            return Err(LandfoldError::Msg("three-band init must be finite".into()));
+        }
+        z.to_owned()
+    } else {
+        classical_mds(hd.view(), opts.lowdim)?.0
+    };
     let mut m1 = Array2::<f64>::zeros((n, opts.lowdim));
     let mut m2 = Array2::<f64>::zeros((n, opts.lowdim));
     const BETA1: f64 = 0.9;
@@ -184,7 +226,13 @@ pub fn bands_embed(
                         coeff -= w_near * opts.riesz * 2.0 / (d2e * d2e);
                     }
                 } else if hdij >= tau {
-                    coeff += w_far * 2.0 * (d - hdij) / d;
+                    if step >= opts.warm {
+                        if pin[i * n + j] {
+                            coeff += w_pin * 2.0 * (d - hdij) / d;
+                        }
+                        let dt = d * d + 1.0;
+                        coeff += w_far * (-2.0) / (dt * dt);
+                    }
                 } else {
                     let (fld, dfld) = t_ld.fdf(d);
                     coeff += -w_mid * 2.0 * (fhd[(i, j)] - fld) * dfld / d;
@@ -226,6 +274,7 @@ pub fn bands_embed(
             n_near,
             n_mid,
             n_far,
+            n_pin: pin_k,
         },
     ))
 }
@@ -249,8 +298,10 @@ mod tests {
             &BandOpts {
                 steps: 150,
                 riesz: 0.01,
+                warm: 0,
                 ..BandOpts::default()
             },
+            None,
         )
         .unwrap();
         assert!(rep.sigma < rep.tau);
@@ -282,8 +333,31 @@ mod tests {
                 riesz: 0.0,
                 ..BandOpts::default()
             },
+            None,
         )
         .unwrap();
         assert!(rep.n_mid > 0, "chain must populate the mid band");
+    }
+
+    #[test]
+    fn diameter_pins_are_the_largest_far_pairs() {
+        let mut pts = Array2::<f64>::zeros((16, 4));
+        for i in 0..8 {
+            pts[(i, 0)] = 0.02 * i as f64;
+            pts[(i + 8, 0)] = 8.0 + 0.02 * i as f64;
+        }
+        let (_, rep) = bands_embed(
+            pts.view(),
+            &Euclid,
+            &BandOpts {
+                steps: 5,
+                pin_k: 10,
+                warm: 0,
+                ..BandOpts::default()
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(rep.n_pin, 10);
     }
 }

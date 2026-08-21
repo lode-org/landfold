@@ -72,10 +72,15 @@ those pairs cannot be told apart) plus a Riesz `s=2` energy
 
 `landfold embed --bands` keeps all three scales: identity on `D≤σ`,
 Ceriotti χ on the mid window (default HD `ceriotti,knee,8,1` and LD
-`ceriotti,knee,2,2` when `--fun-hd` is identity), identity on `D≥τ`,
-and Riesz `s=2`. Near-far drops the mid band the TSE lobes live on.
-Published χ (`imix = 0`) saturates the far band that sets the lobe
-gap. Lean `band_far_separates` / `sat_mid_cannot_tell`.
+`ceriotti,knee,2,2` when `--fun-hd` is identity), PaCMAP
+`1/(1+d²)` repulsion on `D≥τ`, and identity on the `--pin-k`
+largest far pairs (the diameter). A target `d=D` on every far pair
+is 2-D isometric MDS of the tail and shrinks the TSE tip gap.
+`--warm` steps run mid χ only so the lobes form before far
+repulsion. `--init` starts from an existing map and, with
+default knobs, is a short polish (`riesz=0`, `warm=0`,
+`far-weight=0.5`, 80 steps): that is the TSE run that beats
+Ceriotti tip gap and `|corr ξ|`. Riesz `s=2` is near-band only.
 
 `landfold embed --axis refs.cv` is the exact projection onto the
 contrast of two reference rows: \(s_1(x)=(x-a)\cdot u/\|b-a\|\) so

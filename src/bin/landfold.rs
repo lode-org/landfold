@@ -158,9 +158,18 @@ enum Cmd {
         far_cut: Option<f64>,
         #[arg(long = "riesz", default_value_t = 0.05)]
         riesz: f64,
-        /// Identity near, Ceriotti χ mid, identity far, Riesz s=2
+        /// Identity near, Ceriotti χ mid, PaCMAP far repulsion, diameter pins
         #[arg(long)]
         bands: bool,
+        /// Identity-match the K largest far pairs (diameter)
+        #[arg(long = "pin-k", default_value_t = 256)]
+        pin_k: usize,
+        /// Steps with far weight zero so mid χ can form the lobes
+        #[arg(long = "warm", default_value_t = 100)]
+        warm: usize,
+        /// Weight on PaCMAP far repulsion (three-band)
+        #[arg(long = "far-weight", default_value_t = 1.0)]
+        far_weight: f64,
         /// Exact projection onto the contrast of two reference rows
         #[arg(long = "axis")]
         axis: Option<PathBuf>,
@@ -426,6 +435,9 @@ fn main() -> landfold::Result<()> {
             far_cut,
             riesz,
             bands,
+            pin_k,
+            warm,
+            far_weight,
             axis,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
@@ -435,25 +447,54 @@ fn main() -> landfold::Result<()> {
                 } else {
                     Box::new(Euclid)
                 };
+                let polish = init.is_some();
                 let popts = BandOpts {
                     lowdim: low,
                     near: near_cut,
                     far: far_cut,
                     tfun_hd: Transfer::from_cli(&fun_hd)?,
                     tfun_ld: Transfer::from_cli(&fun_ld)?,
-                    riesz,
+                    riesz: if polish && (riesz - 0.05).abs() < 1e-15 {
+                        0.0
+                    } else {
+                        riesz
+                    },
+                    pin_k,
+                    warm: if polish && warm == 100 { 0 } else { warm },
+                    far_weight: if polish && (far_weight - 1.0).abs() < 1e-15 {
+                        0.5
+                    } else {
+                        far_weight
+                    },
+                    steps: if polish && steps == 100 { 80 } else { steps },
                     ..BandOpts::default()
                 };
-                let (coords, rep) = bands_embed(set.points.view(), metric.as_ref(), &popts)?;
+                let init_pts = if let Some(p) = init {
+                    Some(read_points(
+                        std::io::BufReader::new(std::fs::File::open(p)?),
+                        low,
+                        false,
+                    )?)
+                } else {
+                    None
+                };
+                let (coords, rep) = bands_embed(
+                    set.points.view(),
+                    metric.as_ref(),
+                    &popts,
+                    init_pts.as_ref().map(|p| p.points.view()),
+                )?;
                 write_points(&mut io::stdout().lock(), &coords, None)?;
                 writeln!(
                     io::stderr(),
-                    "# bands sigma {} tau {} near {} mid {} far {} riesz {}",
+                    "# bands sigma {} tau {} near {} mid {} far {} pin {} warm {} riesz {}",
                     rep.sigma,
                     rep.tau,
                     rep.n_near,
                     rep.n_mid,
                     rep.n_far,
+                    rep.n_pin,
+                    warm,
                     riesz
                 )?;
                 return Ok(());
