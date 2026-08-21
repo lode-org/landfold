@@ -162,6 +162,7 @@ def main() -> None:
     cf = _cf()
     xy = load_xy(PROJ)
     e = np.loadtxt("/tmp/occ-book/lj38.energy")
+    cv = np.loadtxt("/tmp/occ-book/lj38.cv")
     if not CSV.is_file():
         write_fes(xy, CSV)
     gx, gy, fes = load_fes(CSV)
@@ -237,12 +238,13 @@ def main() -> None:
             arrowprops=dict(arrowstyle="-", color="k", lw=0.8),
         )
         fval = cf.fes_at(gx, gy, fes, tip)
-        k, c = cf.cn_hist(xyz)
+        desc = cv[index]
         hax = fig.add_axes([fx - 0.09, fy - 0.22, 0.18, 0.075])
-        hax.bar(k, c, color="k", width=0.7)
-        hax.set_xlim(2.5, 12.5)
-        hax.set_xticks(cf.CN_BINS)
-        hax.set_xticklabels([str(int(v)) for v in cf.CN_BINS])
+        bins = np.arange(4, 14)
+        hax.bar(bins, desc, color="k", width=0.7)
+        hax.set_xlim(3.5, 13.5)
+        hax.set_xticks(bins)
+        hax.set_xticklabels([str(int(v)) for v in bins])
         hax.tick_params(labelsize=6, length=2)
         hax.set_yticks([])
         hax.set_title(f"{label}  {energies[name]:.1f}  F={fval:.2f}", fontsize=8, pad=2)
