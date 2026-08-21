@@ -52,39 +52,59 @@ UCV="$OUT/${LABEL}.unique.cv"
 INV="$OUT/${LABEL}.inv"
 python3 - "$CV" "$UCV" "$INV" <<'PY'
 import sys
-import numpy as np
-cv = np.loadtxt(sys.argv[1])
-_, idx, inv = np.unique(np.round(cv, 8), axis=0, return_index=True, return_inverse=True)
-np.savetxt(sys.argv[2], cv[idx], fmt="%.8e")
-np.savetxt(sys.argv[3], inv, fmt="%d")
-print("# unique", len(idx), "of", len(cv))
+rows = []
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    rows.append(line.split())
+key_to_u = {}
+unique = []
+inv = []
+for row in rows:
+    key = tuple(round(float(x), 8) for x in row)
+    if key not in key_to_u:
+        key_to_u[key] = len(unique)
+        unique.append(row)
+    inv.append(key_to_u[key])
+with open(sys.argv[2], "w") as w:
+    for row in unique:
+        w.write(" ".join(row) + "\n")
+with open(sys.argv[3], "w") as w:
+    for i in inv:
+        w.write("%d\n" % i)
+print("# unique", len(unique), "of", len(rows))
 PY
 awk '{print $0, 1}' "$UCV" >"$OUT/${LABEL}.unique.wcv"
 run phate "$LANDFOLD" embed -D 10 -d 2 -w --phate <"$OUT/${LABEL}.unique.wcv"
 run pacmap "$LANDFOLD" embed -D 10 -d 2 -w --pacmap <"$OUT/${LABEL}.unique.wcv"
 python3 - "$OUT/${LABEL}_phate.ld" "$INV" "$OUT/${LABEL}_phate.proj" <<'PY'
 import sys
-from pathlib import Path
-import numpy as np
 ld = []
-for line in Path(sys.argv[1]).read_text().splitlines():
-    if not line.strip() or line.startswith("#"):
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line or line.startswith("#"):
         continue
-    ld.append([float(x) for x in line.split()[:2]])
-inv = np.loadtxt(sys.argv[2], dtype=int)
-np.savetxt(sys.argv[3], np.asarray(ld)[inv], fmt="%.8e")
+    parts = line.split()
+    ld.append(parts[0] + " " + parts[1])
+inv = [int(x) for x in open(sys.argv[2]) if x.strip()]
+with open(sys.argv[3], "w") as w:
+    for i in inv:
+        w.write(ld[i] + "\n")
 PY
 python3 - "$OUT/${LABEL}_pacmap.ld" "$INV" "$OUT/${LABEL}_pacmap.proj" <<'PY'
 import sys
-from pathlib import Path
-import numpy as np
 ld = []
-for line in Path(sys.argv[1]).read_text().splitlines():
-    if not line.strip() or line.startswith("#"):
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line or line.startswith("#"):
         continue
-    ld.append([float(x) for x in line.split()[:2]])
-inv = np.loadtxt(sys.argv[2], dtype=int)
-np.savetxt(sys.argv[3], np.asarray(ld)[inv], fmt="%.8e")
+    parts = line.split()
+    ld.append(parts[0] + " " + parts[1])
+inv = [int(x) for x in open(sys.argv[2]) if x.strip()]
+with open(sys.argv[3], "w") as w:
+    for i in inv:
+        w.write(ld[i] + "\n")
 PY
 run nearfar "$LANDFOLD" embed -D 10 -d 2 -w --nearfar --init-f --steps 80 \
   <"$OUT/${LABEL}.lm"
