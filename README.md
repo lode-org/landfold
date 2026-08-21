@@ -64,6 +64,12 @@ distance. `landfold project --phate` places new rows by a Nyström
 potential and a metric MDS fit against the stored landmark map.
 This is not a Ceriotti transfer and does not use χ.
 
+`landfold embed --nearfar` is identity on the near band `D≤σ` and the
+far band `D≥τ` (Ceriotti's sigmoid sends every large `D` to 1, so
+those pairs cannot be told apart) plus a Riesz `s=2` energy
+(Saff-Kuijlaars) for spacing. Cuts default to the pairwise 25th and
+75th percentiles. This is not a rank-CDF flatten.
+
 `landfold embed --pacmap --w1 --uniform` is near-to-near / far-to-far
 (Wang, Huang, Rudin, Shaposhnik, *JMLR* **22**, 2021) on the
 1-Wasserstein metric of the coordination histograms, then a

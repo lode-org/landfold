@@ -28,6 +28,7 @@ pub mod io;
 pub mod iter;
 pub mod landmark;
 pub mod mds;
+pub mod nearfar;
 pub mod metric;
 pub mod pacmap;
 pub mod pairwise;
@@ -66,6 +67,7 @@ pub use landmark::{
     voronoi_weights,
 };
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
+pub use nearfar::{NearFarOpts, nearfar_embed};
 pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch, Wasserstein1};
 pub use pacmap::{PacmapOpts, knn_project, pacmap_embed, rank_uniform};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};

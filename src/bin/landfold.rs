@@ -16,9 +16,10 @@ use landfold::{
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
     Transfer, Wasserstein1, basin_coordinate, coordination_histogram, embed,
     embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
-    mds_from_points, pairwise, pacmap_embed, phate_embed, phate_project, predict_imq,
-    suggest_alpha, pairwise_euclid, project_many_report, read_points, select_landmarks,
-    suggest_scale, write_plumed, write_points, PacmapOpts, PhateOpts,
+    mds_from_points, nearfar_embed, pairwise, pacmap_embed, phate_embed, phate_project,
+    predict_imq, suggest_alpha, pairwise_euclid, project_many_report, read_points,
+    select_landmarks, suggest_scale, write_plumed, write_points, NearFarOpts, PacmapOpts,
+    PhateOpts,
 };
 
 #[derive(Parser, Debug)]
@@ -149,6 +150,15 @@ enum Cmd {
         /// Rank-uniform each low-D axis (empirical CDF)
         #[arg(long)]
         uniform: bool,
+        /// Split isometry: identity on D≤σ and D≥τ, plus Riesz s=2
+        #[arg(long)]
+        nearfar: bool,
+        #[arg(long = "near-cut")]
+        near_cut: Option<f64>,
+        #[arg(long = "far-cut")]
+        far_cut: Option<f64>,
+        #[arg(long = "riesz", default_value_t = 0.05)]
+        riesz: f64,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -208,6 +218,8 @@ enum Cmd {
         phate_t: Option<usize>,
         #[arg(long)]
         pacmap: bool,
+        #[arg(long)]
+        nearfar: bool,
         #[arg(long = "w1")]
         w1: bool,
         #[arg(long = "knn", default_value_t = 10)]
@@ -399,8 +411,35 @@ fn main() -> landfold::Result<()> {
             pacmap,
             w1,
             uniform,
+            nearfar,
+            near_cut,
+            far_cut,
+            riesz,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
+            if nearfar {
+                let metric: Box<dyn Metric> = if w1 {
+                    Box::new(Wasserstein1)
+                } else {
+                    Box::new(Euclid)
+                };
+                let popts = NearFarOpts {
+                    lowdim: low,
+                    near: near_cut,
+                    far: far_cut,
+                    riesz,
+                    ..NearFarOpts::default()
+                };
+                let (coords, sigma, tau) =
+                    nearfar_embed(set.points.view(), metric.as_ref(), &popts)?;
+                write_points(&mut io::stdout().lock(), &coords, None)?;
+                writeln!(
+                    io::stderr(),
+                    "# near-far sigma {} tau {} riesz {}",
+                    sigma, tau, riesz
+                )?;
+                return Ok(());
+            }
             if pacmap {
                 let metric: Box<dyn Metric> = if w1 {
                     Box::new(Wasserstein1)
@@ -653,6 +692,7 @@ fn main() -> landfold::Result<()> {
             phate_decay,
             phate_t,
             pacmap,
+            nearfar,
             w1,
             knn,
         } => {
@@ -666,7 +706,7 @@ fn main() -> landfold::Result<()> {
                 low,
                 false,
             )?;
-            if pacmap {
+            if pacmap || nearfar {
                 let metric: Box<dyn Metric> = if w1 {
                     Box::new(Wasserstein1)
                 } else {
