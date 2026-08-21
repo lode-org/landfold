@@ -4,3 +4,4 @@ import LandfoldAlg.Display
 import LandfoldAlg.NearFar
 import LandfoldAlg.Axis
 import LandfoldAlg.Bands
+import LandfoldAlg.Asinh

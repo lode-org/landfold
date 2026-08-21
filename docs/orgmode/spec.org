@@ -39,6 +39,11 @@ is biased high. Torgerson / Halko rangefinder MDS
 | Quality visual | =dimdist= joint \(P(D,d)\) | =landfold dist --low-file= |
 | Trajectory map | (none) | =landfold embed --phate= (Moon 2019; Rohrdanz 2011 kernel) |
 
+The TSE LJ38 far Pearson of the published map is already ~0.95, so
+that sample cannot decide a non-saturating \(F\). The beta-hairpin
+landmarks (Ardevol, JCTC 2015, 10.1021/ct500950z) have published
+far Spearman ~0.18: that is the quality test.
+
 * Transfer
 
 Generalised sigmoid (Ceriotti 2011, DOI 10.1073/pnas.1108486108):

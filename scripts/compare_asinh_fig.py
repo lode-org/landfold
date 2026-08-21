@@ -58,12 +58,15 @@ def pd_hist(ax, D, d, title):
     q25, q75 = np.quantile(D, [0.25, 0.75])
     far = D >= q75
     near = D <= q25
-    sp_far = float(np.corrcoef(D[far], d[far])[0, 1]) if far.any() else 0.0
+    pear_far = float(np.corrcoef(D[far], d[far])[0, 1]) if far.any() else 0.0
+    rank_d = np.argsort(np.argsort(D[far]))
+    rank_ld = np.argsort(np.argsort(d[far]))
+    spear_far = float(np.corrcoef(rank_d, rank_ld)[0, 1]) if far.any() else 0.0
     rm_near = float(np.sqrt(np.mean((d[near] - D[near]) ** 2)))
     ax.text(
         0.04,
         0.96,
-        f"far corr {sp_far:.3f}\nnear RMSE {rm_near:.2f}",
+        f"far Pearson {pear_far:.3f}\nfar Spearman {spear_far:.3f}\nnear RMSE {rm_near:.2f}",
         transform=ax.transAxes,
         va="top",
         fontsize=8,
@@ -120,16 +123,17 @@ def main() -> None:
     ico0 = cf.match_tip(base, tscv, cf.cn_vector(EX / "lj38_ico.xyz"))
     fcc1 = cf.match_tip(ash, tscv, cf.cn_vector(EX / "lj38_fcc.xyz"))
     ico1 = cf.match_tip(ash, tscv, cf.cn_vector(EX / "lj38_ico.xyz"))
+    pb = np.loadtxt(EX / "ts.all")[:, 1]
+    def anycorr(xy, y):
+        return float(
+            max(abs(np.corrcoef(xy[:, 0], y)[0, 1]), abs(np.corrcoef(xy[:, 1], y)[0, 1]))
+        )
     print("Ceriotti tip", float(np.linalg.norm(fcc0 - ico0)))
     print("asinh tip", float(np.linalg.norm(fcc1 - ico1)))
-    print(
-        "corr any-xi Ceriotti",
-        float(max(abs(np.corrcoef(base[:, 0], xi)[0, 1]), abs(np.corrcoef(base[:, 1], xi)[0, 1]))),
-    )
-    print(
-        "corr any-xi asinh",
-        float(max(abs(np.corrcoef(ash[:, 0], xi)[0, 1]), abs(np.corrcoef(ash[:, 1], xi)[0, 1]))),
-    )
+    print("corr any-xi Ceriotti", anycorr(base, xi))
+    print("corr any-xi asinh", anycorr(ash, xi))
+    print("corr any-pB Ceriotti", anycorr(base, pb))
+    print("corr any-pB asinh", anycorr(ash, pb))
     fig, axes = plt.subplots(3, 2, figsize=(10.4, 13.6), dpi=150, facecolor="white")
     pd_hist(axes[0, 0], D, d0, r"Ceriotti $P(D,d)$")
     pd_hist(axes[0, 1], D, d1, r"asinh $P(D,d)$")
