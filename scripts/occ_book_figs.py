@@ -60,8 +60,8 @@ def main() -> None:
     methods = [
         ("ceriotti.proj", "Ceriotti chi"),
         ("asinh.proj", "asinh"),
-        ("phate.ld", "PHATE"),
-        ("pacmap.ld", "PaCMAP"),
+        ("phate.proj", "PHATE"),
+        ("pacmap.proj", "PaCMAP"),
         ("nearfar.proj", "near-far"),
         ("bands.proj", "three-band"),
         ("gapsplit.proj", "gap-split"),
@@ -71,6 +71,8 @@ def main() -> None:
     panels = [("native", None)]
     for suffix, title in methods:
         p = work / f"{label}_{suffix}"
+        if not (p.is_file() and p.stat().st_size > 0) and suffix.endswith(".proj"):
+            p = work / f"{label}_{suffix.replace('.proj', '.ld')}"
         if p.is_file() and p.stat().st_size > 0:
             panels.append((title, p))
 
