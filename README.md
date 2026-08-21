@@ -70,6 +70,13 @@ those pairs cannot be told apart) plus a Riesz `s=2` energy
 (Saff-Kuijlaars) for spacing. Cuts default to the pairwise 25th and
 75th percentiles. This is not a rank-CDF flatten.
 
+`landfold embed --bands` keeps all three scales: identity on `D≤σ`,
+Ceriotti χ on the mid window (default HD `ceriotti,knee,8,1` and LD
+`ceriotti,knee,2,2` when `--fun-hd` is identity), identity on `D≥τ`,
+and Riesz `s=2`. Near-far drops the mid band the TSE lobes live on.
+Published χ (`imix = 0`) saturates the far band that sets the lobe
+gap. Lean `band_far_separates` / `sat_mid_cannot_tell`.
+
 `landfold embed --axis refs.cv` is the exact projection onto the
 contrast of two reference rows: \(s_1(x)=(x-a)\cdot u/\|b-a\|\) so
 \(s_1(a)=0\), \(s_1(b)=1\), and remaining axes are residual principal

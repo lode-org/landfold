@@ -28,7 +28,12 @@ Theorems.
    `(u·v)²`; the residual *removes* it. The named fcc-ico axis is a
    choice of `u`. The slow mode `ψ` is the data-driven choice.
 
-4. Contrast axis. The unnormalised projection
+4. Three-band pair term. Near and far use identity stress.
+   Mid uses a transfer `F`. A saturating mid residual ignores the
+   HD distance (`sat_mid_cannot_tell`). Identity on the far band
+   still separates (`band_far_separates`).
+
+5. Contrast axis. The unnormalised projection
    `p(x) = (x-a)·(b-a)` is linear:
    `p(x) - p(y) = (x-y)·(b-a)`, `p(a) = 0`,
    `p(b) = ‖b-a‖²`. Distinct refs give a nonzero gap. A saturating

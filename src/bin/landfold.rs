@@ -11,14 +11,14 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    axis_embed, axis_fit, axis_project, basin_coordinate, coordination_histogram, embed,
-    embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
+    axis_embed, axis_fit, axis_project, bands_embed, basin_coordinate, coordination_histogram,
+    embed, embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
     mds_from_points, nearfar_embed, pacmap_embed, pairwise, pairwise_euclid, phate_embed,
     phate_project, predict_imq, project_many_report, read_points, select_landmarks, suggest_alpha,
-    suggest_scale, write_plumed, write_points, AnnealOpts, Dot, Embedding, Euclid, Fisher,
-    FreeEnergy, Histogram2d, IterOpts, LandmarkMode, MdsMode, Metric, NearFarOpts, PacmapOpts,
-    Periodic, PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Stretch, Transfer,
-    Wasserstein1, FUN_SPEC_HELP, L1,
+    suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding, Euclid,
+    Fisher, FreeEnergy, Histogram2d, IterOpts, LandmarkMode, MdsMode, Metric, NearFarOpts,
+    PacmapOpts, Periodic, PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Stretch,
+    Transfer, Wasserstein1, FUN_SPEC_HELP, L1,
 };
 
 #[derive(Parser, Debug)]
@@ -158,6 +158,9 @@ enum Cmd {
         far_cut: Option<f64>,
         #[arg(long = "riesz", default_value_t = 0.05)]
         riesz: f64,
+        /// Identity near, Ceriotti χ mid, identity far, Riesz s=2
+        #[arg(long)]
+        bands: bool,
         /// Exact projection onto the contrast of two reference rows
         #[arg(long = "axis")]
         axis: Option<PathBuf>,
@@ -222,6 +225,8 @@ enum Cmd {
         pacmap: bool,
         #[arg(long)]
         nearfar: bool,
+        #[arg(long)]
+        bands: bool,
         #[arg(long = "w1")]
         w1: bool,
         #[arg(long = "knn", default_value_t = 10)]
@@ -420,9 +425,39 @@ fn main() -> landfold::Result<()> {
             near_cut,
             far_cut,
             riesz,
+            bands,
             axis,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
+            if bands {
+                let metric: Box<dyn Metric> = if w1 {
+                    Box::new(Wasserstein1)
+                } else {
+                    Box::new(Euclid)
+                };
+                let popts = BandOpts {
+                    lowdim: low,
+                    near: near_cut,
+                    far: far_cut,
+                    tfun_hd: Transfer::from_cli(&fun_hd)?,
+                    tfun_ld: Transfer::from_cli(&fun_ld)?,
+                    riesz,
+                    ..BandOpts::default()
+                };
+                let (coords, rep) = bands_embed(set.points.view(), metric.as_ref(), &popts)?;
+                write_points(&mut io::stdout().lock(), &coords, None)?;
+                writeln!(
+                    io::stderr(),
+                    "# bands sigma {} tau {} near {} mid {} far {} riesz {}",
+                    rep.sigma,
+                    rep.tau,
+                    rep.n_near,
+                    rep.n_mid,
+                    rep.n_far,
+                    riesz
+                )?;
+                return Ok(());
+            }
             if let Some(path) = axis {
                 let refs = read_points(
                     std::io::BufReader::new(std::fs::File::open(path)?),
@@ -737,6 +772,7 @@ fn main() -> landfold::Result<()> {
             phate_t,
             pacmap,
             nearfar,
+            bands,
             w1,
             knn,
             axis,
@@ -773,7 +809,7 @@ fn main() -> landfold::Result<()> {
                 low,
                 false,
             )?;
-            if pacmap || nearfar {
+            if pacmap || nearfar || bands {
                 let metric: Box<dyn Metric> = if w1 {
                     Box::new(Wasserstein1)
                 } else {
