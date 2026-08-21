@@ -3,9 +3,10 @@ import LandfoldAlg.NearFar
 /-!
 # Three-band loss
 
-Near and far pairs use identity stress. Mid pairs use a transfer.
-A saturating mid transfer cannot tell two far distances apart;
-identity on the far band can.
+Near pairs use identity stress. Mid pairs use a transfer. Far pairs
+use `1/(1+d²)` (depends on `d`) except the diameter pins, which keep
+identity. A saturating mid transfer cannot tell two far distances
+apart. `satFar` is constantly 1; `repFar` is not.
 -/
 
 namespace LandfoldAlg
@@ -41,5 +42,17 @@ theorem band_far_separates (d D1 D2 F : Rat) :
       (D2 - D1) * (2 * d - D1 - D2) := by
   unfold bandTerm
   simpa using id_stress_separates d D1 D2
+
+/-- PaCMAP-style far repulsion. -/
+def repFar (d : Rat) : Rat := 1 / (1 + d * d)
+
+theorem sat_far_is_one (D : Rat) : satFar D = 1 := by
+  unfold satFar
+  rfl
+
+/-- Unlike `satFar`, the repulsive far term still depends on `d`. -/
+theorem rep_far_depends_on_d : repFar 0 ≠ repFar 1 := by
+  unfold repFar
+  native_decide
 
 end LandfoldAlg
