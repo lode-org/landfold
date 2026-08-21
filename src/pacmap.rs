@@ -32,10 +32,10 @@ impl Default for PacmapOpts {
             n_neighbors: 10,
             mn_ratio: 0.5,
             fp_ratio: 2.0,
-            steps: 200,
-            lr: 1.0,
+            steps: 450,
+            lr: 0.1,
             lowdim: 2,
-            uniform: true,
+            uniform: false,
         }
     }
 }
@@ -77,8 +77,17 @@ pub fn pacmap_embed(
     let dist = pairwise(points, metric)?;
     let pairs = build_pairs(dist.view(), k, n_mid, n_far)?;
     let (mut y, _) = classical_mds(dist.view(), opts.lowdim)?;
+    for v in y.iter_mut() {
+        *v *= 0.01;
+    }
     let mut grad = Array2::<f64>::zeros((n, opts.lowdim));
+    let mut m1 = Array2::<f64>::zeros((n, opts.lowdim));
+    let mut m2 = Array2::<f64>::zeros((n, opts.lowdim));
+    const BETA1: f64 = 0.9;
+    const BETA2: f64 = 0.999;
+    const EPS: f64 = 1e-7;
     for step in 0..opts.steps {
+        let (w_nb, w_mn, w_fp) = schedule(step, opts.steps);
         grad.fill(0.0);
         for p in &pairs {
             let mut d2 = 0.0;
@@ -87,27 +96,31 @@ pub fn pacmap_embed(
                 delta[h] = y[(p.i, h)] - y[(p.j, h)];
                 d2 += delta[h] * delta[h];
             }
-            // Paper: dtilde = ||yi-yj||^2 + 1. Attractive L = dtilde/(C+dtilde)
-            // has grad 2C u / (C+dtilde)^2. Far L = 1/(1+dtilde) has
-            // grad -2 u / (1+dtilde)^2.
             let dt = d2 + 1.0;
-            let scale = match p.kind {
-                PairKind::Near => 20.0 / (10.0 + dt).powi(2),
-                PairKind::Mid => 20000.0 / (10000.0 + dt).powi(2),
-                PairKind::Far => -2.0 / (1.0 + dt).powi(2),
+            let wscale = match p.kind {
+                PairKind::Near => w_nb * 20.0 / (10.0 + dt).powi(2),
+                PairKind::Mid => w_mn * 20000.0 / (10000.0 + dt).powi(2),
+                PairKind::Far => w_fp * (-2.0) / (1.0 + dt).powi(2),
             };
-            if !scale.is_finite() {
+            if !wscale.is_finite() {
                 continue;
             }
             for h in 0..opts.lowdim {
-                grad[(p.i, h)] += scale * delta[h];
-                grad[(p.j, h)] -= scale * delta[h];
+                grad[(p.i, h)] += wscale * delta[h];
+                grad[(p.j, h)] -= wscale * delta[h];
             }
         }
-        let t = opts.lr / (1.0 + 0.01 * step as f64);
+        let t = (step + 1) as f64;
+        let bc1 = 1.0 - BETA1.powf(t);
+        let bc2 = 1.0 - BETA2.powf(t);
         for i in 0..n {
             for h in 0..opts.lowdim {
-                y[(i, h)] -= t * grad[(i, h)];
+                let g = grad[(i, h)];
+                m1[(i, h)] = BETA1 * m1[(i, h)] + (1.0 - BETA1) * g;
+                m2[(i, h)] = BETA2 * m2[(i, h)] + (1.0 - BETA2) * g * g;
+                let mh = m1[(i, h)] / bc1;
+                let vh = m2[(i, h)] / bc2;
+                y[(i, h)] -= opts.lr * mh / (vh.sqrt() + EPS);
                 if !y[(i, h)].is_finite() {
                     return Err(LandfoldError::Msg("PaCMAP coordinate is not finite".into()));
                 }
@@ -198,6 +211,19 @@ pub fn knn_project(
         }
     }
     Ok(out)
+}
+
+/// Paper schedule: 100 steps of heavy mid-near, 100 balanced, rest local.
+fn schedule(step: usize, total: usize) -> (f64, f64, f64) {
+    let _ = total;
+    if step < 100 {
+        let t = step as f64 / 99.0;
+        (2.0, 1000.0 + (3.0 - 1000.0) * t, 1.0)
+    } else if step < 200 {
+        (3.0, 3.0, 1.0)
+    } else {
+        (1.0, 0.0, 1.0)
+    }
 }
 
 fn build_pairs(
