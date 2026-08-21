@@ -33,15 +33,16 @@ PES = LinearSegmentedColormap.from_list(
     N=256,
 )
 
-# book rows: fcc fam0, ico fam1, leftover fam147, liquid fam36
+# book rows: fcc fam0 = Wales GM, ico fam1 = second minimum
 ROW = {"fcc": 0, "ico": 1, "left": 147, "liquid": 36}
 LABELS = {
-    "fcc": "fcc",
+    "fcc": "GM fcc",
     "ico": "ico",
     "left": "other packing",
     "liquid": "liquid",
 }
-ENERGIES = {"fcc": -173.93, "ico": -173.25, "left": -170.67, "liquid": -168.05}
+# Wales / Doye catalogued energies (also the journal exact values)
+ENERGIES = {"fcc": -173.928427, "ico": -173.252378, "left": -170.67, "liquid": -168.05}
 SIDX = {"fcc": 0, "ico": 40, "left": 1393, "liquid": 3674}
 # asinh chi: fcc right, ico top, leftover left, liquid into the well
 POS = {
@@ -143,6 +144,29 @@ def main() -> None:
     cb.set_label(r"$F/kT$  leftover-well occupancy on asinh $\chi$ of DECAF $L^1$", fontsize=11)
     cb.set_ticks([0, 0.5, 1, 1.5, 2])
 
+    # known catalogued minima sit on the map, not only in the corner frames
+    for name, marker, color in (("fcc", "*", "#111111"), ("ico", "D", "#111111")):
+        tip = xy[ROW[name]]
+        ax.scatter(
+            tip[0],
+            tip[1],
+            s=90 if name == "fcc" else 55,
+            marker=marker,
+            c=color,
+            edgecolors="white",
+            linewidths=0.6,
+            zorder=6,
+        )
+        ax.annotate(
+            f"{LABELS[name]}  {ENERGIES[name]:.3f}",
+            tip,
+            textcoords="offset points",
+            xytext=(6, 6),
+            fontsize=8,
+            color="#111111",
+            zorder=7,
+        )
+
     for name, (fx, fy) in POS.items():
         j = ROW[name]
         tip = xy[j]
@@ -174,7 +198,7 @@ def main() -> None:
         hax.tick_params(labelsize=6, length=2)
         hax.set_yticks([])
         hax.set_title(
-            f"{LABELS[name]}  {ENERGIES[name]:.1f}  F={fval:.2f}",
+            f"{LABELS[name]}  {ENERGIES[name]:.3f}  F={fval:.2f}",
             fontsize=8,
             pad=2,
         )
@@ -184,6 +208,53 @@ def main() -> None:
 
     dest = OUT / "elja_occ_lj38_decaf_chi.png"
     fig.savefig(dest, dpi=170, facecolor="white")
+    print("wrote", dest)
+    write_cmp(xy, wells, cf)
+
+
+def write_cmp(xy_asinh: np.ndarray, wells: np.ndarray, cf) -> None:
+    """Ceriotti vs asinh, with the two known minima marked."""
+    cer = load_xy(Path("/tmp/occ-book/lj38_decaf_cer.ld"))
+    fig, axes = plt.subplots(1, 2, figsize=(10.4, 4.5), facecolor="white")
+    for ax, xy, title in (
+        (axes[0], cer, r"Ceriotti $0.5,8,8$  $\chi$  stress $0.025$"),
+        (axes[1], xy_asinh, r"asinh $\sigma=0.5$  $\chi$  stress $0.007$"),
+    ):
+        gx, gy, fes = kde_fes(xy, wells, cf)
+        ax.contourf(gx, gy, fes, levels=np.linspace(0, 2, 21), cmap=PES, extend="max")
+        ax.contour(
+            gx,
+            gy,
+            np.where(np.isfinite(fes), fes, np.nan),
+            levels=np.linspace(0.15, 1.85, 8),
+            colors="#1a1a2e",
+            linewidths=0.3,
+        )
+        marks = (
+            ("fcc", ROW["fcc"], "*", 110, r"GM $-173.928$"),
+            ("ico", ROW["ico"], "D", 70, r"ico $-173.252$"),
+            ("occ", 19, "o", 50, r"occ $321$ wells"),
+        )
+        for _name, j, marker, size, lab in marks:
+            ax.scatter(
+                xy[j, 0],
+                xy[j, 1],
+                s=size,
+                marker=marker,
+                c="k",
+                edgecolors="white",
+                linewidths=0.6,
+                zorder=6,
+            )
+            ax.annotate(lab, xy[j], textcoords="offset points", xytext=(5, 5), fontsize=8)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(title, fontsize=10)
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.5)
+    fig.tight_layout()
+    dest = OUT / "elja_occ_lj38_decaf_chi_cmp.png"
+    fig.savefig(dest, dpi=160, facecolor="white")
     print("wrote", dest)
 
 
