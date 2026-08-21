@@ -64,6 +64,13 @@ distance. `landfold project --phate` places new rows by a Nyström
 potential and a metric MDS fit against the stored landmark map.
 This is not a Ceriotti transfer and does not use χ.
 
+`landfold field --refs a,b --low-file chi.ld` is the MethodsX field
+on that plane: the basin coordinate
+\(\xi=d(x,a)/(d(x,a)+d(x,b))\) of the high-D descriptors, with a
+type-II MAP inverse-multiquadric GP (ChemGP NLL on \(\log\ell\))
+and posterior variance as reliability. Occupancy invert is not
+that field.
+
 `landfold embed --gapsplit` is the map licensed by
 `lean/LandfoldAlg`: the second eigenfunction `ψ` of the locally
 scaled walk, then Ceriotti χ only on pairs with `|Δψ| ≤ τ`. The

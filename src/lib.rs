@@ -16,6 +16,7 @@ pub mod artifact;
 pub mod cg;
 pub mod chi_obj;
 pub mod error;
+pub mod fieldgp;
 pub mod floor;
 pub mod gapsplit;
 #[cfg(feature = "hdf5")]
@@ -46,6 +47,7 @@ pub use array::to_dlpack;
 pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use error::{LandfoldError, Result};
+pub use fieldgp::{FieldGp, FieldPredict, basin_coordinate, fit_imq_map, imq, predict_imq};
 pub use floor::occupancy_map_floor;
 pub use gapsplit::{GapReport, gap_pair_weights, gap_split_embed, suggest_tau};
 #[cfg(feature = "hdf5")]

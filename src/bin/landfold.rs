@@ -14,10 +14,10 @@ use landfold::{
     AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, Fisher, FreeEnergy, Histogram2d, IterOpts,
     L1, Stretch,
     LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
-    Transfer, coordination_histogram, embed, embed_sigma_schedule, joint_pairwise_hist,
-    mds_from_points, pairwise, phate_embed, phate_project, suggest_alpha,
-    pairwise_euclid, project_many_report, read_points, select_landmarks, suggest_scale,
-    write_plumed, write_points, PhateOpts, gap_split_embed,
+    Transfer, basin_coordinate, coordination_histogram, embed, embed_sigma_schedule,
+    fit_imq_map, joint_pairwise_hist, mds_from_points, pairwise, phate_embed, phate_project,
+    predict_imq, suggest_alpha, pairwise_euclid, project_many_report, read_points,
+    select_landmarks, suggest_scale, write_plumed, write_points, PhateOpts, gap_split_embed,
 };
 
 #[derive(Parser, Debug)]
@@ -319,6 +319,22 @@ enum Cmd {
         /// Keep the largest connected body above this fraction of rho_max
         #[arg(long = "floor", default_value_t = 0.0)]
         floor: f64,
+    },
+    /// MAP IMQ-GP of the basin coordinate ξ on a landfold plane
+    Field {
+        #[arg(short = 'D', default_value_t = 10)]
+        high: usize,
+        #[arg(long = "low-file")]
+        low_file: PathBuf,
+        /// Two reference rows (fcc, ico) in the same HD
+        #[arg(long = "refs")]
+        refs: PathBuf,
+        #[arg(short = 'w')]
+        weighted: bool,
+        #[arg(long, default_value_t = 60)]
+        nx: usize,
+        #[arg(long, default_value_t = 60)]
+        ny: usize,
     },
 }
 
@@ -947,6 +963,69 @@ fn main() -> landfold::Result<()> {
                 return Err(landfold::LandfoldError::Parse(
                     "--cn-csv needs --frames".into(),
                 ));
+            }
+        }
+        Cmd::Field {
+            high,
+            low_file,
+            refs,
+            weighted,
+            nx,
+            ny,
+        } => {
+            let hi = read_points(io::stdin().lock(), high, weighted)?;
+            let lo = read_points(
+                std::io::BufReader::new(std::fs::File::open(low_file)?),
+                2,
+                false,
+            )?;
+            let rf = read_points(std::io::BufReader::new(std::fs::File::open(refs)?), high, false)?;
+            if hi.points.nrows() != lo.points.nrows() {
+                return Err(landfold::LandfoldError::Shape(
+                    "field: HD rows must match the low-file",
+                ));
+            }
+            if rf.points.nrows() != 2 {
+                return Err(landfold::LandfoldError::Parse(
+                    "--refs needs exactly two rows".into(),
+                ));
+            }
+            let xi = basin_coordinate(
+                hi.points.view(),
+                rf.points.row(0),
+                rf.points.row(1),
+            )?;
+            let gp = fit_imq_map(lo.points.view(), xi.view())?;
+            writeln!(
+                io::stderr(),
+                "# field MAP ell {} sf2 {} noise {} nll {}",
+                gp.ell, gp.sigma_f2, gp.noise, gp.nll
+            )?;
+            let (xmin, xmax) = minmax(lo.points.column(0).iter().copied());
+            let (ymin, ymax) = minmax(lo.points.column(1).iter().copied());
+            let px = 0.08 * (xmax - xmin).max(1e-6);
+            let py = 0.08 * (ymax - ymin).max(1e-6);
+            let mut grid = ndarray::Array2::<f64>::zeros((nx * ny, 2));
+            for iy in 0..ny {
+                let yv = ymin - py + (ymax - ymin + 2.0 * py) * (iy as f64) / (ny - 1) as f64;
+                for ix in 0..nx {
+                    let xv = xmin - px + (xmax - xmin + 2.0 * px) * (ix as f64) / (nx - 1) as f64;
+                    let r = iy * nx + ix;
+                    grid[(r, 0)] = xv;
+                    grid[(r, 1)] = yv;
+                }
+            }
+            let pred = predict_imq(&gp, lo.points.view(), xi.view(), grid.view())?;
+            let mut out = io::stdout().lock();
+            for i in 0..grid.nrows() {
+                writeln!(
+                    out,
+                    "{:.8} {:.8} {:.8} {:.8}",
+                    grid[(i, 0)],
+                    grid[(i, 1)],
+                    pred.mean[i],
+                    pred.var[i]
+                )?;
             }
         }
     }
