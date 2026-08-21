@@ -1,3 +1,5 @@
+import LandfoldAlg.Residual
+
 /-!
 # Exact contrast axis
 
@@ -5,8 +7,6 @@ The signed projection onto `b - a` is linear. The difference of
 projections is the high-D contrast itself, so two distinct refs
 cannot collapse. A saturating `F` (see `NearFar`) cannot say this.
 -/
-
-import LandfoldAlg.Residual
 
 namespace LandfoldAlg
 
