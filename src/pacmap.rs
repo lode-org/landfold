@@ -87,10 +87,14 @@ pub fn pacmap_embed(
                 delta[h] = y[(p.i, h)] - y[(p.j, h)];
                 d2 += delta[h] * delta[h];
             }
+            // Paper: dtilde = ||yi-yj||^2 + 1. Attractive L = dtilde/(C+dtilde)
+            // has grad 2C u / (C+dtilde)^2. Far L = 1/(1+dtilde) has
+            // grad -2 u / (1+dtilde)^2.
+            let dt = d2 + 1.0;
             let scale = match p.kind {
-                PairKind::Near => 20.0 / (10.0 + d2).powi(2),
-                PairKind::Mid => 20000.0 / (10000.0 + d2).powi(2),
-                PairKind::Far => -2.0 / (1.0 + d2).powi(2),
+                PairKind::Near => 20.0 / (10.0 + dt).powi(2),
+                PairKind::Mid => 20000.0 / (10000.0 + dt).powi(2),
+                PairKind::Far => -2.0 / (1.0 + dt).powi(2),
             };
             if !scale.is_finite() {
                 continue;
