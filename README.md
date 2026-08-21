@@ -97,6 +97,12 @@ the refs does, and \(s_1(1-s_1)\) is the two-well field on that axis.
 rank-uniform map of each axis. `landfold project --pacmap` is k-NN
 interpolation of that landmark map.
 
+`asinh,sigma` is a non-saturating transfer:
+\(F(x)=\mathrm{asinh}(x/\sigma)/(2\,\mathrm{asinh}\,1)\), so \(F(\sigma)=1/2\)
+and far distances stay ordered. Use it on the published landmark
+path (`--init-f --preopt`), not as a polish of a Ceriotti map.
+The quality figure is the PNAS joint \(P(D,d)\).
+
 `landfold field --refs a,b --low-file chi.ld` is the MethodsX field
 on that plane: the basin coordinate
 \(\xi=d(x,a)/(d(x,a)+d(x,b))\) of the high-D descriptors, with a

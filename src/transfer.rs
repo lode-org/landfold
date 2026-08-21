@@ -26,7 +26,7 @@ use crate::error::{LandfoldError, Result};
 pub const FUN_SPEC_HELP: &str = "\
 Ceriotti sigmoid (PNAS/JCTC): sigma,a,b or ceriotti,sigma,a,b. \
 Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd (C++ dimred). \
-imq,sigma and ms,s1,s2,... are extra.";
+imq,sigma, asinh,sigma, and ms,s1,s2,... are extra.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
@@ -38,6 +38,7 @@ pub enum TransferMode {
     Warp,
     Imq,
     Multiscale,
+    Asinh,
 }
 
 /// High-D or low-D distance transfer function with analytic derivative.
@@ -121,11 +122,7 @@ impl Transfer {
         }
         Self::from_parts(
             TransferMode::Gamma,
-            vec![
-                1.0 / (sigma * std::f64::consts::SQRT_2),
-                n,
-                normalizer,
-            ],
+            vec![1.0 / (sigma * std::f64::consts::SQRT_2), n, normalizer],
         )
     }
 
@@ -142,6 +139,23 @@ impl Transfer {
             return Err(LandfoldError::TransferParams("imq scale is not finite"));
         }
         Self::from_parts(TransferMode::Imq, vec![c])
+    }
+
+    /// `F(x) = asinh(x/σ) / (2 asinh 1)`, so `F(σ) = 1/2` and `F`
+    /// is unbounded. Far distances stay ordered (unlike a saturating
+    /// sigmoid or IMQ).
+    pub fn asinh(sigma: f64) -> Result<Self> {
+        if !(sigma.is_finite() && sigma > 0.0) {
+            return Err(LandfoldError::TransferParams("asinh sigma must be > 0"));
+        }
+        let inv = 1.0 / sigma;
+        let norm = 0.5 / 1.0_f64.asinh();
+        if !norm.is_finite() || !(norm > 0.0) {
+            return Err(LandfoldError::TransferParams(
+                "asinh normalizer is not finite",
+            ));
+        }
+        Self::from_parts(TransferMode::Asinh, vec![inv, norm])
     }
 
     /// Mean of IMQ transfers at several scales (PNAS 2011 hierarchical map).
@@ -212,13 +226,24 @@ impl Transfer {
             return Ok(Self::identity());
         }
         let lower = spec.to_ascii_lowercase();
+        if lower == "asinh" {
+            return Self::asinh(1.0);
+        }
+        if let Some(rest) = lower.strip_prefix("asinh,") {
+            let sigma: f64 = rest
+                .trim()
+                .parse()
+                .map_err(|e| LandfoldError::Parse(format!("fun spec `{spec}`: {e}")))?;
+            return Self::asinh(sigma);
+        }
         if lower == "imq" {
             return Self::imq(1.0);
         }
         if let Some(rest) = lower.strip_prefix("imq,") {
-            let sigma: f64 = rest.trim().parse().map_err(|e| {
-                LandfoldError::Parse(format!("fun spec `{spec}`: {e}"))
-            })?;
+            let sigma: f64 = rest
+                .trim()
+                .parse()
+                .map_err(|e| LandfoldError::Parse(format!("fun spec `{spec}`: {e}")))?;
             return Self::imq(sigma);
         }
         if lower == "ms" || lower == "multi" {
@@ -296,6 +321,7 @@ impl Transfer {
             TransferMode::Gamma => "gamma",
             TransferMode::Warp => "warp",
             TransferMode::Multiscale => "multiscale",
+            TransferMode::Asinh => "asinh",
         }
     }
 
@@ -327,6 +353,12 @@ impl Transfer {
                 let c = self.pars[0];
                 let inv = 1.0 / (c * c + x * x).sqrt();
                 (1.0 - c * inv, c * x * inv * inv * inv)
+            }
+            TransferMode::Asinh => {
+                let u = x * self.pars[0];
+                let f = u.asinh() * self.pars[1];
+                let df = self.pars[0] * self.pars[1] / (1.0 + u * u).sqrt();
+                (f, df)
             }
             TransferMode::Multiscale => {
                 let n = self.pars.len() as f64;
@@ -594,6 +626,35 @@ mod tests {
         let h = 1e-7;
         let fd = (t.f(x + h) - t.f(x - h)) / (2.0 * h);
         assert_relative_eq!(t.df(x), fd, epsilon = 1e-7);
+    }
+
+    #[test]
+    fn asinh_half_at_sigma_and_unbounded() {
+        let t = Transfer::asinh(5.0).unwrap();
+        assert_eq!(t.mode(), TransferMode::Asinh);
+        assert_relative_eq!(t.f(0.0), 0.0, epsilon = 1e-15);
+        assert_relative_eq!(t.f(5.0), 0.5, epsilon = 1e-14);
+        assert!(t.f(50.0) > t.f(5.0));
+        assert!(t.f(50.0) > 1.0);
+        assert!(t.df(0.0) > 0.0);
+        assert!(t.df(5.0) > 0.0);
+    }
+
+    #[test]
+    fn asinh_finite_difference() {
+        let t = Transfer::asinh(2.0).unwrap();
+        let x = 1.3;
+        let h = 1e-7;
+        let fd = (t.f(x + h) - t.f(x - h)) / (2.0 * h);
+        assert_relative_eq!(t.df(x), fd, epsilon = 1e-7);
+    }
+
+    #[test]
+    fn from_cli_asinh() {
+        let t = Transfer::from_cli("asinh,5").unwrap();
+        assert_eq!(t.family(), "asinh");
+        assert_relative_eq!(t.f(5.0), 0.5, epsilon = 1e-14);
+        assert!(Transfer::from_cli("asinh,0").is_err());
     }
 
     #[test]

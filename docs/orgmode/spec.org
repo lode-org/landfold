@@ -48,7 +48,11 @@ Generalised sigmoid (Ceriotti 2011, DOI 10.1073/pnas.1108486108):
 equals 1/2 at =x = σ=.
 
 Ceriotti reproduction is =sigma,a,b= or =ceriotti,sigma,a,b= (same
-=xsigmoid=). The extra MethodsX arm is =imq,σ=:
+=xsigmoid=). The extra non-saturating arm is =asinh,σ=:
+
+=F(x) = asinh(x/σ) / (2 asinh 1)=, so =F(σ) = 1/2= and
+=F= is unbounded. Far distances stay ordered. The extra
+MethodsX arm is =imq,σ=:
 
 =F(x) = 1 - c / sqrt(c^2 + x^2)= with =c = σ/√3=, so =F(σ) = 1/2=.
 

@@ -9,11 +9,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use crate::provenance::{PROVENANCE_SCHEMA, Provenance};
+use crate::provenance::{Provenance, PROVENANCE_SCHEMA};
 use crate::{
-    Euclid, IterOpts, LandmarkMode, MdsMode, ProjOpts, Transfer, embed_points, farthest_point,
-    fes_from_points, joint_pairwise_hist, mds_from_points, pairwise_euclid, project_one,
-    select_landmarks, suggest_scale,
+    embed_points, farthest_point, fes_from_points, joint_pairwise_hist, mds_from_points,
+    pairwise_euclid, project_one, select_landmarks, suggest_scale, Euclid, IterOpts, LandmarkMode,
+    MdsMode, ProjOpts, Transfer,
 };
 use ndarray::Array2;
 
@@ -57,7 +57,9 @@ fn validated_metadata<'py>(metadata: Option<Bound<'py, PyDict>>) -> PyResult<Bou
             .get_item(key)?
             .ok_or_else(|| PyValueError::new_err(format!("metadata.provenance.{key} is required")))?
             .extract()
-            .map_err(|_| PyValueError::new_err(format!("metadata.provenance.{key} must be a string")))
+            .map_err(|_| {
+                PyValueError::new_err(format!("metadata.provenance.{key} must be a string"))
+            })
     };
     let optional_string = |key: &str| -> PyResult<Option<String>> {
         provenance
@@ -74,13 +76,19 @@ fn validated_metadata<'py>(metadata: Option<Bound<'py, PyDict>>) -> PyResult<Bou
             .get_item(key)?
             .ok_or_else(|| PyValueError::new_err(format!("metadata.provenance.{key} is required")))?
             .extract()
-            .map_err(|_| PyValueError::new_err(format!("metadata.provenance.{key} must be an integer")))
+            .map_err(|_| {
+                PyValueError::new_err(format!("metadata.provenance.{key} must be an integer"))
+            })
     };
     let layout: u32 = provenance
         .get_item("abi_layout_revision")?
-        .ok_or_else(|| PyValueError::new_err("metadata.provenance.abi_layout_revision is required"))?
+        .ok_or_else(|| {
+            PyValueError::new_err("metadata.provenance.abi_layout_revision is required")
+        })?
         .extract()
-        .map_err(|_| PyValueError::new_err("metadata.provenance.abi_layout_revision must be an integer"))?;
+        .map_err(|_| {
+            PyValueError::new_err("metadata.provenance.abi_layout_revision must be an integer")
+        })?;
     let engine_id = string("engine_id")?;
     let run_id = string("run_id")?;
     let input_digest = string("input_digest")?;
@@ -388,7 +396,10 @@ fn transfers() -> Vec<(String, String)> {
         ),
         ("identity".into(), "F(x)=x. Spec: identity".into()),
         ("sigmoid".into(), "1-1/(1+(x/sigma)^2). Spec: sigma".into()),
-        ("gamma".into(), "Incomplete-gamma sigmoid. Spec: sigma,n".into()),
+        (
+            "gamma".into(),
+            "Incomplete-gamma sigmoid. Spec: sigma,n".into(),
+        ),
         (
             "warp".into(),
             "F_LD^{-1}(F_HD(x)). Spec: sigma,aD,bD,ad,bd".into(),
@@ -396,6 +407,10 @@ fn transfers() -> Vec<(String, String)> {
         (
             "imq".into(),
             "Extra MethodsX inverse-multiquadric. Spec: imq,sigma".into(),
+        ),
+        (
+            "asinh".into(),
+            "Non-saturating asinh(x/sigma)/(2 asinh 1). Spec: asinh,sigma".into(),
         ),
         (
             "multiscale".into(),
@@ -412,7 +427,10 @@ fn solvers() -> Vec<(String, String)> {
             "standard".into(),
             "full-pair Polak-Ribiere CG (published Ceriotti path)".into(),
         ),
-        ("lbfgs".into(), "xtsci-optimize L-BFGS, same ChiObjective".into()),
+        (
+            "lbfgs".into(),
+            "xtsci-optimize L-BFGS, same ChiObjective".into(),
+        ),
         (
             "highs".into(),
             "L-BFGS two-loop projected by HiGHS (--features highs)".into(),
@@ -492,8 +510,8 @@ fn landmarks_euclid<'py>(
     unique: bool,
 ) -> PyResult<(Vec<usize>, Bound<'py, PyArray2<f64>>)> {
     let pts = copy_f64_2d(points);
-    let mode = LandmarkMode::from_cli(mode, gamma)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let mode =
+        LandmarkMode::from_cli(mode, gamma).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let lm = select_landmarks(pts.view(), &Euclid, k, None, seed, None, unique, mode)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok((lm.index, to_pyarray2(py, lm.points)))
