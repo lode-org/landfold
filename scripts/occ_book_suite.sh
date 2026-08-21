@@ -47,8 +47,45 @@ run asinh "$LANDFOLD" embed -D 10 -d 2 -w \
   --fun-hd asinh,5 --fun-ld asinh,5 --grid 12,11,41 --refine 3 \
   <"$CV" >"$OUT/${LABEL}_asinh.proj"
 
-run phate "$LANDFOLD" embed -D 10 -d 2 -w --phate <"$WCV"
-run pacmap "$LANDFOLD" embed -D 10 -d 2 -w --pacmap <"$WCV"
+# Exact CN copies (same packing family) make PHATE's k-NN scale zero.
+UCV="$OUT/${LABEL}.unique.cv"
+INV="$OUT/${LABEL}.inv"
+python3 - "$CV" "$UCV" "$INV" <<'PY'
+import sys
+import numpy as np
+cv = np.loadtxt(sys.argv[1])
+_, idx, inv = np.unique(np.round(cv, 8), axis=0, return_index=True, return_inverse=True)
+np.savetxt(sys.argv[2], cv[idx], fmt="%.8e")
+np.savetxt(sys.argv[3], inv, fmt="%d")
+print("# unique", len(idx), "of", len(cv))
+PY
+awk '{print $0, 1}' "$UCV" >"$OUT/${LABEL}.unique.wcv"
+run phate "$LANDFOLD" embed -D 10 -d 2 -w --phate <"$OUT/${LABEL}.unique.wcv"
+run pacmap "$LANDFOLD" embed -D 10 -d 2 -w --pacmap <"$OUT/${LABEL}.unique.wcv"
+python3 - "$OUT/${LABEL}_phate.ld" "$INV" "$OUT/${LABEL}_phate.proj" <<'PY'
+import sys
+from pathlib import Path
+import numpy as np
+ld = []
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if not line.strip() or line.startswith("#"):
+        continue
+    ld.append([float(x) for x in line.split()[:2]])
+inv = np.loadtxt(sys.argv[2], dtype=int)
+np.savetxt(sys.argv[3], np.asarray(ld)[inv], fmt="%.8e")
+PY
+python3 - "$OUT/${LABEL}_pacmap.ld" "$INV" "$OUT/${LABEL}_pacmap.proj" <<'PY'
+import sys
+from pathlib import Path
+import numpy as np
+ld = []
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if not line.strip() or line.startswith("#"):
+        continue
+    ld.append([float(x) for x in line.split()[:2]])
+inv = np.loadtxt(sys.argv[2], dtype=int)
+np.savetxt(sys.argv[3], np.asarray(ld)[inv], fmt="%.8e")
+PY
 run nearfar "$LANDFOLD" embed -D 10 -d 2 -w --nearfar --init-f --steps 80 \
   <"$OUT/${LABEL}.lm"
 "$LANDFOLD" project -D 10 -d 2 -w --nearfar \
