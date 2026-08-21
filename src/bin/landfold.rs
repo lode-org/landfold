@@ -11,15 +11,14 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
-    AnnealOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, Fisher, FreeEnergy, Histogram2d, IterOpts,
-    L1, Stretch,
-    LandmarkMode, MdsMode, Metric, Periodic, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts,
-    Transfer, Wasserstein1, basin_coordinate, coordination_histogram, embed,
+    axis_embed, axis_fit, axis_project, basin_coordinate, coordination_histogram, embed,
     embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
-    mds_from_points, nearfar_embed, pairwise, pacmap_embed, phate_embed, phate_project,
-    predict_imq, suggest_alpha, pairwise_euclid, project_many_report, read_points,
-    select_landmarks, suggest_scale, write_plumed, write_points, NearFarOpts, PacmapOpts,
-    PhateOpts,
+    mds_from_points, nearfar_embed, pacmap_embed, pairwise, pairwise_euclid, phate_embed,
+    phate_project, predict_imq, project_many_report, read_points, select_landmarks, suggest_alpha,
+    suggest_scale, write_plumed, write_points, AnnealOpts, Dot, Embedding, Euclid, Fisher,
+    FreeEnergy, Histogram2d, IterOpts, LandmarkMode, MdsMode, Metric, NearFarOpts, PacmapOpts,
+    Periodic, PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Stretch, Transfer,
+    Wasserstein1, FUN_SPEC_HELP, L1,
 };
 
 #[derive(Parser, Debug)]
@@ -159,6 +158,9 @@ enum Cmd {
         far_cut: Option<f64>,
         #[arg(long = "riesz", default_value_t = 0.05)]
         riesz: f64,
+        /// Exact projection onto the contrast of two reference rows
+        #[arg(long = "axis")]
+        axis: Option<PathBuf>,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -224,6 +226,9 @@ enum Cmd {
         w1: bool,
         #[arg(long = "knn", default_value_t = 10)]
         knn: usize,
+        /// Reuse `--axis` refs; residual PCs come from `--high-file`
+        #[arg(long = "axis")]
+        axis: Option<PathBuf>,
     },
     /// Farthest-point (Gonzalez) landmarks
     Landmarks {
@@ -415,8 +420,38 @@ fn main() -> landfold::Result<()> {
             near_cut,
             far_cut,
             riesz,
+            axis,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
+            if let Some(path) = axis {
+                let refs = read_points(
+                    std::io::BufReader::new(std::fs::File::open(path)?),
+                    high,
+                    false,
+                )?;
+                if refs.points.nrows() != 2 {
+                    return Err(landfold::LandfoldError::Parse(
+                        "--axis needs exactly two reference rows".into(),
+                    ));
+                }
+                let (coords, model) = axis_embed(
+                    set.points.view(),
+                    refs.points.row(0),
+                    refs.points.row(1),
+                    low,
+                )?;
+                write_points(&mut io::stdout().lock(), &coords, None)?;
+                writeln!(io::stderr(), "# axis gap {} s1_span {}", model.gap, {
+                    let mut lo = f64::INFINITY;
+                    let mut hi = f64::NEG_INFINITY;
+                    for i in 0..coords.nrows() {
+                        lo = lo.min(coords[(i, 0)]);
+                        hi = hi.max(coords[(i, 0)]);
+                    }
+                    hi - lo
+                })?;
+                return Ok(());
+            }
             if nearfar {
                 let metric: Box<dyn Metric> = if w1 {
                     Box::new(Wasserstein1)
@@ -436,7 +471,9 @@ fn main() -> landfold::Result<()> {
                 writeln!(
                     io::stderr(),
                     "# near-far sigma {} tau {} riesz {}",
-                    sigma, tau, riesz
+                    sigma,
+                    tau,
+                    riesz
                 )?;
                 return Ok(());
             }
@@ -456,7 +493,9 @@ fn main() -> landfold::Result<()> {
                 writeln!(
                     io::stderr(),
                     "# PaCMAP neighbors {} uniform {} w1 {}",
-                    popts.n_neighbors, uniform, w1
+                    popts.n_neighbors,
+                    uniform,
+                    w1
                 )?;
                 return Ok(());
             }
@@ -482,7 +521,9 @@ fn main() -> landfold::Result<()> {
                 writeln!(
                     io::stderr(),
                     "# gap-split tau {} kept {}/{} pairs",
-                    rep.tau, rep.n_kept, rep.n_pairs
+                    rep.tau,
+                    rep.n_kept,
+                    rep.n_pairs
                 )?;
                 return Ok(());
             }
@@ -500,7 +541,10 @@ fn main() -> landfold::Result<()> {
                 writeln!(
                     io::stderr(),
                     "# PHATE t {} knn {} decay {} gamma {}",
-                    model.t, model.knn, model.decay, model.gamma
+                    model.t,
+                    model.knn,
+                    model.decay,
+                    model.gamma
                 )?;
                 return Ok(());
             }
@@ -695,12 +739,35 @@ fn main() -> landfold::Result<()> {
             nearfar,
             w1,
             knn,
+            axis,
         } => {
             let hi = read_points(
                 std::io::BufReader::new(std::fs::File::open(&high_file)?),
                 high,
                 weighted,
             )?;
+            if let Some(path) = axis {
+                let refs = read_points(
+                    std::io::BufReader::new(std::fs::File::open(path)?),
+                    high,
+                    false,
+                )?;
+                if refs.points.nrows() != 2 {
+                    return Err(landfold::LandfoldError::Parse(
+                        "--axis needs exactly two reference rows".into(),
+                    ));
+                }
+                let model = axis_fit(
+                    hi.points.view(),
+                    refs.points.row(0),
+                    refs.points.row(1),
+                    low,
+                )?;
+                let query = read_points(io::stdin().lock(), high, false)?;
+                let proj = axis_project(&model, query.points.view())?;
+                write_points(&mut io::stdout().lock(), &proj, None)?;
+                return Ok(());
+            }
             let lo = read_points(
                 std::io::BufReader::new(std::fs::File::open(&low_file)?),
                 low,
@@ -949,11 +1016,7 @@ fn main() -> landfold::Result<()> {
                 let s = suggest_scale(&pairs)?;
                 let mut out = io::stdout().lock();
                 writeln!(out, "# pairs {}", s.n_pairs)?;
-                writeln!(
-                    out,
-                    "# q25 {:.8} q50 {:.8} q75 {:.8}",
-                    s.q25, s.q50, s.q75
-                )?;
+                writeln!(out, "# q25 {:.8} q50 {:.8} q75 {:.8}", s.q25, s.q50, s.q75)?;
                 writeln!(out, "# knee {:.8}", s.knee)?;
                 writeln!(out, "ceriotti,{:.6},8,1", s.knee)?;
                 writeln!(out, "imq,{:.6}", s.knee)?;
@@ -1078,7 +1141,11 @@ fn main() -> landfold::Result<()> {
                 2,
                 false,
             )?;
-            let rf = read_points(std::io::BufReader::new(std::fs::File::open(refs)?), high, false)?;
+            let rf = read_points(
+                std::io::BufReader::new(std::fs::File::open(refs)?),
+                high,
+                false,
+            )?;
             if hi.points.nrows() != lo.points.nrows() {
                 return Err(landfold::LandfoldError::Shape(
                     "field: HD rows must match the low-file",
@@ -1089,16 +1156,15 @@ fn main() -> landfold::Result<()> {
                     "--refs needs exactly two rows".into(),
                 ));
             }
-            let xi = basin_coordinate(
-                hi.points.view(),
-                rf.points.row(0),
-                rf.points.row(1),
-            )?;
+            let xi = basin_coordinate(hi.points.view(), rf.points.row(0), rf.points.row(1))?;
             let gp = fit_imq_map(lo.points.view(), xi.view())?;
             writeln!(
                 io::stderr(),
                 "# field MAP ell {} sf2 {} noise {} nll {}",
-                gp.ell, gp.sigma_f2, gp.noise, gp.nll
+                gp.ell,
+                gp.sigma_f2,
+                gp.noise,
+                gp.nll
             )?;
             let (xmin, xmax) = minmax(lo.points.column(0).iter().copied());
             let (ymin, ymax) = minmax(lo.points.column(1).iter().copied());

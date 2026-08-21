@@ -13,6 +13,7 @@
 pub mod anneal;
 pub mod array;
 pub mod artifact;
+pub mod axis;
 pub mod cg;
 pub mod chi_obj;
 pub mod error;
@@ -47,6 +48,7 @@ pub mod transfer;
 pub use anneal::AnnealOpts;
 pub use array::to_dlpack;
 pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
+pub use axis::{AxisModel, axis_embed, axis_fit, axis_project, double_well};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use error::{LandfoldError, Result};
 pub use fieldgp::{FieldGp, FieldPredict, basin_coordinate, fit_imq_map, imq, predict_imq};

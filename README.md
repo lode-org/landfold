@@ -70,6 +70,15 @@ those pairs cannot be told apart) plus a Riesz `s=2` energy
 (Saff-Kuijlaars) for spacing. Cuts default to the pairwise 25th and
 75th percentiles. This is not a rank-CDF flatten.
 
+`landfold embed --axis refs.cv` is the exact projection onto the
+contrast of two reference rows: \(s_1(x)=(x-a)\cdot u/\|b-a\|\) so
+\(s_1(a)=0\), \(s_1(b)=1\), and remaining axes are residual principal
+components. Lean `axis_diff` is the isometry along that one-dimensional
+subspace. `landfold project --axis` reapplies the same formula. The
+TSE file `ts.all` does not contain the crystals; occupancy of that
+sample cannot show the basins. The axis map of a sample that includes
+the refs does, and \(s_1(1-s_1)\) is the two-well field on that axis.
+
 `landfold embed --pacmap --w1 --uniform` is near-to-near / far-to-far
 (Wang, Huang, Rudin, Shaposhnik, *JMLR* **22**, 2021) on the
 1-Wasserstein metric of the coordination histograms, then a

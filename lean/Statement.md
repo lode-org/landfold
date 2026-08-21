@@ -28,8 +28,15 @@ Theorems.
    `(u·v)²`; the residual *removes* it. The named fcc-ico axis is a
    choice of `u`. The slow mode `ψ` is the data-driven choice.
 
-These four statements are the licence for the gap-split embedding:
-take `ψ` to be the second eigenfunction of a locally scaled diffusion
-operator (Coifman-Lafon, Rohrdanz), set `w(i,j) = 0` when
+4. Contrast axis. The unnormalised projection
+   `p(x) = (x-a)·(b-a)` is linear:
+   `p(x) - p(y) = (x-y)·(b-a)`, `p(a) = 0`,
+   `p(b) = ‖b-a‖²`. Distinct refs give a nonzero gap. A saturating
+   transfer (theorem in `NearFar`) cannot say this.
+
+These statements licence two maps. Gap-split: take `ψ` to be the
+second eigenfunction of a locally scaled diffusion operator
+(Coifman-Lafon, Rohrdanz), set `w(i,j) = 0` when
 `|ψ(i)-ψ(j)|` exceeds a cut, minimise Ceriotti `χ` on the remaining
-pairs to obtain `s`, and display `Φ = (ψ, s)`.
+pairs to obtain `s`, and display `Φ = (ψ, s)`. Axis: display the
+named contrast itself as `s₁` and residual PCs as the other axes.
