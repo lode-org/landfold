@@ -33,9 +33,8 @@ theorem axis_diff (a b x y : Rat × Rat) :
 
 /-- Distinct refs give a nonzero gap on the axis. -/
 theorem axis_separates (a b : Rat × Rat) (h : nsq (sub b a) ≠ 0) :
-    axisProj a b b - axisProj a b a ≠ 0 := by
-  have hb := axis_at_b a b
-  have ha := axis_at_a a b
-  simpa [hb, ha] using h
+    axisProj a b b ≠ axisProj a b a := by
+  rw [axis_at_b, axis_at_a]
+  exact h
 
 end LandfoldAlg
