@@ -1,11 +1,10 @@
 //! Randomised pair search on χ.
 //!
-//! Mini-batches of pairs are drawn uniformly and a Robbins-Monro step is
-//! taken on the corresponding partial gradient (Robbins and Monro, *Ann.
-//! Math. Statist.* **22**, 400 (1951),
-//! <https://doi.org/10.1214/aoms/1177729586>). Use this when the full
-//! `n²` standard CG pass is too expensive. The default solver remains
-//! [`crate::cg::minimize`].
+//! Mini-batches of pairs are drawn uniformly and the partial χ
+//! gradient is applied with bias-corrected Adam (Kingma and Ba,
+//! ICLR 2015, <https://doi.org/10.48550/arXiv.1412.6980>;
+//! `β1=0.9`, `β2=0.999`, constant step). This is an extra arm. The
+//! default solver remains [`crate::cg::minimize`].
 
 use ndarray::ArrayView1;
 
