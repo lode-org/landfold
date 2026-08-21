@@ -144,7 +144,7 @@ pub fn fit_imq_map(x: ArrayView2<f64>, y: ArrayView1<f64>) -> Result<FieldGp> {
     }
     let sigma_f2 = var;
     let noise = 1e-3 * var;
-    let mut span = 0.0;
+    let mut span: f64 = 0.0;
     for h in 0..x.ncols() {
         let mut lo = f64::INFINITY;
         let mut hi = f64::NEG_INFINITY;
