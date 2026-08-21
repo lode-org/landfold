@@ -44,7 +44,8 @@ def occ(ax, xy, title, fa, ia):
 
 
 def xi_scatter(ax, xy, xi, title, fa, ia):
-    sc = ax.scatter(xy[:, 0], xy[:, 1], c=xi, s=6, cmap=cf.CMAP, vmin=0, vmax=1, linewidths=0)
+    lo, hi = np.quantile(xi, [0.05, 0.95])
+    sc = ax.scatter(xy[:, 0], xy[:, 1], c=xi, s=6, cmap=cf.CMAP, vmin=lo, vmax=hi, linewidths=0)
     ax.scatter(*fa, s=80, marker="*", c="#f4d35e", edgecolors="k", zorder=5, label="fcc")
     ax.scatter(*ia, s=80, marker="*", c="#111111", zorder=5, label="ico")
     ax.set_title(title)
