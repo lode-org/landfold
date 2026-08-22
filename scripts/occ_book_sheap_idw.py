@@ -11,6 +11,7 @@ Occupancy leftover-well invert is not used.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import matplotlib
@@ -21,12 +22,16 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "docs" / "ceriotti-figs"
-BOOK = Path("/tmp/occ-book")
-CAND = BOOK / "cand-sheap"
+_ENERGY = os.environ.get("ENERGY", "").strip()
+_DEST = os.environ.get("SHEAP_DEST", "").strip()
+_OUT = os.environ.get("SHEAP_OUT", "").strip()
+_FIG = os.environ.get("SHEAP_FIG", "").strip()
+OUT = Path(_OUT) if _OUT else ROOT / "docs" / "ceriotti-figs"
+BOOK = Path(_DEST).parent if _DEST else Path("/tmp/occ-book")
+CAND = Path(_DEST) if _DEST else BOOK / "cand-sheap"
 XY_CANDIDATES = (CAND / "sheap.xy", CAND / "asinh_sheap.xy")
-ENERGY = BOOK / "lj38.energy"
-FIG = OUT / "elja_occ_lj38_sheap_idw.png"
+ENERGY = Path(_ENERGY) if _ENERGY else BOOK / "lj38.energy"
+FIG = Path(_FIG) if _FIG else OUT / "elja_occ_lj38_sheap_idw.png"
 KS = (1, 4, 8)
 GM_E = -173.928427
 ICO_E = -173.252378

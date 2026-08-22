@@ -18,6 +18,7 @@ of E - E_GM on the embedding.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -29,11 +30,19 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "docs" / "ceriotti-figs"
-MINFILE = Path("/tmp/occ-book/lj38_0013.min")
-DEST = Path("/tmp/occ-book/cand-sheap")
-DPAIR_CACHE = Path("/tmp/occ-book/lj38_dpair.dist")
-KABSCH_CACHE = Path("/tmp/occ-book/lj38_kabsch.dist")
+_MIN = os.environ.get("MIN", "").strip()
+_DEST = os.environ.get("SHEAP_DEST", "").strip()
+_OUT = os.environ.get("SHEAP_OUT", "").strip()
+OUT = Path(_OUT) if _OUT else ROOT / "docs" / "ceriotti-figs"
+MINFILE = Path(_MIN) if _MIN else Path("/tmp/occ-book/lj38_0013.min")
+DEST = Path(_DEST) if _DEST else Path("/tmp/occ-book/cand-sheap")
+if _DEST:
+    DPAIR_CACHE = DEST / "lj38_dpair.dist"
+    KABSCH_CACHE = DEST / "lj38_kabsch.dist"
+else:
+    DPAIR_CACHE = Path("/tmp/occ-book/lj38_dpair.dist")
+    KABSCH_CACHE = Path("/tmp/occ-book/lj38_kabsch.dist")
+N_ATOMS = int(os.environ.get("NATOMS", "38"))
 
 PES = LinearSegmentedColormap.from_list(
     "ruhi_pes",
@@ -44,7 +53,6 @@ GM_E = -173.928427
 ICO_E = -173.252378
 GM_IDX = 0
 ICO_IDX = 40
-N_ATOMS = 38
 KNN0 = 12
 EMAX = 6.0
 DUP_EPS = 5e-2
@@ -74,7 +82,9 @@ class UnionFind:
         return True
 
 
-def load_min(path: Path, n_atoms: int = N_ATOMS):
+def load_min(path: Path, n_atoms: int | None = None):
+    if n_atoms is None:
+        n_atoms = N_ATOMS
     energies = []
     frames = []
     for line in path.read_text().splitlines():

@@ -86,6 +86,14 @@ Compact-support inverse-distance weighting of \(E-E_{\mathrm{GM}}\)
 The basin visual of the 4042 book is a SHEAP-style dual funnel of
 the structure kNN, filled with the same energy IDW
 (=scripts/occ_book_sheap.py=, =scripts/occ_book_sheap_idw.py=).
+=sheap.py= is the entry in this directory: it honours =MIN= / =ENERGY=
+and writes =sheap_idw.png= next to the SOAP energy IDW.
+
+#+begin_src sh
+python3 sheap.py --min book.min --energy book.energy --out sheap_idw.png
+# or MIN=/path/to/book.min ENERGY=/path/to/book.energy python3 sheap.py
+#+end_src
+
 The GM sits in a well at \(E-E_{\mathrm{GM}}=0\); the icosahedral
 minimum sits in a second well at \(0.676\,\varepsilon\). Leftover
 occupancy invert of n4..n13 \(\chi\) puts those floors the other
@@ -97,5 +105,7 @@ Compare =docs/ceriotti-figs/elja_occ_lj38_occ_vs_sheap.png=.
 
 #+begin_src sh
 LANDFOLD=/path/to/landfold MIN=/path/to/book.min KIND=soap ./run.sh
-# KIND=pair uses the 703-D sorted internuclear list
+# KIND=pair uses the 703-D sorted internuclear list, then SHEAP
+MIN=/path/to/book.min KIND=sheap ./run.sh
+# pair HD + SHEAP dual-funnel energy IDW; landfold is not used
 #+end_src
