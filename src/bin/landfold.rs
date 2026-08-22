@@ -13,8 +13,8 @@ use clap::{Parser, Subcommand};
 use landfold::{
     axis_embed, axis_fit, axis_project, bands_embed, basin_coordinate, coordination_histogram,
     embed, embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
-    landscape_attractors, landscape_embed, landscape_qe, mds_from_points, nearfar_embed,
-    pacmap_embed, pairwise,
+    landscape_attractors as attractors_embed, landscape_embed, landscape_qe, mds_from_points,
+    nearfar_embed, pacmap_embed, pairwise,
     pairwise_euclid,
     phate_embed, phate_project, predict_imq, project_many_report, read_points, select_landmarks,
     suggest_alpha, suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding,
@@ -705,7 +705,7 @@ fn main() -> landfold::Result<()> {
                     lowdim: low,
                 };
                 if landscape_attractors {
-                    let (coords, rep) = landscape_attractors(
+                    let (coords, rep) = attractors_embed(
                         set.points.view(),
                         earr.view(),
                         metric.as_ref(),
