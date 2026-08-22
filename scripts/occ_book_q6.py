@@ -156,9 +156,6 @@ def split_score(book: dict[str, np.ndarray], gm: int, ico: int, kind: str) -> di
     d4 = float(q4[gm] - q4[ico])
     d6 = float(q6[gm] - q6[ico])
     sep = float(math.hypot(d4, d6))
-    # overlap: fraction of all minima whose (Q4,Q6) sits in both
-    # 1-sigma balls around the two motifs (using the motif copies)
-    e = None
     return {
         "dQ4": d4,
         "dQ6": d6,
@@ -264,7 +261,26 @@ def energy_field(xy: np.ndarray, values: np.ndarray, ngrid: int = 220, pad: floa
         if e < grid[i, j]:
             grid[i, j] = e
     occupied = np.isfinite(grid)
-    # IDW fill of masked empty cells from occupied cell centres
+    def _dilate(m: np.ndarray) -> np.ndarray:
+        out = m.copy()
+        out[1:, :] |= m[:-1, :]
+        out[:-1, :] |= m[1:, :]
+        out[:, 1:] |= m[:, :-1]
+        out[:, :-1] |= m[:, 1:]
+        return out
+
+    # grow the two deep motif islands so they read as wells, not pixels
+    deep = occupied & (grid < 1.2)
+    grown = _dilate(_dilate(deep))
+    # each new cell takes the min of neighbouring already-set deep cells
+    for _ in range(2):
+        for i, j in zip(*np.where(grown & ~occupied)):
+            nb = grid[max(i - 1, 0) : i + 2, max(j - 1, 0) : j + 2]
+            nb = nb[np.isfinite(nb)]
+            if nb.size:
+                grid[i, j] = float(nb.min())
+                occupied[i, j] = True
+
     cy, cx = np.where(occupied)
     src = np.column_stack([gu[cx], gv[cy]])
     sval = grid[occupied]
@@ -286,13 +302,14 @@ def energy_field(xy: np.ndarray, values: np.ndarray, ngrid: int = 220, pad: floa
             num = w @ sval
             filled[i0:i1] = np.where(den > 0, num / np.clip(den, 1e-12, None), np.nan)
         field[qy, qx] = filled
-    # light blur of finite cells only
+    # blur only the interpolated (non-occupied) cells
     finite = np.isfinite(field)
     fill = np.where(finite, field, 0.0)
     wgt = finite.astype(np.float64)
     fill_b = _blur(fill, passes=2)
     wgt_b = _blur(wgt, passes=2)
-    field = np.where(mask & (wgt_b > 0.15), fill_b / np.clip(wgt_b, 1e-12, None), np.nan)
+    blurred = fill_b / np.clip(wgt_b, 1e-12, None)
+    field = np.where(occupied, field, np.where(mask & (wgt_b > 0.15), blurred, np.nan))
     return gx, gy, field, dens
 
 
@@ -365,12 +382,18 @@ def mark(ax, gm_xy, ico_xy, gm_e, ico_e) -> None:
         zorder=7,
         label=rf"ico  ${ico_e:.3f}$",
     )
-    ax.legend(handles=[h1, h2], loc="best", frameon=True, fancybox=False, framealpha=0.92)
+    ax.legend(
+        handles=[h1, h2],
+        loc="upper left",
+        frameon=True,
+        fancybox=False,
+        framealpha=0.92,
+    )
 
 
 def plot_q6q4(xy, rel, gm, ico, energy, kind, r_cut, dest: Path, extra: Path | None) -> dict:
     print("IDW/envelope fill ...", flush=True)
-    gx, gy, ehat, _dens = energy_field(xy, rel, ngrid=220, pad=0.10, cutoff=0.05, power=4.0)
+    gx, gy, ehat, _dens = energy_field(xy, rel, ngrid=220, pad=0.14, cutoff=0.05, power=4.0)
     print("fill done", flush=True)
     e_clip = 6.0
     painted = np.clip(ehat, 0.0, e_clip)
