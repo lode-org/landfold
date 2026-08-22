@@ -75,8 +75,8 @@ def fill(xy, z, ngrid=160, k=6):
 
 
 def dual_funnel(xy, hd, z, gm, ico, sep=1.15, floor=0.10):
-    d_gm = np.linalg.norm(hd - hd[gm], axis=1)
-    d_ico = np.linalg.norm(hd - hd[ico], axis=1)
+    d_gm = np.linalg.norm(xy - xy[gm], axis=1)
+    d_ico = np.linalg.norm(xy - xy[ico], axis=1)
     nearer_gm = d_gm <= d_ico
     zmax = float(np.percentile(z, 95))
     scale = floor + (1.0 - floor) * np.clip(z / max(zmax, 1e-9), 0.0, 1.6)
