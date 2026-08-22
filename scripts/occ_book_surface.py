@@ -151,6 +151,51 @@ def plot_cmp(cf, e) -> None:
     print("wrote", dest)
 
 
+def plot_twoscale(cf, e) -> None:
+    """Ceriotti vs asinh vs HD-asinh/LD-Ceriotti occupancy of 4042 minima."""
+    panels = (
+        ("lj38_ceriotti.proj", r"Ceriotti $5,8,1$ / $5,2,2$"),
+        ("lj38_asinh.proj", r"asinh $\sigma=5$"),
+        ("lj38_asinh_cer.proj", r"HD asinh / LD $5,2,2$"),
+        ("lj38_asinh_cer_mw.proj", r"HD asinh / LD $5,2,2$ + mw"),
+    )
+    have = [(f, t) for f, t in panels if (SRC / f).is_file() and (SRC / f).stat().st_size > 100]
+    if not have:
+        print("no twoscale occupancy maps")
+        return
+    fig, axes = plt.subplots(1, len(have), figsize=(5.2 * len(have), 4.8), facecolor="white")
+    axes = np.atleast_1d(axes)
+    mesh = None
+    for ax, (fname, title) in zip(axes, have):
+        xy = load_xy(SRC / fname)
+        if len(xy) != len(e):
+            print("row mismatch", fname, len(xy), len(e))
+            ax.axis("off")
+            continue
+        gx, gy, fes = kde_fes(xy, cf)
+        mesh = paint(ax, gx, gy, fes)
+        gm = xy[int(np.argmin(e))]
+        ico = xy[int(np.argmin(np.abs(e - ICO_E)))]
+        mark(ax, gm, ico)
+        ax.set_title(title, fontsize=11)
+        print(
+            title,
+            "F(GM)",
+            cf.fes_at(gx, gy, fes, gm),
+            "F(ico)",
+            cf.fes_at(gx, gy, fes, ico),
+        )
+    if mesh is not None:
+        fig.subplots_adjust(bottom=0.18, wspace=0.08)
+        cax = fig.add_axes([0.28, 0.08, 0.44, 0.03])
+        cb = fig.colorbar(mesh, cax=cax, orientation="horizontal")
+        cb.set_label(r"$F/\varepsilon$  occupancy of 4042 inherent structures")
+        cb.set_ticks([0, 0.5, 1, 1.5, 2])
+    dest = OUT / "elja_occ_lj38_twoscale_fes.png"
+    fig.savefig(dest, dpi=170, facecolor="white", bbox_inches="tight")
+    print("wrote", dest)
+
+
 def plot_teach(cf, e) -> None:
     xy = load_xy(SRC / "lj38_asinh.proj")
     cv = np.loadtxt(CV)
@@ -218,6 +263,7 @@ def main() -> None:
     cf = _cf()
     e = np.loadtxt(ENERGY)
     plot_cmp(cf, e)
+    plot_twoscale(cf, e)
     plot_teach(cf, e)
 
 

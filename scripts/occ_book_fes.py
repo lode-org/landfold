@@ -93,6 +93,8 @@ def main() -> None:
         ("lj38_ceriotti.proj", "ceriotti", "Ceriotti"),
         ("lj38_asinh.proj", "asinh", "asinh"),
         ("lj38_pacmap.proj", "pacmap", "PaCMAP"),
+        ("lj38_asinh_cer.proj", "asinh_cer", r"asinh HD / Ceriotti LD"),
+        ("lj38_asinh_cer_mw.proj", "asinh_cer_mw", r"asinh HD / Ceriotti LD + mw"),
     ]
     for fname, tag, title in maps:
         path = SRC / fname
