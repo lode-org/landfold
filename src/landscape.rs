@@ -179,8 +179,11 @@ mod tests {
             [5.0, 0.1],
         ];
         let e = array![-2.0, -1.8, -1.7, -1.9, -1.7, -1.6];
-        let (xy, rep) = landscape_embed(pts.view(), e.view(), &Euclid, &LandscapeOpts::default())
-            .expect("embed");
+        let opts = LandscapeOpts {
+            knn: 2,
+            ..LandscapeOpts::default()
+        };
+        let (xy, rep) = landscape_embed(pts.view(), e.view(), &Euclid, &opts).expect("embed");
         assert_eq!(xy.nrows(), 6);
         assert_eq!(xy.ncols(), 2);
         assert!(rep.n_edges > 0);
