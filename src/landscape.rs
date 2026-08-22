@@ -85,7 +85,11 @@ pub fn landscape_embed(
             if i == j {
                 continue;
             }
-            let d = metric.distance(points.row(i), points.row(j))?;
+            let a = points.row(i);
+            let b = points.row(j);
+            let a = a.as_slice().ok_or(LandfoldError::Empty)?;
+            let b = b.as_slice().ok_or(LandfoldError::Empty)?;
+            let d = metric.dist(a, b)?;
             if !d.is_finite() || d < 0.0 {
                 return Err(LandfoldError::Msg(
                     "landscape metric produced a non-finite distance".into(),
