@@ -44,8 +44,9 @@ def pair_d(x):
     return out
 
 
-def pd_hist(ax, D, d, title):
-    mx = max(float(np.quantile(D, 0.99)), float(np.quantile(d, 0.99)))
+def pd_hist(ax, D, d, title, mx=None):
+    if mx is None:
+        mx = max(float(np.quantile(D, 0.99)), float(np.quantile(d, 0.99)))
     H, xe, ye = np.histogram2d(D, d, bins=80, range=[[0, mx], [0, mx]])
     H = H.T
     H = H / H.max() if H.max() > 0 else H
@@ -54,6 +55,8 @@ def pd_hist(ax, D, d, title):
     ax.set_title(title)
     ax.set_xlabel(r"$D$")
     ax.set_ylabel(r"$d$")
+    ax.set_xlim(0, mx)
+    ax.set_ylim(0, mx)
     ax.set_aspect("equal", adjustable="box")
     q25, q75 = np.quantile(D, [0.25, 0.75])
     far = D >= q75
