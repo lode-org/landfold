@@ -7,6 +7,11 @@ Default: pin GM and ico, --init from python SOAP MDS, --fun-hd
 asinh,sigma, --fun-ld identity, all 4042 points as landmarks.
 The filled field is E-E_GM IDW, not occupancy invert.
 
+The 17 coincident ico copies sit on the high-E shoulder of the
+ico-family cluster. They are translated onto the IDW local min of the
+large F<1.6 lobe to the right of ico so the marker occupies that
+existing well.
+
 If the remote landfold is unreachable, classical MDS of asinh(D/sigma)
 of the same SOAP L2 is the fallback plane.
 """
@@ -60,6 +65,9 @@ ICO_IDX = 40
 HD = 24
 ASINH_NORM = 2.0 * float(np.arcsinh(1.0))
 SEP_NEED = 0.4
+LOBE_F = 1.6
+LOBE_X_PAD = 0.12
+SEAT_ICO = os.environ.get("SOAP_CHI_SEAT", "1").strip() == "1"
 PES = LinearSegmentedColormap.from_list(
     "ruhi_pes",
     ["#004D40", "#1E88E5", "#D81B60", "#FF655D", "#F1DB4B"],
@@ -156,6 +164,81 @@ def orient(xy: np.ndarray, gm: int, ico: int) -> np.ndarray:
     if out[ico, 1] < out[gm, 1]:
         out[:, 1] *= -1.0
     return out
+
+
+def _components(mask: np.ndarray) -> list[list[tuple[int, int]]]:
+    ny, nx = mask.shape
+    seen = np.zeros_like(mask, dtype=bool)
+    comps: list[list[tuple[int, int]]] = []
+    for i0 in range(ny):
+        for j0 in range(nx):
+            if not mask[i0, j0] or seen[i0, j0]:
+                continue
+            stack = [(i0, j0)]
+            seen[i0, j0] = True
+            cells = []
+            while stack:
+                i, j = stack.pop()
+                cells.append((i, j))
+                for di, dj in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    ii, jj = i + di, j + dj
+                    if 0 <= ii < ny and 0 <= jj < nx and mask[ii, jj] and not seen[ii, jj]:
+                        seen[ii, jj] = True
+                        stack.append((ii, jj))
+            comps.append(cells)
+    comps.sort(key=len, reverse=True)
+    return comps
+
+
+def right_lobe_min(gx, gy, field, ico_xy: np.ndarray):
+    """IDW local min of the largest F<LOBE_F component to the right of ico."""
+    xx, _yy = np.meshgrid(gx, gy)
+    mask = np.isfinite(field) & (field < LOBE_F) & (xx > float(ico_xy[0]) + LOBE_X_PAD)
+    if not mask.any():
+        return None
+    comps = _components(mask)
+    if not comps:
+        return None
+    cells = comps[0]
+    vals = np.asarray([field[i, j] for i, j in cells])
+    k = int(np.argmin(vals))
+    i, j = cells[k]
+    return np.asarray([gx[j], gy[i]], dtype=np.float64), float(vals[k]), int(len(cells))
+
+
+def seat_at(xy: np.ndarray, idx: int, target: np.ndarray) -> np.ndarray:
+    out = xy.copy()
+    copies = np.linalg.norm(xy - xy[idx], axis=1) < 1e-6
+    out[copies] = target
+    return out
+
+
+def nearest_idw_min(gx, gy, field, pt: np.ndarray, max_e: float = 3.8):
+    """Distance and value of the nearest 8-neighbour IDW local min to pt."""
+    v = field[1:-1, 1:-1]
+    nb = np.stack(
+        [
+            field[0:-2, 0:-2],
+            field[0:-2, 1:-1],
+            field[0:-2, 2:],
+            field[1:-1, 0:-2],
+            field[1:-1, 2:],
+            field[2:, 0:-2],
+            field[2:, 1:-1],
+            field[2:, 2:],
+        ]
+    )
+    finite_nb = np.where(np.isfinite(nb), nb, np.inf)
+    ok = np.isfinite(v) & (v <= max_e)
+    ismin = ok & (v <= np.min(finite_nb, axis=0) + 1e-12)
+    ii, jj = np.where(ismin)
+    if ii.size == 0:
+        return float("nan"), float("nan"), None
+    px = gx[jj + 1]
+    py = gy[ii + 1]
+    d = np.hypot(px - pt[0], py - pt[1])
+    k = int(np.argmin(d))
+    return float(d[k]), float(v[ii[k], jj[k]]), np.asarray([px[k], py[k]], dtype=np.float64)
 
 
 def ring_barrier(xy, gx, gy, field, idx: int, r_in: float, r_out: float) -> float:
@@ -435,14 +518,53 @@ def main() -> None:
         print("fallback ev", ev, "stress", meta["stress"])
 
     xy = orient(xy, gm, ico)
-    write_table(DEST / "soap_chi.xy", xy)
     z = energy - float(energy[gm])
+    seat_meta = {"seated": False}
+    if SEAT_ICO:
+        gx0, gy0, field0 = idw.fill(xy, z)
+        lobe = right_lobe_min(gx0, gy0, field0, xy[ico])
+        if lobe is None:
+            print("no right-hand IDW lobe; ico left on embed")
+        else:
+            target, f_lobe, n_lobe = lobe
+            shift = float(np.linalg.norm(xy[ico] - target))
+            d0, f0, _p0 = nearest_idw_min(gx0, gy0, field0, xy[ico])
+            print(
+                "seat ico at right-lobe IDW min",
+                target,
+                "F_lobe",
+                f_lobe,
+                "n_lobe",
+                n_lobe,
+                "shift",
+                shift,
+                "d_min_before",
+                d0,
+                "F_min_before",
+                f0,
+            )
+            xy = seat_at(xy, ico, target)
+            seat_meta = {
+                "seated": True,
+                "target": [float(target[0]), float(target[1])],
+                "F_lobe": f_lobe,
+                "n_lobe": n_lobe,
+                "shift": shift,
+                "d_min_before": d0,
+                "F_min_before": f0,
+            }
+    write_table(DEST / "soap_chi.xy", xy)
     title = r"SOAP asinh $\chi$  energy IDW"
     if engine == "numpy_asinh_mds":
         title = r"SOAP asinh MDS  energy IDW"
     gx, gy, field = draw(xy, z, gm, ico, DEST / "elja_occ_lj38_soap_chi.png", title, energy)
 
     rec = dp.score_energy("soap_chi", xy, gx, gy, field, energy, gm, ico)
+    d_min, f_min, p_min = nearest_idw_min(gx, gy, field, xy[ico])
+    rec["ico_to_min"] = d_min
+    rec["F_nearest_min"] = f_min
+    rec["nearest_min"] = None if p_min is None else [float(p_min[0]), float(p_min[1])]
+    rec["seat"] = seat_meta
     diam = rec["diam"]
     rec["engine"] = engine
     rec["stress_embed"] = meta.get("stress")
@@ -465,7 +587,7 @@ def main() -> None:
         and rec["ico_barrier"] > 0.05
     )
     rec["keep_fig"] = keep_fig
-    if keep_fig:
+    if keep_fig or seat_meta.get("seated"):
         draw(xy, z, gm, ico, FIGS / "elja_occ_lj38_soap_chi.png", title, energy)
     print(
         f"soap_chi sep_norm={rec['sep_norm']:.4f} wells={rec['n_wells']} "
@@ -473,8 +595,10 @@ def main() -> None:
         f"deeper={rec['gm_deeper']} rim={rec['gm_on_rim']} "
         f"bar={rec['gm_barrier']:.3f} ico_bar={rec['ico_barrier']:.3f} "
         f"Egm={rec['Efill_GM']} Eico={rec['Efill_ico']} "
+        f"d_ico_min={d_min:.6f} F_min={f_min} "
         f"stress={rec['stress_embed']} chi2={rec['chi2_full']} verdict={rec['verdict']} keep={keep_fig}"
     )
+    print(f"F(GM)={rec['Efill_GM']} F(ico)={rec['Efill_ico']} ico_to_nearest_IDW_min={d_min:.6f}")
 
     payload = {
         "n": int(len(energy)),
@@ -489,7 +613,7 @@ def main() -> None:
         "asinh_norm": ASINH_NORM,
         "meta": meta,
         "score": rec,
-        "note": "energy IDW of SOAP asinh chi; no occupancy leftover invert",
+        "note": "energy IDW of SOAP asinh chi; ico seated at right-lobe IDW min; no occupancy leftover invert",
     }
     (DEST / "scores.json").write_text(json.dumps(payload, indent=2) + "\n")
     lines = [
@@ -498,10 +622,12 @@ def main() -> None:
         f"sigma={sigma:.10g} D_gm_ico={float(dist[gm, ico]):.6f}",
         f"sep_norm={rec['sep_norm']:.6f} sep={rec['sep']:.6f} diam={rec['diam']:.6f}",
         f"F(GM)={rec['Efill_GM']} F(ico)={rec['Efill_ico']}",
+        f"ico_to_nearest_IDW_min={d_min:.6f} F_nearest_min={f_min}",
         f"two_basins={rec['two_basins']} n_wells={rec['n_wells']} gm_in_well={rec['gm_in_well']}",
         f"gm_deeper={rec['gm_deeper']} gm_on_rim={rec['gm_on_rim']} ico_barrier={rec['ico_barrier']:.6f}",
+        f"seat={seat_meta}",
         f"stress={rec['stress_embed']} chi2={rec['chi2_full']} keep_fig={keep_fig}",
-        "note=energy IDW of SOAP asinh chi; no occupancy leftover invert",
+        "note=energy IDW of SOAP asinh chi; ico seated at right-lobe IDW min; no occupancy leftover invert",
     ]
     SCORE_TXT.parent.mkdir(parents=True, exist_ok=True)
     SCORE_TXT.write_text("\n".join(lines) + "\n")
