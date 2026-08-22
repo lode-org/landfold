@@ -192,6 +192,23 @@ pub fn project_report(
         return path_average(emb, hd_row.view(), nearest, nearest_idx, opts.path_lambda);
     }
     let mut best = emb.low.row(nearest_idx).to_owned();
+    if nearest <= 1e-14 {
+        let (chi, _) = query_chi(
+            best.view(),
+            emb.low.view(),
+            hd_row.view(),
+            fhd_row.view(),
+            &emb.tfun_ld,
+            emb.imix,
+            emb.weights.view(),
+        );
+        return Ok(ProjReport {
+            coords: best,
+            chi,
+            nearest,
+            nearest_idx,
+        });
+    }
     let eval = |x: ArrayView1<f64>| {
         query_chi(
             x,
