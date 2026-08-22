@@ -50,3 +50,17 @@ landfold fes --input out/ts.proj --nx 80 --ny 80 --kt 0.168 \
 ./run.sh
 # compose_fes.py writes out/lj38_fes.png and lj38_fes.png
 #+end_src
+
+* Structure fingerprint of minima
+
+The course zip is a coordination-count TSE. A book of quenched
+Cartesian minima is a different sample: 4042 inherent structures,
+one row = energy then \(3N\) coordinates.
+
+That book is not embedded as n4..n13, and the field on the plane is
+not occupancy invert. The path is SOAP (or sorted internuclear pairs)
+as a .hist, landfold =asinh,sigma= on landmarks, then IDW of
+\(E-E_{\mathrm{GM}}\).
+
+See [[file:../lj38-book/README.org][../lj38-book/README.org]]. Engines:
+=scripts/occ_book_soap.py=, =scripts/occ_book_soap_chi.py=.

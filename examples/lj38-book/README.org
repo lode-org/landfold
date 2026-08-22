@@ -1,0 +1,89 @@
+#+TITLE: LJ38 structure fingerprint of minima
+#+FILETAGS: :landfold:example:
+#+DATE: <2026-08-22 Sat>
+#+DESCRIPTION: 4042 quenched minima to SOAP or pair HD to asinh chi to energy IDW
+#+STATUS: Active
+
+* Path
+
+The COSMO teaching example embeds n4..n13 coordination counts of a
+transition-state ensemble and paints occupancy invert. This directory
+is the other map: a book of quenched Cartesian minima.
+
+#+begin_example
+4042 .min book  ->  SOAP or sorted-pair HD  ->  landfold asinh  ->  energy IDW
+#+end_example
+
+The field on that plane is \(E-E_{\mathrm{GM}}\). Do not run
+=landfold fes= here: that command is occupancy invert
+(\(F = -kT\ln(\rho/\rho_{\max})\)), not the energy of a minimum.
+
+Engines: =scripts/occ_book_soap.py= (SOAP mean, \(n_r=16\), \(n_a=8\),
+24-D) and =scripts/occ_book_soap_chi.py= (writes the .hist, folds
+=asinh,sigma=, fills energy IDW). =scripts/occ_book_dpair.py= is the
+sorted-pair table. This directory is the documented entry point.
+
+* Input
+
+One whitespace row per inherent structure: energy, then \(3N\)
+Cartesian coordinates. The LJ38 occupancy book is 4042 rows, \(N=38\).
+Comments starting with =#= are skipped. Supply the book as =MIN=;
+it is not shipped with the COSMO zip.
+
+* Fingerprint
+
+#+begin_src sh
+python3 min_to_hist.py --min book.min --kind soap --out soap.hist \
+    --energy book.energy --sigma sigma.txt --n-land 200 --landmarks soap.lm
+python3 min_to_hist.py --min book.min --kind pair --out pair.hist \
+    --energy book.energy --sigma sigma.txt --n-land 200 --landmarks pair.lm
+#+end_src
+
+SOAP is the atom-averaged Gaussian neighbor density on
+\(r\in[0.8,2.8]\) plus an 8-bin neighbor-angle histogram. Sorted-pair
+HD is the descending internuclear list (\(N(N-1)/2 = 703\) for LJ38).
+Both are permutation-invariant. =sigma= is the median positive
+pairwise L2 of the fingerprint table.
+
+* Embed
+
+Set =LANDFOLD= to a release binary. This example does not compile.
+
+=sigma= is the value written by =min_to_hist.py=. The flags match
+=scripts/occ_book_soap_chi.py=: landmark asinh \(\chi\), then project
+the book.
+
+#+begin_src sh
+# D=24 for SOAP mean n_r=16 n_a=8; D=703 for LJ38 sorted pairs
+landfold embed -D "$D" -d 2 \
+    --fun-hd "asinh,$SIGMA" --fun-ld "asinh,$SIGMA" \
+    --init-f --preopt 40 --steps 40 --center \
+    < soap.lm > soap.ld
+
+landfold project -D "$D" -d 2 \
+    --fun-hd "asinh,$SIGMA" --fun-ld "asinh,$SIGMA" \
+    --high-file soap.lm --low-file soap.ld \
+    --grid 12,11,41 --refine 3 \
+    < soap.hist > soap.proj
+#+end_src
+
+=--fun-hd asinh,sigma= is the non-saturating transfer
+\(F(x)=\mathrm{asinh}(x/\sigma)/(2\,\mathrm{asinh}\,1)\).
+=--init-f --preopt= is the published landmark path.
+
+* Energy field
+
+#+begin_src sh
+python3 energy_idw.py --xy soap.proj --energy book.energy \
+    --out soap_energy_idw.png
+#+end_src
+
+Compact-support inverse-distance weighting of \(E-E_{\mathrm{GM}}\)
+(=scripts/occ_book_idw_fill.py=). Occupancy invert is not this field.
+
+* Run
+
+#+begin_src sh
+LANDFOLD=/path/to/landfold MIN=/path/to/book.min KIND=soap ./run.sh
+# KIND=pair uses the 703-D sorted internuclear list
+#+end_src
