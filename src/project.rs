@@ -203,11 +203,24 @@ pub fn project_report(
             emb.weights.view(),
         )
     };
+    // Nearest landmark (and every other landmark) is a candidate.
+    // A coarse grid on [-w,w] can miss the cloud and must not discard it.
+    let (mut best_f, _) = eval(best.view());
+    for i in 0..n {
+        if i == nearest_idx {
+            continue;
+        }
+        let cand = emb.low.row(i).to_owned();
+        let (f, _) = eval(cand.view());
+        if f < best_f {
+            best_f = f;
+            best = cand;
+        }
+    }
 
     if d == 2 && opts.grid_coarse >= 2 {
         let w = opts.gridw;
         let g1 = opts.grid_coarse;
-        let mut best_f = f64::INFINITY;
         scan_grid_2d(-w, w, -w, w, g1, |q| {
             let (f, _) = eval(q.view());
             if f < best_f {
@@ -229,7 +242,6 @@ pub fn project_report(
     } else if d == 1 && opts.grid_coarse >= 2 {
         let w = opts.gridw;
         let g1 = opts.grid_coarse;
-        let mut best_f = f64::INFINITY;
         scan_grid_1d(-w, w, g1, |q| {
             let (f, _) = eval(q.view());
             if f < best_f {
@@ -445,6 +457,37 @@ mod tests {
             ..ProjOpts::default()
         };
         assert!(opts.validate().is_err());
+    }
+
+    #[test]
+    fn landmark_query_beats_a_coarse_grid() {
+        let high = array![[0.0, 0.0], [0.4, 0.0], [0.0, 0.4]];
+        let low = array![[0.15, 0.15], [0.55, 0.10], [0.10, 0.55]];
+        let emb = Embedding::from_landmarks(
+            high.clone(),
+            low.clone(),
+            &Euclid,
+            Transfer::identity(),
+            Transfer::identity(),
+            0.0,
+            None,
+        )
+        .unwrap();
+        let opts = ProjOpts {
+            gridw: 2.0,
+            grid_coarse: 3,
+            grid_fine: 3,
+            cg_steps: 0,
+            ..ProjOpts::default()
+        };
+        let r = project_report(&emb, high.row(0), &Euclid, &opts).unwrap();
+        assert_eq!(r.nearest_idx, 0);
+        let err = (r.coords[0] - low[(0, 0)]).hypot(r.coords[1] - low[(0, 1)]);
+        assert!(
+            err < 1e-12,
+            "landmark query must stay on the landmark, got {err} at {:?}",
+            r.coords
+        );
     }
 
     #[test]
