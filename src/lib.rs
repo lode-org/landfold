@@ -71,7 +71,9 @@ pub use landmark::{
     Landmarks, LandmarkMode, farthest_point, farthest_point_ifirst, select_landmarks,
     voronoi_weights,
 };
-pub use landscape::{LandscapeOpts, LandscapeReport, landscape_embed};
+pub use landscape::{
+    LandscapeOpts, LandscapeReport, landscape_committor, landscape_embed, landscape_qe,
+};
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use nearfar::{NearFarOpts, nearfar_embed};
 pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch, Wasserstein1};

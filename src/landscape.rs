@@ -38,6 +38,126 @@ pub struct LandscapeReport {
     pub n_edges: usize,
 }
 
+fn knn_affinity(
+    points: ArrayView2<f64>,
+    energy: ArrayView1<f64>,
+    metric: &dyn Metric,
+    opts: &LandscapeOpts,
+) -> Result<(Vec<f64>, usize)> {
+    let n = points.nrows();
+    let mut affinity = vec![0.0; n * n];
+    let mut n_edges = 0usize;
+    for i in 0..n {
+        let mut neigh: Vec<(f64, usize)> = Vec::with_capacity(n - 1);
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let a = points.row(i);
+            let b = points.row(j);
+            let a = a.as_slice().ok_or(LandfoldError::Empty)?;
+            let b = b.as_slice().ok_or(LandfoldError::Empty)?;
+            let d = metric.dist(a, b)?;
+            neigh.push((d, j));
+        }
+        neigh.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for &(d, j) in neigh.iter().take(opts.knn) {
+            let de = (energy[i] - energy[j]).abs();
+            let cost = de + opts.lambda * d;
+            let w = (-cost / opts.temperature).exp();
+            let a = i * n + j;
+            let b = j * n + i;
+            if affinity[a] == 0.0 && affinity[b] == 0.0 {
+                n_edges += 1;
+            }
+            if w > affinity[a] {
+                affinity[a] = w;
+                affinity[b] = w;
+            }
+        }
+    }
+    Ok((affinity, n_edges))
+}
+
+/// Directed Metropolis committor on the same k-NN graph: q(src)=0, q(sink)=1.
+pub fn landscape_committor(
+    points: ArrayView2<f64>,
+    energy: ArrayView1<f64>,
+    metric: &dyn Metric,
+    opts: &LandscapeOpts,
+    src: usize,
+    sink: usize,
+) -> Result<Array1<f64>> {
+    let n = points.nrows();
+    if src >= n || sink >= n || src == sink {
+        return Err(LandfoldError::Msg(
+            "landscape committor src and sink must be distinct indices".into(),
+        ));
+    }
+    let (aff, _) = knn_affinity(points, energy, metric, opts)?;
+    // Metropolis: keep undirected support, direct the walk by energy
+    let mut p = vec![0.0; n * n];
+    for i in 0..n {
+        let mut row = 0.0;
+        for j in 0..n {
+            if aff[i * n + j] == 0.0 {
+                continue;
+            }
+            let de = (energy[j] - energy[i]).max(0.0);
+            let w = (-de / opts.temperature).exp();
+            p[i * n + j] = w;
+            row += w;
+        }
+        if row > 0.0 {
+            for j in 0..n {
+                p[i * n + j] /= row;
+            }
+        }
+    }
+    let trans: Vec<usize> = (0..n).filter(|&i| i != src && i != sink).collect();
+    let m = trans.len();
+    let mut a = DMatrix::<f64>::zeros(m, m);
+    let mut rhs = nalgebra::DVector::<f64>::zeros(m);
+    for (ii, &i) in trans.iter().enumerate() {
+        a[(ii, ii)] = 1.0;
+        for (jj, &j) in trans.iter().enumerate() {
+            a[(ii, jj)] -= p[i * n + j];
+        }
+        rhs[ii] = p[i * n + sink];
+    }
+    let q_t = a.lu().solve(&rhs).ok_or_else(|| {
+        LandfoldError::Msg("landscape committor linear system is singular".into())
+    })?;
+    let mut q = Array1::<f64>::zeros(n);
+    q[sink] = 1.0;
+    for (ii, &i) in trans.iter().enumerate() {
+        q[i] = q_t[ii].clamp(0.0, 1.0);
+    }
+    Ok(q)
+}
+
+/// Coordinates (q, (E-Emin)/(Emax-Emin)) so the two funnels are the axes.
+pub fn landscape_qe(
+    points: ArrayView2<f64>,
+    energy: ArrayView1<f64>,
+    metric: &dyn Metric,
+    opts: &LandscapeOpts,
+    src: usize,
+    sink: usize,
+) -> Result<(Array2<f64>, Array1<f64>)> {
+    let q = landscape_committor(points, energy, metric, opts, src, sink)?;
+    let emin = energy.iter().copied().fold(f64::INFINITY, f64::min);
+    let emax = energy.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let span = (emax - emin).max(1e-12);
+    let n = points.nrows();
+    let mut xy = Array2::<f64>::zeros((n, 2));
+    for i in 0..n {
+        xy[(i, 0)] = q[i];
+        xy[(i, 1)] = (energy[i] - emin) / span;
+    }
+    Ok((xy, q))
+}
+
 /// Symmetric normalized Laplacian eigenmaps of the energy-weighted k-NN graph.
 pub fn landscape_embed(
     points: ArrayView2<f64>,
@@ -77,42 +197,7 @@ pub fn landscape_embed(
         ));
     }
 
-    let mut affinity = vec![0.0; n * n];
-    let mut n_edges = 0usize;
-    for i in 0..n {
-        let mut neigh: Vec<(f64, usize)> = Vec::with_capacity(n - 1);
-        for j in 0..n {
-            if i == j {
-                continue;
-            }
-            let a = points.row(i);
-            let b = points.row(j);
-            let a = a.as_slice().ok_or(LandfoldError::Empty)?;
-            let b = b.as_slice().ok_or(LandfoldError::Empty)?;
-            let d = metric.dist(a, b)?;
-            if !d.is_finite() || d < 0.0 {
-                return Err(LandfoldError::Msg(
-                    "landscape metric produced a non-finite distance".into(),
-                ));
-            }
-            neigh.push((d, j));
-        }
-        neigh.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for &(d, j) in neigh.iter().take(opts.knn) {
-            let de = (energy[i] - energy[j]).abs();
-            let cost = de + opts.lambda * d;
-            let w = (-cost / opts.temperature).exp();
-            let a = i * n + j;
-            let b = j * n + i;
-            if affinity[a] == 0.0 && affinity[b] == 0.0 {
-                n_edges += 1;
-            }
-            if w > affinity[a] {
-                affinity[a] = w;
-                affinity[b] = w;
-            }
-        }
-    }
+    let (affinity, n_edges) = knn_affinity(points, energy, metric, opts)?;
 
     let mut deg = vec![0.0; n];
     for i in 0..n {
@@ -192,5 +277,28 @@ mod tests {
         let sep = ((left[0] - right[0]).powi(2) + (left[1] - right[1]).powi(2)).sqrt();
         let d_in = ((xy[(0, 0)] - xy[(1, 0)]).powi(2) + (xy[(0, 1)] - xy[(1, 1)]).powi(2)).sqrt();
         assert!(sep > 2.0 * d_in, "sep={sep} din={d_in}");
+    }
+
+    #[test]
+    fn committor_splits_wells() {
+        let pts = array![
+            [0.0, 0.0],
+            [0.1, 0.0],
+            [0.0, 0.1],
+            [5.0, 0.0],
+            [5.1, 0.0],
+            [5.0, 0.1],
+        ];
+        let e = array![-2.0, -1.8, -1.7, -1.9, -1.7, -1.6];
+        let opts = LandscapeOpts {
+            knn: 2,
+            temperature: 0.2,
+            ..LandscapeOpts::default()
+        };
+        let q = landscape_committor(pts.view(), e.view(), &Euclid, &opts, 0, 3).expect("q");
+        assert!((q[0] - 0.0).abs() < 1e-12);
+        assert!((q[3] - 1.0).abs() < 1e-12);
+        assert!(q[1] < 0.5, "left well q={}", q[1]);
+        assert!(q[4] > 0.5, "right well q={}", q[4]);
     }
 }

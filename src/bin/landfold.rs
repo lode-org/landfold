@@ -13,7 +13,8 @@ use clap::{Parser, Subcommand};
 use landfold::{
     axis_embed, axis_fit, axis_project, bands_embed, basin_coordinate, coordination_histogram,
     embed, embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
-    landscape_embed, mds_from_points, nearfar_embed, pacmap_embed, pairwise, pairwise_euclid,
+    landscape_embed, landscape_qe, mds_from_points, nearfar_embed, pacmap_embed, pairwise,
+    pairwise_euclid,
     phate_embed, phate_project, predict_imq, project_many_report, read_points, select_landmarks,
     suggest_alpha, suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding,
     Euclid, Fisher, FreeEnergy, Histogram2d, IterOpts, LandmarkMode, LandscapeOpts, MdsMode,
@@ -188,6 +189,15 @@ enum Cmd {
         /// Landscape barrier penalty per unit high-D distance
         #[arg(long = "landscape-lambda", default_value_t = 2.0)]
         landscape_lambda: f64,
+        /// Emit (committor, scaled energy) instead of Laplacian eigenmaps
+        #[arg(long = "landscape-committor")]
+        landscape_committor: bool,
+        /// Committor source index (GM)
+        #[arg(long = "landscape-src", default_value_t = 0)]
+        landscape_src: usize,
+        /// Committor sink index (ico)
+        #[arg(long = "landscape-sink", default_value_t = 1)]
+        landscape_sink: usize,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -461,6 +471,9 @@ fn main() -> landfold::Result<()> {
             landscape_knn,
             landscape_t,
             landscape_lambda,
+            landscape_committor,
+            landscape_src,
+            landscape_sink,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             if bands {
@@ -682,6 +695,30 @@ fn main() -> landfold::Result<()> {
                     lambda: landscape_lambda,
                     lowdim: low,
                 };
+                if landscape_committor {
+                    let (coords, q) = landscape_qe(
+                        set.points.view(),
+                        earr.view(),
+                        metric.as_ref(),
+                        &lopts,
+                        landscape_src,
+                        landscape_sink,
+                    )?;
+                    write_points(&mut io::stdout().lock(), &coords, None)?;
+                    writeln!(
+                        io::stderr(),
+                        "# landscape-committor src {} sink {} q_median {:.4} q_std {:.4}",
+                        landscape_src,
+                        landscape_sink,
+                        q.mean().unwrap_or(0.0),
+                        {
+                            let m = q.mean().unwrap_or(0.0);
+                            (q.iter().map(|v| (v - m) * (v - m)).sum::<f64>() / q.len().max(1) as f64)
+                                .sqrt()
+                        }
+                    )?;
+                    return Ok(());
+                }
                 let (coords, rep) =
                     landscape_embed(set.points.view(), earr.view(), metric.as_ref(), &lopts)?;
                 write_points(&mut io::stdout().lock(), &coords, None)?;
