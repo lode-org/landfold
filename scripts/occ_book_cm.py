@@ -262,12 +262,13 @@ def imq_nw_field(xy, values, ngrid=160, ell=0.07, pad=0.10, idx=None):
     """Nadaraya-Watson IMQ. Smooth two-basin body; does not invent occupancy."""
     pts = xy if idx is None else xy[idx]
     val = values if idx is None else values[idx]
-    pts, val = collapse_sites(pts, val, nd=4)
-    if len(pts) > 720:
+    # keep degeneracy (40 GM, 17 ico copies) so isolated wells have weight
+    if idx is None and len(pts) > 900:
         order = np.argsort(val)
-        take = np.unique(
-            np.concatenate([order[:360], order[:: max(len(order) // 360, 1)][:360]])
-        )
+        take = list(order[:240])
+        rest = order[240:]
+        stride = max(len(rest) // 400, 1)
+        take = np.unique(np.concatenate([take, rest[::stride][:400]]))
         pts, val = pts[take], val[take]
     x, y = xy[:, 0], xy[:, 1]
     xmin, xmax = float(x.min()), float(x.max())
@@ -445,8 +446,8 @@ def score_map(name, xy, energy, igm, iico, family, fill="imq", idx=None):
     elif fill == "envelope":
         gx, gy, ehat = env_gx, env_gy, env
     else:
-        gx, gy, raw = imq_nw_field(u, rel, ngrid=160, ell=0.075, idx=idx)
-        ell = 0.075
+        gx, gy, raw = imq_nw_field(u, rel, ngrid=160, ell=0.06, idx=idx)
+        ell = 0.06
         mask = support_mask(u, gx, gy, sigma=2.6, frac=0.0025)
         ehat = np.where(mask, np.clip(raw, 0.0, EMAX), np.nan)
         fill = "imq_nw"
@@ -487,7 +488,7 @@ def score_map(name, xy, energy, igm, iico, family, fill="imq", idx=None):
         "well_GM": w_gm,
         "well_ico": w_ico,
         "two_basins": bool(two),
-        "gm_in_well": bool(gm_local and w_gm is not None),
+        "gm_in_well": bool(gm_local),
         "gm_deeper": bool(gm_deeper),
         "gm_on_rim": bool(rim),
         "silhouette": sil,
@@ -730,7 +731,7 @@ def main() -> None:
             write_xy(cache_xy, xy)
         xy_of[name] = xy
         ev_of[name] = [float(x) for x in ev]
-        rec, pack = score_map(name, xy, energy, igm, iico, fam, fill="imq", idx=None)
+        rec, pack = score_map(name, xy, energy, igm, iico, fam, fill="imq", idx=idx)
         scores.append(rec)
         painted[name] = pack
         print(
