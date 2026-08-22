@@ -251,6 +251,7 @@ def main() -> None:
     cb_o = fig.colorbar(mesh_o, ax=ax_o, fraction=0.046, pad=0.03)
     cb_o.set_label(r"$F/\varepsilon$  occupancy invert")
     cb_o.set_ticks([0.0, 0.5, 1.0, 1.5, 2.0])
+    cb_o.ax.yaxis.set_major_formatter(plt.FormatStrFormatter("%.1f"))
 
     mesh_s = paint_energy(ax_s, gx_s, gy_s, e_soft)
     mark(ax_s, xy_soft[gm], xy_soft[ico])
