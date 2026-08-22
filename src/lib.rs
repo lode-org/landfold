@@ -29,6 +29,7 @@ pub mod hist;
 pub mod io;
 pub mod iter;
 pub mod landmark;
+pub mod landscape;
 pub mod mds;
 pub mod nearfar;
 pub mod metric;
@@ -70,6 +71,7 @@ pub use landmark::{
     Landmarks, LandmarkMode, farthest_point, farthest_point_ifirst, select_landmarks,
     voronoi_weights,
 };
+pub use landscape::{LandscapeOpts, LandscapeReport, landscape_embed};
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use nearfar::{NearFarOpts, nearfar_embed};
 pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch, Wasserstein1};

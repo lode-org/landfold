@@ -13,12 +13,12 @@ use clap::{Parser, Subcommand};
 use landfold::{
     axis_embed, axis_fit, axis_project, bands_embed, basin_coordinate, coordination_histogram,
     embed, embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
-    mds_from_points, nearfar_embed, pacmap_embed, pairwise, pairwise_euclid, phate_embed,
-    phate_project, predict_imq, project_many_report, read_points, select_landmarks, suggest_alpha,
-    suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding, Euclid,
-    Fisher, FreeEnergy, Histogram2d, IterOpts, LandmarkMode, MdsMode, Metric, NearFarOpts,
-    PacmapOpts, Periodic, PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Stretch,
-    Transfer, Wasserstein1, FUN_SPEC_HELP, L1,
+    landscape_embed, mds_from_points, nearfar_embed, pacmap_embed, pairwise, pairwise_euclid,
+    phate_embed, phate_project, predict_imq, project_many_report, read_points, select_landmarks,
+    suggest_alpha, suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding,
+    Euclid, Fisher, FreeEnergy, Histogram2d, IterOpts, LandmarkMode, LandscapeOpts, MdsMode,
+    Metric, NearFarOpts, PacmapOpts, Periodic, PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere,
+    StochOpts, Stretch, Transfer, Wasserstein1, FUN_SPEC_HELP, L1,
 };
 
 #[derive(Parser, Debug)]
@@ -173,6 +173,21 @@ enum Cmd {
         /// Exact projection onto the contrast of two reference rows
         #[arg(long = "axis")]
         axis: Option<PathBuf>,
+        /// Laplacian eigenmaps of the energy-weighted k-NN graph
+        #[arg(long)]
+        landscape: bool,
+        /// One energy per input row (required by `--landscape`)
+        #[arg(long = "energy")]
+        energy: Option<PathBuf>,
+        /// Landscape k-NN (default 12)
+        #[arg(long = "landscape-knn", default_value_t = 12)]
+        landscape_knn: usize,
+        /// Landscape temperature in the Boltzmann edge weight
+        #[arg(long = "landscape-t", default_value_t = 0.5)]
+        landscape_t: f64,
+        /// Landscape barrier penalty per unit high-D distance
+        #[arg(long = "landscape-lambda", default_value_t = 2.0)]
+        landscape_lambda: f64,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -441,6 +456,11 @@ fn main() -> landfold::Result<()> {
             warm,
             far_weight,
             axis,
+            landscape,
+            energy,
+            landscape_knn,
+            landscape_t,
+            landscape_lambda,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             if bands {
@@ -623,6 +643,56 @@ fn main() -> landfold::Result<()> {
                     model.knn,
                     model.decay,
                     model.gamma
+                )?;
+                return Ok(());
+            }
+            if landscape {
+                let epath = energy.ok_or_else(|| {
+                    landfold::LandfoldError::Parse("--landscape needs --energy FILE".into())
+                })?;
+                let raw = std::fs::read_to_string(&epath)
+                    .map_err(|e| landfold::LandfoldError::Parse(format!("read --energy: {e}")))?;
+                let ev: Vec<f64> = raw
+                    .lines()
+                    .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+                    .map(|l| {
+                        l.split_whitespace()
+                            .next()
+                            .ok_or_else(|| {
+                                landfold::LandfoldError::Parse("empty --energy row".into())
+                            })
+                            .and_then(|s| {
+                                s.parse::<f64>().map_err(|e| {
+                                    landfold::LandfoldError::Parse(format!("--energy: {e}"))
+                                })
+                            })
+                    })
+                    .collect::<landfold::Result<Vec<_>>>()?;
+                let earr = ndarray::Array1::from(ev);
+                let metric: Box<dyn Metric> = if l1 {
+                    Box::new(L1)
+                } else if w1 {
+                    Box::new(Wasserstein1)
+                } else {
+                    Box::new(Euclid)
+                };
+                let lopts = LandscapeOpts {
+                    knn: landscape_knn,
+                    temperature: landscape_t,
+                    lambda: landscape_lambda,
+                    lowdim: low,
+                };
+                let (coords, rep) =
+                    landscape_embed(set.points.view(), earr.view(), metric.as_ref(), &lopts)?;
+                write_points(&mut io::stdout().lock(), &coords, None)?;
+                writeln!(
+                    io::stderr(),
+                    "# landscape knn {} T {} lambda {} edges {} evals {:?}",
+                    lopts.knn,
+                    lopts.temperature,
+                    lopts.lambda,
+                    rep.n_edges,
+                    rep.eigenvalues.as_slice().unwrap_or(&[])
                 )?;
                 return Ok(());
             }
