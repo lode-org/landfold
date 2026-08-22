@@ -3,13 +3,17 @@
 
 The labelled (d_GM, d_ico) plane is elja_occ_lj38_hungarian.png: GM is
 a satellite by construction. This script fills the unsupervised
-landmark MDS of the landmark-landmark Hungarian matrix D_ll.
+landmark MDS of D_ll.
 
-mds.xy is reused when present. Otherwise Torgerson of D_ll.dist plus
-Nyström from (d_GM, d_ico) if that plane exists.
+Embedding: Torgerson of unique D=0 cliques in D_ll (40 GM copies and
+17 ico copies collapse to two sites). If mds_unique.xy is absent it is
+computed from D_ll.dist + landmarks.idx, with Nyström of the rest from
+the (d_GM, d_ico) plane. Cached mds.xy (the copy-inflated satellite
+map) is only a fallback.
 
-The painted field is E - E_GM (IDW, no leftover occupancy). Candidate
-fills are scored for two basins, GM in a well, and connectivity.
+The painted field is E - E_GM (inducing-point IDW, no leftover
+occupancy). Candidate fills are scored for two basins, GM in a well,
+and a connected support.
 """
 
 from __future__ import annotations
@@ -23,7 +27,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
@@ -97,13 +100,33 @@ def farthest_indices(xy: np.ndarray, k: int, must) -> np.ndarray:
     return np.unique(np.asarray(chosen, dtype=int))
 
 
-def inducing(xy: np.ndarray, z: np.ndarray, n_ind: int = 110, n_low: int = 50):
-    pts, val = unique_lowest(xy, z)
+def basin_indices(pts: np.ndarray, val: np.ndarray, n_keep: int = 4, min_sep: float = 0.06, emax: float = 1.4):
+    """Deepest spatially separated minima (GM / ico plus at most a couple more)."""
     order = np.argsort(val)
-    low = order[: min(n_low, len(order))]
+    kept = []
+    for i in order:
+        if float(val[i]) > emax and kept:
+            break
+        if all(np.linalg.norm(pts[i] - pts[j]) > min_sep for j in kept):
+            kept.append(int(i))
+        if len(kept) >= n_keep:
+            break
+    return np.asarray(kept, dtype=int)
+
+
+def inducing(xy: np.ndarray, z: np.ndarray, n_ind: int = 90, n_low: int = 4, min_sep: float = 0.06):
+    pts, val = unique_lowest(xy, z)
     loc_gm = int(np.argmin(np.linalg.norm(pts - xy[GM], axis=1)))
     loc_ico = int(np.argmin(np.linalg.norm(pts - xy[ICO], axis=1)))
-    cover = farthest_indices(pts, min(n_ind, len(pts)), [loc_gm, loc_ico])
+    low = basin_indices(pts, val, n_keep=n_low, min_sep=min_sep)
+    # farthest cover of the high-E cloud only, so cover sites cannot mint wells
+    high = np.flatnonzero(val >= 1.6)
+    if len(high) >= 8:
+        seed = [0]
+        cover_h = farthest_indices(pts[high], min(n_ind, len(high)), seed)
+        cover = high[cover_h]
+    else:
+        cover = farthest_indices(pts, min(n_ind, len(pts)), [loc_gm, loc_ico])
     idx = np.unique(np.concatenate([cover, low, np.array([loc_gm, loc_ico])]))
     return pts[idx], np.clip(val[idx], 0.0, EMAX)
 
@@ -133,13 +156,14 @@ def energy_idw(
     pad=0.10,
     cutoff=None,
     pin=None,
-    n_ind: int = 110,
-    n_low: int = 50,
+    n_ind: int = 90,
+    n_low: int = 4,
+    min_sep: float = 0.06,
 ):
     """Inducing-point IDW of E-E_GM. Disk support, wells pinned."""
     finite = np.isfinite(xy).all(1)
     xy_f, z_f = xy[finite], z[finite]
-    pts, val = inducing(xy_f, z_f, n_ind=n_ind, n_low=n_low)
+    pts, val = inducing(xy_f, z_f, n_ind=n_ind, n_low=n_low, min_sep=min_sep)
     xmin, xmax = float(xy_f[:, 0].min()), float(xy_f[:, 0].max())
     ymin, ymax = float(xy_f[:, 1].min()), float(xy_f[:, 1].max())
     dx, dy = max(xmax - xmin, 1e-6), max(ymax - ymin, 1e-6)
@@ -173,7 +197,8 @@ def energy_idw(
     if pin:
         for pt, ev in pin:
             r2 = (xx - pt[0]) ** 2 + (yy - pt[1]) ** 2
-            near = r2 <= (0.018 * span) ** 2
+            rad = 0.038 * span if ev < 0.15 else 0.030 * span
+            near = r2 <= rad * rad
             field = np.where(near, float(ev), field)
     return gx, gy, field, float(cutoff)
 
@@ -546,13 +571,9 @@ def main() -> None:
     print("median nn", med_nn, "0.07*span", 0.07 * span)
 
     trials = [
-        ("ind_k6_p4_auto", dict(k=6, power=4.0, cutoff=None, n_ind=110, n_low=50)),
-        ("ind_k6_p4_s09", dict(k=6, power=4.0, cutoff=0.09 * span, n_ind=110, n_low=50)),
-        ("ind_k6_p4_s11", dict(k=6, power=4.0, cutoff=0.11 * span, n_ind=110, n_low=50)),
-        ("ind_k6_p4_s13", dict(k=6, power=4.0, cutoff=0.13 * span, n_ind=120, n_low=60)),
-        ("ind_k8_p4_s11", dict(k=8, power=4.0, cutoff=0.11 * span, n_ind=96, n_low=40)),
-        ("ind_k6_p4_s11_dense", dict(k=6, power=4.0, cutoff=0.11 * span, n_ind=160, n_low=80)),
-        ("ind_k6_p3_s11", dict(k=6, power=3.0, cutoff=0.11 * span, n_ind=110, n_low=50)),
+        ("ind_k6_p4_b2", dict(k=6, power=4.0, cutoff=0.11 * span, n_ind=80, n_low=2)),
+        ("ind_k6_p4_b3", dict(k=6, power=4.0, cutoff=0.10 * span, n_ind=90, n_low=3)),
+        ("ind_k6_p4_b2_auto", dict(k=6, power=4.0, cutoff=None, n_ind=80, n_low=2)),
     ]
 
     scores = []

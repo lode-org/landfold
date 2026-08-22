@@ -12,6 +12,9 @@ does the cheap Cameron plane and a landmark Nyström instead:
   landmarks     lowest 100 E plus 100 random, Hungarian among them,
                 Torgerson MDS, Nyström / IDW of the rest.
 
+The MDS energy fill is occ_book_hungarian_mds.py (unique-landmark
+Torgerson of D_ll). This script paints the labelled (d_GM, d_ico) plane.
+
 The (d_GM, d_ico) plane is the structure-space committor analogue.
 Energy is an IDW (p=4) interpolant of E - E_GM, pinned at the two
 wells (no leftover occupancy).
@@ -602,23 +605,8 @@ def main() -> None:
     plt.close(fig)
     print("wrote", FIG)
 
-    # landmark MDS energy fill as a companion in DEST only
-    gx2, gy2, zg2, xx2, yy2, gp2_gm, gp2_ico, _, _ = energy_grid(
-        nyst, energy, gm_idx, ico_idx
-    )
-    fig, ax = plt.subplots(figsize=(5.8, 5.0), facecolor="white")
-    mesh = paint_energy(ax, xx2, yy2, zg2)
-    mark(ax, nyst[gm_idx], nyst[ico_idx])
-    ax.set_xlabel(r"$s_1$  (landmark MDS)")
-    ax.set_ylabel(r"$s_2$")
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_title(r"landmark Hungarian MDS  $E-E_{\mathrm{GM}}$")
-    fig.colorbar(mesh, ax=ax, fraction=0.046, pad=0.04).set_label(
-        r"$E-E_{\mathrm{GM}}/\varepsilon$"
-    )
-    fig.tight_layout()
-    fig.savefig(DEST / "elja_occ_lj38_hungarian_mds.png", dpi=170, facecolor="white")
-    plt.close(fig)
+    # MDS energy fill lives in occ_book_hungarian_mds.py (unique-landmark
+    # Torgerson of D_ll). Do not clobber that figure from the labelled plane.
 
     scores = {
         "n": int(n),
@@ -631,8 +619,8 @@ def main() -> None:
         "well_depth_ico": well_ico,
         "gp_at_GM": gp_gm,
         "gp_at_ico": gp_ico,
-        "gp_mds_at_GM": gp2_gm,
-        "gp_mds_at_ico": gp2_ico,
+        "gp_mds_at_GM": None,
+        "gp_mds_at_ico": None,
         "D_GM_ico": d_cross,
         "d_GM": {
             "gm": float(d_gm[gm_idx]),
