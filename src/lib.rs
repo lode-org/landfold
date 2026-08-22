@@ -72,7 +72,8 @@ pub use landmark::{
     voronoi_weights,
 };
 pub use landscape::{
-    LandscapeOpts, LandscapeReport, landscape_committor, landscape_embed, landscape_qe,
+    LandscapeOpts, LandscapeReport, landscape_attractors, landscape_committor, landscape_embed,
+    landscape_qe,
 };
 pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
 pub use nearfar::{NearFarOpts, nearfar_embed};

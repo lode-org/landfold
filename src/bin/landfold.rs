@@ -13,7 +13,8 @@ use clap::{Parser, Subcommand};
 use landfold::{
     axis_embed, axis_fit, axis_project, bands_embed, basin_coordinate, coordination_histogram,
     embed, embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
-    landscape_embed, landscape_qe, mds_from_points, nearfar_embed, pacmap_embed, pairwise,
+    landscape_attractors, landscape_embed, landscape_qe, mds_from_points, nearfar_embed,
+    pacmap_embed, pairwise,
     pairwise_euclid,
     phate_embed, phate_project, predict_imq, project_many_report, read_points, select_landmarks,
     suggest_alpha, suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding,
@@ -198,6 +199,12 @@ enum Cmd {
         /// Committor sink index (ico)
         #[arg(long = "landscape-sink", default_value_t = 1)]
         landscape_sink: usize,
+        /// MDS of steepest-descent attractors, GM at the origin
+        #[arg(long = "landscape-attractors")]
+        landscape_attractors: bool,
+        /// Within-basin HD residual scale on the attractor map
+        #[arg(long = "landscape-residual", default_value_t = 0.15)]
+        landscape_residual: f64,
     },
     /// Project new high-D rows into a fitted embedding (grid + local refine)
     Project {
@@ -474,6 +481,8 @@ fn main() -> landfold::Result<()> {
             landscape_committor,
             landscape_src,
             landscape_sink,
+            landscape_attractors,
+            landscape_residual,
         } => {
             let set = read_points(io::stdin().lock(), high, weighted)?;
             if bands {
@@ -695,6 +704,25 @@ fn main() -> landfold::Result<()> {
                     lambda: landscape_lambda,
                     lowdim: low,
                 };
+                if landscape_attractors {
+                    let (coords, rep) = landscape_attractors(
+                        set.points.view(),
+                        earr.view(),
+                        metric.as_ref(),
+                        &lopts,
+                        landscape_src,
+                        landscape_residual,
+                    )?;
+                    write_points(&mut io::stdout().lock(), &coords, None)?;
+                    writeln!(
+                        io::stderr(),
+                        "# landscape-attractors n_attr {:.0} edges {} residual {}",
+                        rep.eigenvalues[0],
+                        rep.n_edges,
+                        landscape_residual
+                    )?;
+                    return Ok(());
+                }
                 if landscape_committor {
                     let (coords, q) = landscape_qe(
                         set.points.view(),
