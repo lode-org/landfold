@@ -238,6 +238,8 @@ enum Cmd {
         bands: bool,
         #[arg(long = "w1")]
         w1: bool,
+        #[arg(long)]
+        l1: bool,
         #[arg(long = "knn", default_value_t = 10)]
         knn: usize,
         /// Reuse `--axis` refs; residual PCs come from `--high-file`
@@ -815,6 +817,7 @@ fn main() -> landfold::Result<()> {
             nearfar,
             bands,
             w1,
+            l1,
             knn,
             axis,
         } => {
@@ -851,7 +854,9 @@ fn main() -> landfold::Result<()> {
                 false,
             )?;
             if pacmap || nearfar || bands {
-                let metric: Box<dyn Metric> = if w1 {
+                let metric: Box<dyn Metric> = if l1 {
+                    Box::new(L1)
+                } else if w1 {
                     Box::new(Wasserstein1)
                 } else {
                     Box::new(Euclid)
@@ -917,6 +922,10 @@ fn main() -> landfold::Result<()> {
                 return Err(landfold::LandfoldError::Parse(
                     "--fisher needs --stretch refs".into(),
                 ));
+            } else if l1 {
+                Box::new(L1)
+            } else if w1 {
+                Box::new(Wasserstein1)
             } else if dot {
                 Box::new(Dot)
             } else if sphere != 0.0 {
