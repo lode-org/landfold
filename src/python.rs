@@ -413,6 +413,10 @@ fn transfers() -> Vec<(String, String)> {
             "Non-saturating asinh(x/sigma)/(2 asinh 1). Spec: asinh,sigma".into(),
         ),
         (
+            "twoscale".into(),
+            "Ceriotti on [0,sigma], asinh tail past sigma. Spec: ts,sigma,a,b".into(),
+        ),
+        (
             "multiscale".into(),
             "Extra mean of IMQ at several scales. Spec: ms,s1,s2,...".into(),
         ),

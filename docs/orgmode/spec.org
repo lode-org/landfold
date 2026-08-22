@@ -56,7 +56,10 @@ Ceriotti reproduction is =sigma,a,b= or =ceriotti,sigma,a,b= (same
 =xsigmoid=). The extra non-saturating arm is =asinh,σ=:
 
 =F(x) = asinh(x/σ) / (2 asinh 1)=, so =F(σ) = 1/2= and
-=F= is unbounded. Far distances stay ordered. The extra
+=F= is unbounded. Far distances stay ordered. The two-scale
+arm is =ts,σ,a,b=: Ceriotti =(σ,a,b)= on =[0,σ]= and the
+asinh tail past =σ=, matched at =F(σ)=1/2=. Optional
+=ts,σ,a,b,σ_a= uses a separate asinh scale. The extra
 MethodsX arm is =imq,σ=:
 
 =F(x) = 1 - c / sqrt(c^2 + x^2)= with =c = σ/√3=, so =F(σ) = 1/2=.

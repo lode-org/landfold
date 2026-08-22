@@ -21,12 +21,12 @@ use crate::error::{LandfoldError, Result};
 ///
 /// Ceriotti generalised sigmoid (`sigma,a,b` or `ceriotti,sigma,a,b`)
 /// is the PNAS 2011 / JCTC 2013 path. `identity`, `sigma`, `sigma,n`,
-/// and warp match the C++ `dimred` parser. `imq` / `ms` stay available
-/// but are not the reproduction default.
+/// and warp match the C++ `dimred` parser. `imq` / `ms` / `ts` stay
+/// available but are not the reproduction default.
 pub const FUN_SPEC_HELP: &str = "\
 Ceriotti sigmoid (PNAS/JCTC): sigma,a,b or ceriotti,sigma,a,b. \
 Also identity | sigma | sigma,n | sigma,aD,bD,ad,bd (C++ dimred). \
-imq,sigma, asinh,sigma, and ms,s1,s2,... are extra.";
+imq,sigma, asinh,sigma, ms,s1,s2,..., and ts,sigma,a,b are extra.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
@@ -39,6 +39,7 @@ pub enum TransferMode {
     Imq,
     Multiscale,
     Asinh,
+    Twoscale,
 }
 
 /// High-D or low-D distance transfer function with analytic derivative.
@@ -158,6 +159,23 @@ impl Transfer {
         Self::from_parts(TransferMode::Asinh, vec![inv, norm])
     }
 
+    /// Two-scale: Ceriotti xsigmoid near, asinh far, same σ.
+    ///
+    /// `F = F_c` on `[0, σ]` and the asinh tail past `σ`, matched
+    /// at `F(σ) = 1/2`.
+    pub fn twoscale(sigma: f64, a: f64, b: f64) -> Result<Self> {
+        Self::twoscale_sigmas(sigma, a, b, sigma)
+    }
+
+    /// Two-scale blend of Ceriotti `(σ_c, a, b)` and asinh at `σ_a`.
+    pub fn twoscale_sigmas(sigma_c: f64, a: f64, b: f64, sigma_a: f64) -> Result<Self> {
+        let cer = Self::xsigmoid(sigma_c, a, b)?;
+        let ash = Self::asinh(sigma_a)?;
+        let mut pars = cer.pars;
+        pars.extend_from_slice(&ash.pars);
+        Self::from_parts(TransferMode::Twoscale, pars)
+    }
+
     /// Mean of IMQ transfers at several scales (PNAS 2011 hierarchical map).
     pub fn multiscale(sigmas: &[f64]) -> Result<Self> {
         if sigmas.len() < 2 {
@@ -246,6 +264,32 @@ impl Transfer {
                 .map_err(|e| LandfoldError::Parse(format!("fun spec `{spec}`: {e}")))?;
             return Self::imq(sigma);
         }
+        if lower == "ts" || lower == "twoscale" {
+            return Err(LandfoldError::TransferParams(
+                "ts needs sigma,a,b (example: ts,6,8,8)",
+            ));
+        }
+        if let Some(rest) = lower
+            .strip_prefix("ts,")
+            .or_else(|| lower.strip_prefix("twoscale,"))
+        {
+            let parts: Result<Vec<f64>> = rest
+                .split(',')
+                .map(|s| {
+                    s.trim()
+                        .parse::<f64>()
+                        .map_err(|e| LandfoldError::Parse(format!("fun spec `{spec}`: {e}")))
+                })
+                .collect();
+            let parts = parts?;
+            return match parts.as_slice() {
+                [s, a, b] => Self::twoscale(*s, *a, *b),
+                [s, a, b, sa] => Self::twoscale_sigmas(*s, *a, *b, *sa),
+                _ => Err(LandfoldError::TransferParams(
+                    "ts needs sigma,a,b or sigma,a,b,sigma_asinh",
+                )),
+            };
+        }
         if lower == "ms" || lower == "multi" {
             return Err(LandfoldError::TransferParams(
                 "ms needs at least two sigmas (example: ms,2.8,4.4,6.3)",
@@ -289,7 +333,7 @@ impl Transfer {
             [s, a, b] => Self::xsigmoid(*s, *a, *b),
             [s, a, b, al, bl] => Self::warp(*s, *a, *b, *al, *bl),
             _ => Err(LandfoldError::TransferParams(
-                "fun spec must be ceriotti,sigma,a,b | imq,sigma | identity | sigma | sigma,n | sigma,a,b | sigma,aD,bD,ad,bd",
+                "fun spec must be ceriotti,sigma,a,b | imq,sigma | asinh,sigma | ts,sigma,a,b | identity | sigma | sigma,n | sigma,a,b | sigma,aD,bD,ad,bd",
             )),
         }
     }
@@ -322,6 +366,7 @@ impl Transfer {
             TransferMode::Warp => "warp",
             TransferMode::Multiscale => "multiscale",
             TransferMode::Asinh => "asinh",
+            TransferMode::Twoscale => "twoscale",
         }
     }
 
@@ -371,6 +416,7 @@ impl Transfer {
                 }
                 (value / n, deriv / n)
             }
+            TransferMode::Twoscale => twoscale_fdf(&self.pars, x),
             TransferMode::Warp => {
                 let (fx, dfx) = xsigmoid_fdf(&self.pars, x);
                 let gx = warp_g(&self.pars, fx);
@@ -410,6 +456,21 @@ fn pow_exp(base: f64, exp: f64) -> f64 {
     } else {
         base.powf(exp)
     }
+}
+
+/// Ceriotti `pars[0..5]` on `[0, σ_c]`, asinh tail past `σ_c`.
+/// The tail is `F_a(x) - F_a(σ_c) + 1/2` so `F` is continuous at `σ_c`.
+fn twoscale_fdf(pars: &[f64], x: f64) -> (f64, f64) {
+    let sigma = 1.0 / pars[0];
+    if x <= sigma {
+        return xsigmoid_fdf(&pars[..5], x);
+    }
+    let u = x * pars[5];
+    let fa = u.asinh() * pars[6];
+    let dfa = pars[5] * pars[6] / (1.0 + u * u).sqrt();
+    let u0 = sigma * pars[5];
+    let fa0 = u0.asinh() * pars[6];
+    (fa - fa0 + 0.5, dfa)
 }
 
 fn xsigmoid_fdf(pars: &[f64], x: f64) -> (f64, f64) {
@@ -655,6 +716,47 @@ mod tests {
         assert_eq!(t.family(), "asinh");
         assert_relative_eq!(t.f(5.0), 0.5, epsilon = 1e-14);
         assert!(Transfer::from_cli("asinh,0").is_err());
+    }
+
+    #[test]
+    fn twoscale_is_ceriotti_near_and_asinh_far() {
+        let t = Transfer::from_cli("ts,6,8,8").unwrap();
+        assert_eq!(t.family(), "twoscale");
+        let c = Transfer::xsigmoid(6.0, 8.0, 8.0).unwrap();
+        let a = Transfer::asinh(6.0).unwrap();
+        assert_relative_eq!(t.f(6.0), 0.5, epsilon = 1e-14);
+        assert_relative_eq!(t.f(1.0), c.f(1.0), epsilon = 1e-14);
+        assert_relative_eq!(t.f(40.0), a.f(40.0), epsilon = 1e-14);
+        assert!(t.f(60.0) > 1.0);
+        assert!(t.f(60.0) > t.f(6.0));
+        let mut prev = t.f(0.0);
+        for k in 1..80 {
+            let next = t.f(0.25 * k as f64);
+            assert!(next >= prev);
+            prev = next;
+        }
+        assert!(Transfer::from_cli("ts").is_err());
+        assert!(Transfer::from_cli("ts,6,8").is_err());
+        assert!(Transfer::twoscale(0.0, 8.0, 8.0).is_err());
+    }
+
+    #[test]
+    fn twoscale_finite_difference() {
+        let t = Transfer::twoscale(2.0, 4.0, 3.0).unwrap();
+        for x in [0.7, 1.3, 3.5] {
+            let h = 1e-7;
+            let fd = (t.f(x + h) - t.f(x - h)) / (2.0 * h);
+            assert_relative_eq!(t.df(x), fd, epsilon = 1e-7);
+        }
+    }
+
+    #[test]
+    fn twoscale_far_sigma_uses_the_asinh_scale() {
+        let t = Transfer::from_cli("ts,2,4,2,8").unwrap();
+        let a = Transfer::asinh(8.0).unwrap();
+        let fa0 = a.f(2.0);
+        assert_relative_eq!(t.f(40.0), a.f(40.0) - fa0 + 0.5, epsilon = 1e-14);
+        assert!(t.f(40.0) > t.f(2.0));
     }
 
     #[test]

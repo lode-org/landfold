@@ -101,6 +101,10 @@ interpolation of that landmark map.
 \(F(x)=\mathrm{asinh}(x/\sigma)/(2\,\mathrm{asinh}\,1)\), so \(F(\sigma)=1/2\)
 and far distances stay ordered. Use it on the published landmark
 path (`--init-f --preopt`), not as a polish of a Ceriotti map.
+`ts,sigma,a,b` is Ceriotti `(sigma,a,b)` on `[0, σ]` and the
+asinh tail past `σ`, matched at `F(σ)=1/2`. Near pairs follow
+the PNAS sigmoid; far distances stay ordered.
+`--midweight` restricts χ to mid-scale pairs `F(D)(1-F(D))`.
 The quality figure is the PNAS joint \(P(D,d)\).
 
 `landfold field --refs a,b --low-file chi.ld` is the MethodsX field
