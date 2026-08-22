@@ -81,6 +81,18 @@ python3 energy_idw.py --xy soap.proj --energy book.energy \
 Compact-support inverse-distance weighting of \(E-E_{\mathrm{GM}}\)
 (=scripts/occ_book_idw_fill.py=). Occupancy invert is not this field.
 
+* Dual-funnel energy layout
+
+The basin visual of the 4042 book is a SHEAP-style dual funnel of
+the structure kNN, filled with the same energy IDW
+(=scripts/occ_book_sheap.py=, =scripts/occ_book_sheap_idw.py=).
+The GM sits in a well at \(E-E_{\mathrm{GM}}=0\); the icosahedral
+minimum sits in a second well at \(0.676\,\varepsilon\). Leftover
+occupancy invert of n4..n13 \(\chi\) puts those floors the other
+way around (\(F(\mathrm{ico})=0.01\), \(F(\mathrm{GM})=0.32\)).
+
+Compare =docs/ceriotti-figs/elja_occ_lj38_occ_vs_sheap.png=.
+
 * Run
 
 #+begin_src sh
