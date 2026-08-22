@@ -737,6 +737,8 @@ fn main() -> landfold::Result<()> {
                 ));
             } else if l1 {
                 Box::new(L1)
+            } else if w1 {
+                Box::new(Wasserstein1)
             } else if dot {
                 Box::new(landfold::Dot)
             } else if sphere != 0.0 {

@@ -87,12 +87,18 @@ def main() -> None:
     s1 = scores(D, d1)
     print("Ceriotti protein pear_far spear_far rm_near", s0)
     print("asinh protein pear_far spear_far rm_near", s1)
-    mx = max(
-        float(np.quantile(D, 0.99)),
-        float(np.quantile(d0, 0.99)),
-        float(np.quantile(d1, 0.99)),
-    )
-    print("shared P(D,d) axis max", mx)
+
+    def xsig(x, sigma, a, b):
+        u = np.clip(np.asarray(x, dtype=float) / sigma, 0.0, None)
+        return 1.0 - (1.0 + (2.0 ** (a / b) - 1.0) * np.power(u, a)) ** (-b / a)
+
+    def asinh_f(x, sigma=6.0):
+        return np.arcsinh(np.asarray(x, dtype=float) / sigma) / (2.0 * np.arcsinh(1.0))
+
+    # Residual space of chi: F(D) vs f(d). Raw D vs d hides asinh because
+    # HD D ~ 70 and asinh LD d ~ 12.
+    FD0, fd0 = xsig(D, 6.0, 8.0, 8.0), xsig(d0, 6.0, 2.0, 8.0)
+    FD1, fd1 = asinh_f(D), asinh_f(d1)
     native = hd[np.argmin(np.linalg.norm(pub, axis=1))]
     color = period_l2(hd, native)
     vlo, vhi = np.quantile(color, [0.02, 0.98])
@@ -115,8 +121,20 @@ def main() -> None:
     ax01 = fig.add_subplot(gs[0, 1])
     ax10 = fig.add_subplot(gs[1, 0])
     ax11 = fig.add_subplot(gs[1, 1])
-    caf.pd_hist(ax00, D, d0, r"Ceriotti $6,8,8$ $P(D,d)$", mx=mx)
-    caf.pd_hist(ax01, D, d1, r"asinh $P(D,d)$", mx=mx)
+    # Each panel uses its own range. A shared max of ~72 shrinks the
+    # asinh cloud to a corner and hides the diagonal.
+    caf.pd_hist(
+        ax00,
+        FD0,
+        fd0,
+        rf"Ceriotti $F(D),f(d)$  raw far Spearman {s0[1]:.3f}",
+    )
+    caf.pd_hist(
+        ax01,
+        FD1,
+        fd1,
+        rf"asinh $F(D),f(d)$  raw far Spearman {s1[1]:.3f}",
+    )
     sc = None
     for ax, xy, title in (
         (ax10, pub, r"Ceriotti $6,8,8$ / $6,2,8$"),
