@@ -6,6 +6,12 @@
 //! `exp(-(|E_i-E_j| + lambda * D_ij) / T)`, and take the first two nontrivial
 //! eigenvectors of the symmetric normalized Laplacian (Belkin and Niyogi,
 //! *Neural Comput.* **15**, 1373 (2003)).
+//!
+//! Do not flood the graph with a median L1 cut. On the Elja LJ38 book that
+//! cut takes half of all pairs, ico becomes a degree-200 hub, and an
+//! undirected committor dumps 399/400 families to ico. k-NN alone keeps the
+//! steepest-descent split (GM 16, ico 52, other 332). The GM funnel is
+//! small. Leftover-well occupancy cannot make it the deepest well.
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
