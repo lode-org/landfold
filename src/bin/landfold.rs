@@ -86,6 +86,9 @@ enum Cmd {
         /// Classical MDS of F(D) rather than raw D
         #[arg(long = "init-f")]
         init_transformed: bool,
+        /// Polish the sketch-map by Kruskal stress of the raw distances
+        #[arg(long = "stress-faithful")]
+        stress_faithful: bool,
         /// Decreasing HD/LD σ, warm-started (last value is the published scale)
         #[arg(long = "continue-sigma")]
         continue_sigma: Option<String>,
@@ -442,6 +445,7 @@ fn main() -> landfold::Result<()> {
             plumed,
             midweight,
             init_transformed,
+            stress_faithful,
             continue_sigma,
             stretch,
             alpha,
@@ -829,6 +833,7 @@ fn main() -> landfold::Result<()> {
             opts.gopt = gopt;
             opts.midweight = midweight;
             opts.init_transformed = init_transformed;
+            opts.stress_faithful = stress_faithful;
             if let Some(spec) = grid {
                 opts.global = Some(ProjOpts::from_cli(&spec)?);
             }

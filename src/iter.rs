@@ -50,6 +50,9 @@ pub struct IterOpts {
     pub pair_weights: Option<Array2<f64>>,
     /// Classical MDS of `F(D)` rather than `D`.
     pub init_transformed: bool,
+    /// After the sketch-map fit, minimise the Kruskal stress of the raw
+    /// distances. The published sigmoid mismatch stays the default.
+    pub stress_faithful: bool,
 }
 
 impl Default for IterOpts {
@@ -68,6 +71,7 @@ impl Default for IterOpts {
             midweight: false,
             pair_weights: None,
             init_transformed: false,
+            stress_faithful: false,
         }
     }
 }
@@ -272,18 +276,37 @@ pub fn embed(
     if opts.center {
         center_in_place(&mut out, weights)?;
     }
+    let mut fitted_imix = opts.imix;
+    let mut fitted_value = report.value;
+    if opts.stress_faithful {
+        let metric = Stress::try_new(
+            hd.clone(),
+            hd.clone(),
+            Transfer::identity(),
+            1.0,
+            w1.clone(),
+            None,
+        )?;
+        report = run_solver(&metric, pack_low(&out).view(), opts, &opts.cg)?;
+        unpack_low(&report.coords, n, opts.lowdim, &mut out);
+        if opts.center {
+            center_in_place(&mut out, weights)?;
+        }
+        fitted_imix = 1.0;
+        fitted_value = report.value;
+    }
     let weights = w1.unwrap_or_else(|| Array1::ones(n));
     Ok((
         Embedding {
             high: points.to_owned(),
             low: out,
             weights,
-            stress: report.value,
+            stress: fitted_value,
             hd,
             fhd,
             tfun_hd: opts.tfun_hd.clone(),
             tfun_ld: opts.tfun_ld.clone(),
-            imix: opts.imix,
+            imix: fitted_imix,
         },
         report,
     ))
@@ -654,5 +677,56 @@ mod tests {
         .unwrap();
         assert!(emb2.stress.is_finite());
         assert_eq!(emb2.low.nrows(), 6);
+    }
+
+    fn metric_stress(high: &ndarray::Array2<f64>, low: &ndarray::Array2<f64>) -> f64 {
+        let n = high.nrows();
+        let mut total = 0.0;
+        for i in 0..n {
+            for j in 0..i {
+                let mut dh = 0.0;
+                let mut dl = 0.0;
+                for h in 0..high.ncols() {
+                    let delta = high[(i, h)] - high[(j, h)];
+                    dh += delta * delta;
+                }
+                for h in 0..low.ncols() {
+                    let delta = low[(i, h)] - low[(j, h)];
+                    dl += delta * delta;
+                }
+                let gap = dh.sqrt() - dl.sqrt();
+                total += gap * gap;
+            }
+        }
+        total
+    }
+
+    #[test]
+    fn stress_faithful_keeps_the_long_gap() {
+        let points = array![[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [8.0, 0.0]];
+        let mut sketch = IterOpts {
+            lowdim: 2,
+            tfun_hd: Transfer::xsigmoid(1.0, 8.0, 2.0).unwrap(),
+            tfun_ld: Transfer::xsigmoid(1.0, 2.0, 2.0).unwrap(),
+            init_transformed: true,
+            center: true,
+            ..IterOpts::default()
+        };
+        sketch.cg.maxiter = 40;
+        let plain = embed(points.view(), &Euclid, &sketch, None, None, None)
+            .unwrap()
+            .0;
+        let mut faithful = sketch.clone();
+        faithful.stress_faithful = true;
+        let polished = embed(points.view(), &Euclid, &faithful, None, None, None)
+            .unwrap()
+            .0;
+        let plain_stress = metric_stress(&points, &plain.low);
+        let faithful_stress = metric_stress(&points, &polished.low);
+        assert!(
+            faithful_stress < plain_stress,
+            "faithful {faithful_stress} sketch-map {plain_stress}"
+        );
+        assert!((polished.imix - 1.0).abs() < 1e-12);
     }
 }
