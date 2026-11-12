@@ -189,7 +189,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn plumed_dump_has_ceriotti_blocks() {
         let high = array![[1.0, 2.0], [3.0, 4.0]];
         let low = array![[0.1, 0.2], [0.3, 0.4]];
