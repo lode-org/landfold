@@ -158,5 +158,10 @@ fn published_pah_example_matches_reference_partition() {
         same_partition(default_fit.labels()),
         same_partition(&reference)
     );
-    assert!((default_fit.bandwidth() - 0.024_402_923_154_637_893).abs() < 1.0e-15);
+    assert!(
+        (default_fit.bandwidth() - 0.023_879_093_905_603_475).abs() < 1.0e-15,
+        "bandwidth={} dimension={}",
+        default_fit.bandwidth(),
+        default_fit.embedded().ncols()
+    );
 }

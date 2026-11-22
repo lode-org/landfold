@@ -298,7 +298,7 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
     }
     for index in 1..(bins - 1) {
         if density[index] < density[index - 1] && density[index] <= density[index + 1] {
-            return Ok((index as f64 + 0.5) * bin_width);
+            return Ok(index as f64 * step + 0.5 * bin_width);
         }
     }
     Ok(max_distance)

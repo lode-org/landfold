@@ -121,8 +121,6 @@ pub fn broken_stick_dimension(eigenvalues: &[f64]) -> usize {
         let expected = ((axis + 1)..=n).map(|k| 1.0 / k as f64).sum::<f64>() / n as f64;
         if eigenvalue.max(0.0) / total >= expected {
             retained += 1;
-        } else {
-            break;
         }
     }
     retained.max(1)
