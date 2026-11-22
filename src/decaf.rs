@@ -407,13 +407,26 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
     }
-    for (offset, window) in density.windows(3).enumerate() {
-        if window[1].total_cmp(&window[0]).is_lt() && window[1].total_cmp(&window[2]).is_le() {
-            let index = offset
-                .checked_add(1)
-                .expect("a density-window offset always has a successor");
-            return Ok(index as f64 * step + 0.5 * bin_width);
+    let mut index = 1;
+    while index + 1 < density.len() {
+        if density[index].total_cmp(&density[index - 1]).is_lt() {
+            let mut plateau_end = index;
+            while plateau_end + 1 < density.len()
+                && density[plateau_end + 1].total_cmp(&density[index]).is_eq()
+            {
+                plateau_end += 1;
+            }
+            if plateau_end + 1 < density.len()
+                && density[plateau_end]
+                    .total_cmp(&density[plateau_end + 1])
+                    .is_lt()
+            {
+                let minimum = (index + plateau_end) as f64 * 0.5;
+                return Ok(minimum * step + 0.5 * bin_width);
+            }
+            index = plateau_end;
         }
+        index += 1;
     }
     Ok(max_distance)
 }
