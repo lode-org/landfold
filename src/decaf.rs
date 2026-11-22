@@ -529,12 +529,12 @@ mod tests {
     }
 
     #[test]
-    fn representatives_are_observed_members_nearest_their_modes() {
-        let points = array![[0.0], [0.2], [5.0]];
-        let centers = array![[0.15], [5.0]];
+    fn representatives_are_within_class_medoids() {
+        let points = array![[0.0], [0.2], [2.0], [5.0]];
+        let centers = array![[1.8], [5.0]];
         assert_eq!(
-            medoid_representatives(points.view(), centers.view(), &[0, 0, 1]),
-            vec![1, 2]
+            medoid_representatives(points.view(), centers.view(), &[0, 0, 0, 1]),
+            vec![1, 3]
         );
     }
 }
