@@ -30,6 +30,10 @@ fn broken_stick_matches_hand_computed_four_eigenvalue_example() {
     // broken-stick expectations are [25/48, 13/48, 7/48, 3/48], so exactly
     // the first two components survive Eq. 5.
     assert_eq!(broken_stick_dimension(&[6.0, 3.0, 1.0, 0.0]), 2);
+
+    // Eq. 5 counts every component above its corresponding broken-stick
+    // expectation; it does not stop at the first component below expectation.
+    assert_eq!(broken_stick_dimension(&[0.55, 0.20, 0.18, 0.07]), 3);
 }
 
 #[test]
@@ -146,4 +150,13 @@ fn published_pah_example_matches_reference_partition() {
     .unwrap();
     assert_eq!(fitted.n_classes(), 11);
     assert_eq!(same_partition(fitted.labels()), same_partition(&reference));
+
+    let default_fit =
+        landfold::decaf_from_dissimilarity(distances.view(), &DecafOptions::default()).unwrap();
+    assert_eq!(default_fit.n_classes(), 11);
+    assert_eq!(
+        same_partition(default_fit.labels()),
+        same_partition(&reference)
+    );
+    assert!((default_fit.bandwidth() - 0.024_402_923_154_637_893).abs() < 1.0e-15);
 }
