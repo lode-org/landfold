@@ -526,6 +526,37 @@ mod tests {
     }
 
     #[test]
+    fn mean_shift_uses_the_squared_bandwidth_as_its_flat_kernel_radius() {
+        let points = array![[0.0], [0.1], [0.5], [0.6]];
+        let centers = mean_shift(points.view(), 0.2, 20, 1.0e-12).unwrap();
+        assert_eq!(centers, array![[0.05], [0.55]]);
+    }
+
+    #[test]
+    fn published_pd211_embedding_matches_reference_bandwidth_and_partition() {
+        let coordinates: Vec<f64> =
+            include_str!("../tests/goldens/decaf_pd211_embedded.txt")
+                .split_whitespace()
+                .map(|value| value.parse().unwrap())
+                .collect();
+        let points = Array2::from_shape_vec((coordinates.len(), 1), coordinates).unwrap();
+        let reference: Vec<usize> = include_str!("../tests/goldens/decaf_pd211_labels.txt")
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+
+        let bandwidth = paper_bandwidth(points.view(), 0.0092).unwrap();
+        assert!((bandwidth - 0.029_146_398_984_356_506).abs() < 1.0e-15);
+        let centers = mean_shift(points.view(), bandwidth, 800, 1.0e-6).unwrap();
+        let labels = nearest_labels(points.view(), centers.view());
+        for i in 0..labels.len() {
+            for j in 0..labels.len() {
+                assert_eq!(labels[i] == labels[j], reference[i] == reference[j]);
+            }
+        }
+    }
+
+    #[test]
     fn fuzzy_weights_and_underflow_fallback_are_exact() {
         let points = array![[0.0]];
         let centers = array![[0.0], [1.0]];
