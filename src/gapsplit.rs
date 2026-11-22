@@ -122,6 +122,7 @@ mod tests {
     use super::*;
     use crate::metric::Euclid;
     use crate::transfer::Transfer;
+    use ndarray::Array1;
 
     #[test]
     fn cut_kills_cross_pairs() {
