@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add descriptor-agnostic DECAF with projectable classical MDS,
+  broken-stick dimension selection, the paper bandwidth heuristic,
+  mean-shift classes, fuzzy memberships, and medoid representatives.
+
 ## 0.1.0
 
 MIT crate **landfold** (Landscape And Nonlinear Distance Folding Onto

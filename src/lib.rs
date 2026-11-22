@@ -17,6 +17,7 @@ pub mod axis;
 pub mod bands;
 pub mod cg;
 pub mod chi_obj;
+pub mod decaf;
 pub mod error;
 pub mod fieldgp;
 pub mod floor;
@@ -31,8 +32,8 @@ pub mod iter;
 pub mod landmark;
 pub mod landscape;
 pub mod mds;
-pub mod nearfar;
 pub mod metric;
+pub mod nearfar;
 pub mod pacmap;
 pub mod pairwise;
 pub mod phate;
@@ -53,6 +54,10 @@ pub use artifact::{EMBEDDING_SCHEMA, FES_SCHEMA, PROJECTION_SCHEMA};
 pub use axis::{AxisModel, axis_embed, axis_fit, axis_project, double_well};
 pub use bands::{BandOpts, BandReport, bands_embed};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
+pub use decaf::{
+    BandwidthChoice, Decaf, DecafOptions, DimensionChoice, decaf_from_descriptors,
+    decaf_from_dissimilarity,
+};
 pub use error::{LandfoldError, Result};
 pub use fieldgp::{FieldGp, FieldPredict, basin_coordinate, fit_imq_map, imq, predict_imq};
 pub use floor::occupancy_map_floor;
@@ -68,21 +73,27 @@ pub use hist::{
 pub use io::{PointSet, read_points, read_points_path, write_plumed, write_points};
 pub use iter::{Embedding, IterOpts, Solver, embed, embed_points, embed_sigma_schedule};
 pub use landmark::{
-    Landmarks, LandmarkMode, farthest_point, farthest_point_ifirst, select_landmarks,
+    LandmarkMode, Landmarks, farthest_point, farthest_point_ifirst, select_landmarks,
     voronoi_weights,
 };
 pub use landscape::{
     LandscapeOpts, LandscapeReport, landscape_attractors, landscape_committor, landscape_embed,
     landscape_qe,
 };
-pub use mds::{MdsMode, MdsReport, classical_mds, mds_from_points, randomized_mds};
-pub use nearfar::{NearFarOpts, nearfar_embed};
+pub use mds::{
+    ClassicalMdsModel, MdsDimension, MdsMode, MdsReport, broken_stick_dimension, classical_mds,
+    mds_from_points, randomized_mds,
+};
 pub use metric::{Dot, Euclid, Fisher, L1, Metric, Periodic, Sphere, Stretch, Wasserstein1};
+pub use nearfar::{NearFarOpts, nearfar_embed};
 pub use pacmap::{PacmapOpts, knn_project, pacmap_embed, rank_uniform};
 pub use pairwise::{apply_transfer, pairwise, pairwise_euclid};
 pub use phate::{PhateModel, PhateOpts, phate_embed, phate_project, slow_mode};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
+};
+pub use provenance::{
+    EON_COMPATIBILITY_SCHEMA, EngineCompatibility, PROVENANCE_SCHEMA, Provenance,
 };
 #[cfg(feature = "readcon")]
 pub use readcon::{
@@ -90,10 +101,7 @@ pub use readcon::{
     read_con_positions,
 };
 #[cfg(feature = "readcon-chemfiles")]
-pub use readcon::{
-    read_trajectory_batch, read_trajectory_frames, read_trajectory_positions,
-};
-pub use provenance::{EON_COMPATIBILITY_SCHEMA, EngineCompatibility, PROVENANCE_SCHEMA, Provenance};
+pub use readcon::{read_trajectory_batch, read_trajectory_frames, read_trajectory_positions};
 pub use replica::ReplicaOpts;
 pub use scale::{ScaleReport, StretchReport, suggest_alpha, suggest_scale};
 pub use search::StochOpts;

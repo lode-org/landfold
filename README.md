@@ -148,6 +148,22 @@ scripts/ceriotti_public_bench.sh
 It reports stress and wall time for the standard, xtsci L-BFGS, and HiGHS
 arms, including a published-map polish with an explicit trust radius.
 
+## DECAF
+
+`decaf_from_descriptors` implements the descriptor-independent stages of Lai
+et al., *J. Chem. Phys.* **159**, 024129 (2023),
+[10.1063/5.0160369](https://doi.org/10.1063/5.0160369). It accepts descriptor
+rows and uses Euclidean dissimilarity; `decaf_from_dissimilarity` accepts a
+precomputed matrix. The default uses Eq. 5 broken-stick dimensionality and
+the paper's Gaussian-smoothed first-minimum bandwidth with
+`sigma_smear = 0.0092`. Explicit dimensions and bandwidths are available
+through `DecafOptions`.
+
+The fitted `Decaf` value retains the Eq. 3 eigenvalue-weighted projector for
+out-of-sample embedding, hard mean-shift labels, normalized fuzzy
+memberships, and one observed medoid representative per class. It is generic
+over descriptors: SOAP generation belongs in caller libraries.
+
 C++ goldens are `tests/goldens/cpp_oracle.txt`, rebuilt on the remote
 builder by `scripts/gen_cpp_goldens.sh` against the HaoZeke `addLocks`
 tree (`SKMAP_SRC`). `cargo test --release --test cpp_parity` loads that file.
