@@ -205,7 +205,7 @@ pub fn decaf_from_dissimilarity(
     )?;
     let labels = nearest_labels(embedded.view(), centers.view());
     let memberships = fuzzy_memberships(embedded.view(), centers.view(), bandwidth);
-    let representatives = medoid_representatives(embedded.view(), centers.view(), &labels);
+    let representatives = medoid_representatives(embedded.view(), &labels);
     Ok(Decaf {
         descriptors: None,
         mds: Some(mds),
@@ -424,21 +424,32 @@ fn fuzzy_memberships(
     memberships
 }
 
-fn medoid_representatives(
-    points: ArrayView2<f64>,
-    centers: ArrayView2<f64>,
-    labels: &[usize],
-) -> Vec<usize> {
-    (0..centers.nrows())
+fn medoid_representatives(points: ArrayView2<f64>, labels: &[usize]) -> Vec<usize> {
+    let class_count = labels.iter().copied().max().map_or(0, |label| label + 1);
+    (0..class_count)
         .map(|class| {
             labels
                 .iter()
                 .enumerate()
                 .filter(|(_, label)| **label == class)
                 .min_by(|(left, _), (right, _)| {
-                    squared_distance(points.row(*left), centers.row(class))
-                        .total_cmp(&squared_distance(points.row(*right), centers.row(class)))
-                        .then_with(|| left.cmp(right))
+                    let left_sum = labels
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, label)| **label == class)
+                        .map(|(other, _)| {
+                            squared_distance(points.row(*left), points.row(other)).sqrt()
+                        })
+                        .sum::<f64>();
+                    let right_sum = labels
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, label)| **label == class)
+                        .map(|(other, _)| {
+                            squared_distance(points.row(*right), points.row(other)).sqrt()
+                        })
+                        .sum::<f64>();
+                    left_sum.total_cmp(&right_sum).then_with(|| left.cmp(right))
                 })
                 .map_or(0, |(index, _)| index)
         })
@@ -531,9 +542,8 @@ mod tests {
     #[test]
     fn representatives_are_within_class_medoids() {
         let points = array![[0.0], [0.2], [2.0], [5.0]];
-        let centers = array![[1.8], [5.0]];
         assert_eq!(
-            medoid_representatives(points.view(), centers.view(), &[0, 0, 0, 1]),
+            medoid_representatives(points.view(), &[0, 0, 0, 1]),
             vec![1, 3]
         );
     }
