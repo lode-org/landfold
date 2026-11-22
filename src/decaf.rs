@@ -444,3 +444,85 @@ fn medoid_representatives(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::array;
+
+    #[test]
+    fn rejects_each_invalid_shape_and_option() {
+        let nonsquare = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.0]];
+        assert!(decaf_from_dissimilarity(nonsquare.view(), &DecafOptions::default()).is_err());
+
+        let distances = array![[0.0, 1.0], [1.0, 0.0]];
+        for options in [
+            DecafOptions {
+                dimensions: DimensionChoice::Fixed(0),
+                ..DecafOptions::default()
+            },
+            DecafOptions {
+                bandwidth: BandwidthChoice::Fixed(f64::NAN),
+                ..DecafOptions::default()
+            },
+            DecafOptions {
+                bandwidth: BandwidthChoice::Fixed(0.0),
+                ..DecafOptions::default()
+            },
+            DecafOptions {
+                max_iterations: 0,
+                ..DecafOptions::default()
+            },
+            DecafOptions {
+                tolerance: f64::NAN,
+                ..DecafOptions::default()
+            },
+            DecafOptions {
+                tolerance: 0.0,
+                ..DecafOptions::default()
+            },
+        ] {
+            assert!(decaf_from_dissimilarity(distances.view(), &options).is_err());
+        }
+    }
+
+    #[test]
+    fn bandwidth_of_a_zero_distance_set_is_the_smearing_width() {
+        let sigma = 0.0092;
+        let uniform = Array2::zeros((3, 2));
+        assert_eq!(paper_bandwidth(uniform.view(), sigma).unwrap(), sigma);
+    }
+
+    #[test]
+    fn flat_kernel_mean_shift_converges_to_local_arithmetic_means() {
+        let points = array![[0.0], [0.2], [2.0], [2.2]];
+        let centers = mean_shift(points.view(), 0.5, 20, 1.0e-12).unwrap();
+        assert_eq!(centers.nrows(), 2);
+        assert!((centers[(0, 0)] - 0.1).abs() < 1.0e-12);
+        assert!((centers[(1, 0)] - 2.1).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn fuzzy_weights_and_underflow_fallback_are_exact() {
+        let points = array![[0.0]];
+        let centers = array![[0.0], [1.0]];
+        let memberships = fuzzy_memberships(points.view(), centers.view(), 1.0);
+        let distant_weight = (-0.5_f64).exp();
+        assert!((memberships[(0, 0)] - 1.0 / (1.0 + distant_weight)).abs() < 1.0e-15);
+        assert!((memberships[(0, 1)] - distant_weight / (1.0 + distant_weight)).abs() < 1.0e-15);
+
+        let far_centers = array![[1.0e200], [2.0e200]];
+        let fallback = fuzzy_memberships(points.view(), far_centers.view(), 1.0);
+        assert_eq!(fallback, array![[1.0, 0.0]]);
+    }
+
+    #[test]
+    fn representatives_are_observed_members_nearest_their_modes() {
+        let points = array![[0.0], [0.2], [5.0]];
+        let centers = array![[0.15], [5.0]];
+        assert_eq!(
+            medoid_representatives(points.view(), centers.view(), &[0, 0, 1]),
+            vec![1, 2]
+        );
+    }
+}
