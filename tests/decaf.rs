@@ -124,6 +124,7 @@ fn mds_model_projects_new_descriptors_with_the_training_projector() {
         },
     )
     .unwrap();
+    assert!(fitted.mds().is_some());
     let projected = fitted
         .project_descriptors(array![[0.5, 0.5]].view())
         .unwrap();
