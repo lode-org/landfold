@@ -166,3 +166,19 @@ fn published_pah_example_matches_reference_partition() {
         default_fit.embedded().ncols()
     );
 }
+
+#[test]
+fn published_pd211_example_matches_reference_pipeline() {
+    let distances = parse_matrix(include_str!("goldens/decaf_pd211_distances.txt"));
+    let reference: Vec<usize> = include_str!("goldens/decaf_pd211_labels.txt")
+        .split_whitespace()
+        .map(|value| value.parse().unwrap())
+        .collect();
+    let fitted =
+        landfold::decaf_from_dissimilarity(distances.view(), &DecafOptions::default()).unwrap();
+
+    assert_eq!(fitted.embedded().ncols(), 1);
+    assert_eq!(fitted.n_classes(), 5);
+    assert_eq!(same_partition(fitted.labels()), same_partition(&reference));
+    assert!((fitted.bandwidth() - 0.029_146_398_984_356_506).abs() < 1.0e-15);
+}
