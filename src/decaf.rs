@@ -304,8 +304,13 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
     }
-    for index in 1..(bins - 1) {
-        if density[index] < density[index - 1] && density[index] <= density[index + 1] {
+    for (offset, window) in density.windows(3).enumerate() {
+        if window[1].total_cmp(&window[0]).is_lt()
+            && window[1].total_cmp(&window[2]).is_le()
+        {
+            let index = offset
+                .checked_add(1)
+                .expect("a density-window offset always has a successor");
             return Ok(index as f64 * step + 0.5 * bin_width);
         }
     }
@@ -319,7 +324,7 @@ fn mean_shift(
     tolerance: f64,
 ) -> Result<Array2<f64>> {
     let radius_sq = bandwidth.powi(2);
-    let convergence_sq = (tolerance * bandwidth).powi(2);
+    let convergence_sq = tolerance.mul_add(bandwidth, 0.0).powi(2);
     let mut candidates: Vec<(usize, Vec<f64>)> = Vec::with_capacity(points.nrows());
     for seed in points.rows() {
         let mut centre = seed.to_vec();
