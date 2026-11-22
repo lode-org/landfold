@@ -495,6 +495,9 @@ mod tests {
         let separated = array![[0.0], [0.1], [2.0], [2.1]];
         let valley = paper_bandwidth(separated.view(), 0.05).unwrap();
         assert!(valley > 0.9 && valley < 1.1, "valley={valley}");
+
+        let one_pair = array![[0.0], [1.0]];
+        assert_eq!(paper_bandwidth(one_pair.view(), 0.05).unwrap(), 1.0);
     }
 
     #[test]
