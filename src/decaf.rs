@@ -164,7 +164,12 @@ pub fn decaf_from_dissimilarity(
     options: &DecafOptions,
 ) -> Result<Decaf> {
     validate_options(options)?;
-    if distances.nrows() == 0 || distances.ncols() != distances.nrows() {
+    if distances.nrows() == 0 {
+        return Err(LandfoldError::Shape(
+            "DECAF dissimilarity matrix must be non-empty and square",
+        ));
+    }
+    if distances.ncols() != distances.nrows() {
         return Err(LandfoldError::Shape(
             "DECAF dissimilarity matrix must be non-empty and square",
         ));
@@ -284,10 +289,13 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
     }
     let bin_width = sigma / 21.0;
     let bins = (max_distance / bin_width).ceil() as usize;
-    if bins < 3 {
+    if let 0..=2 = bins {
         return Ok(max_distance);
     }
-    let step = (bin_width * bins as f64) / (bins - 1) as f64;
+    let intervals = bins
+        .checked_sub(1)
+        .expect("the small-bin case returned above");
+    let step = (bin_width * bins as f64) / intervals as f64;
     let mut density = vec![0.0; bins];
     for (index, value) in density.iter_mut().enumerate() {
         let x = index as f64 * step;
@@ -310,7 +318,7 @@ fn mean_shift(
     max_iterations: usize,
     tolerance: f64,
 ) -> Result<Array2<f64>> {
-    let radius_sq = bandwidth * bandwidth;
+    let radius_sq = bandwidth.powi(2);
     let convergence_sq = (tolerance * bandwidth).powi(2);
     let mut candidates: Vec<(usize, Vec<f64>)> = Vec::with_capacity(points.nrows());
     for seed in points.rows() {
@@ -339,9 +347,12 @@ fn mean_shift(
             for value in &mut next {
                 *value /= support as f64;
             }
-            let shift: f64 = next.iter().zip(&centre).map(|(a, b)| (a - b).powi(2)).sum();
+            let shift = squared_distance(
+                ndarray::ArrayView1::from(next.as_slice()),
+                ndarray::ArrayView1::from(centre.as_slice()),
+            );
             centre = next;
-            if shift <= convergence_sq {
+            if shift.total_cmp(&convergence_sq).is_le() {
                 break;
             }
         }
@@ -361,12 +372,11 @@ fn mean_shift(
     let mut accepted: Vec<Vec<f64>> = Vec::new();
     for (_, candidate) in candidates {
         if accepted.iter().all(|centre| {
-            centre
-                .iter()
-                .zip(&candidate)
-                .map(|(a, b)| (a - b).powi(2))
-                .sum::<f64>()
-                > radius_sq
+            let distance = squared_distance(
+                ndarray::ArrayView1::from(centre.as_slice()),
+                ndarray::ArrayView1::from(candidate.as_slice()),
+            );
+            distance.total_cmp(&radius_sq).is_gt()
         }) {
             accepted.push(candidate);
         }
