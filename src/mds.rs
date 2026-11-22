@@ -29,10 +29,14 @@ pub struct MdsReport {
 /// Rule used to choose the dimension of a classical MDS model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MdsDimension {
-    /// Retain exactly this many dimensions.
+    /// Retain exactly this many dimensions, returning
+    /// [`LandfoldError::LowDim`] when the request exceeds numerical rank.
     Fixed(usize),
-    /// Retain the leading dimensions whose normalized eigenvalues exceed the
-    /// broken-stick expectation.
+    /// Retain as many dimensions as there are numerically ranked components
+    /// whose normalized eigenvalues pass their broken-stick expectations.
+    ///
+    /// This counts every passing component; it does not stop at the first
+    /// component that fails.
     BrokenStick,
 }
 
@@ -47,24 +51,43 @@ pub struct ClassicalMdsModel {
 
 impl ClassicalMdsModel {
     /// Fit classical MDS from a symmetric dissimilarity matrix.
+    ///
+    /// Numerical rank follows the usual matrix-rank tolerance
+    /// `lambda_max * n * f64::EPSILON`, where `n` is the matrix order. The Lai
+    /// reference implementation does not specify a tolerance. This
+    /// scale-relative convention rejects round-off axes before Eq. 3 divides
+    /// by the square root of their eigenvalues.
     pub fn fit(dist: ArrayView2<f64>, dimensions: MdsDimension) -> Result<Self> {
         let (n, b) = torgerson_b(dist)?;
         let dm = DMatrix::<f64>::from_row_slice(n, n, &b);
         let eigen = SymmetricEigen::new(dm);
         let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (eigen.eigenvalues[k], k)).collect();
         pairs.sort_by(|a, b| b.0.total_cmp(&a.0));
-        let eigenvalues = Array1::from_iter(pairs.iter().map(|&(value, _)| value.max(0.0)));
-        let positive = eigenvalues.iter().take_while(|&&value| value > 0.0).count();
+        if pairs.iter().any(|(value, _)| !value.is_finite()) {
+            return Err(LandfoldError::Msg("MDS eigenvalues must be finite".into()));
+        }
+        let largest = pairs.first().map_or(0.0, |(value, _)| value.max(0.0));
+        // NumPy's matrix-rank convention: eigenvalues at or below
+        // lambda_max * max(shape) * epsilon are numerical zero. The Lai
+        // reference does not define a rank tolerance; this scale-aware choice
+        // prevents Eq. 3 from dividing by round-off eigenvalues.
+        let rank_tolerance = largest * n.max(1) as f64 * f64::EPSILON;
+        let eigenvalues = Array1::from_iter(
+            pairs
+                .iter()
+                .map(|&(value, _)| (value > rank_tolerance).then_some(value).unwrap_or(0.0)),
+        );
+        let numerical_rank = eigenvalues.iter().take_while(|&&value| value > 0.0).count();
         let dimension = match dimensions {
             MdsDimension::Fixed(value) => value,
             MdsDimension::BrokenStick => {
                 broken_stick_dimension(eigenvalues.as_slice().expect("owned eigenvalue array"))
             }
         };
-        if dimension == 0 || dimension > positive {
+        if dimension == 0 || dimension > numerical_rank {
             return Err(LandfoldError::LowDim {
                 low: dimension,
-                high: positive,
+                high: numerical_rank,
             });
         }
 
@@ -89,18 +112,24 @@ impl ClassicalMdsModel {
         &self.eigenvalues
     }
 
-    /// Eigenvalue-weighted projector, one retained component per row.
+    /// Eigenvalue-weighted Eq. 3 projector, one retained component per row.
     pub fn projector(&self) -> &Array2<f64> {
         &self.projector
     }
 
     /// Training points embedded by the same Eq. 3-4 projector used for new
     /// points.
+    ///
+    /// The paper and reference package apply `P` directly to squared
+    /// dissimilarities. These coordinates have twice the scale of the
+    /// conventional centered `sqrt(lambda) * v` classical-MDS embedding
+    /// (up to eigensystem orientation).
     pub fn embedding(&self) -> &Array2<f64> {
         &self.embedding
     }
 
-    /// Embed new points from their distances to every training point.
+    /// Embed new points from their distances to every training point at the
+    /// paper/reference package's two-times conventional MDS scale.
     pub fn project_distances(&self, distances: ArrayView2<f64>) -> Result<Array2<f64>> {
         project_with_projector(self.projector.view(), distances)
     }

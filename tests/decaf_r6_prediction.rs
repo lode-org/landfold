@@ -43,7 +43,8 @@ fn out_of_sample_prediction_matches_reference_projection() {
     .unwrap();
 
     let prediction = fitted.predict_descriptors(queries.view()).unwrap();
-    let projected_distances = pair_distances(fitted.embedded().view(), prediction.embedded().view());
+    let projected_distances =
+        pair_distances(fitted.embedded().view(), prediction.embedded().view());
     let reference = super_parse_matrix(include_str!("goldens/decaf_oos_reference_distances.txt"));
     assert_eq!(projected_distances.dim(), reference.dim());
     for (actual, expected) in projected_distances.iter().zip(&reference) {
@@ -98,8 +99,7 @@ fn projected_classification_exposes_labels_and_memberships() {
     );
     for class in 0..fitted.n_classes() {
         assert!(
-            prediction.memberships()[(class, class)]
-                > prediction.memberships()[(class, 1 - class)]
+            prediction.memberships()[(class, class)] > prediction.memberships()[(class, 1 - class)]
         );
     }
 }
@@ -125,8 +125,10 @@ fn representative_is_a_medoid_not_the_observation_nearest_the_class_mean() {
         .into_iter()
         .enumerate()
         .min_by(|(_, left), (_, right)| {
-            pair_distances(left.insert_axis(ndarray::Axis(0)), center.insert_axis(ndarray::Axis(0)))
-                [(0, 0)]
+            pair_distances(
+                left.insert_axis(ndarray::Axis(0)),
+                center.insert_axis(ndarray::Axis(0)),
+            )[(0, 0)]
                 .total_cmp(
                     &pair_distances(
                         right.insert_axis(ndarray::Axis(0)),

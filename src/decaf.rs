@@ -16,7 +16,9 @@ pub enum DimensionChoice {
     /// Eq. 5 broken-stick selection.
     #[default]
     BrokenStick,
-    /// Explicit embedding dimension.
+    /// Explicit embedding dimension. A nonuniform fit errors when this exceeds
+    /// numerical rank; an exactly zero-dissimilarity fit is represented as one
+    /// class with zero embedding axes.
     Fixed(usize),
 }
 
@@ -73,6 +75,32 @@ pub struct Decaf {
     bandwidth: f64,
 }
 
+/// Out-of-sample DECAF projection and fuzzy classification.
+#[derive(Clone, Debug)]
+pub struct DecafPrediction {
+    embedded: Array2<f64>,
+    labels: Vec<usize>,
+    memberships: Array2<f64>,
+}
+
+impl DecafPrediction {
+    /// Projected coordinates at the paper/reference package's two-times
+    /// conventional classical-MDS scale.
+    pub fn embedded(&self) -> &Array2<f64> {
+        &self.embedded
+    }
+
+    /// Hard nearest-center class labels.
+    pub fn labels(&self) -> &[usize] {
+        &self.labels
+    }
+
+    /// Row-normalized fuzzy affinities to all fitted class centers.
+    pub fn memberships(&self) -> &Array2<f64> {
+        &self.memberships
+    }
+}
+
 impl Decaf {
     /// Number of identified classes.
     pub fn n_classes(&self) -> usize {
@@ -97,6 +125,11 @@ impl Decaf {
     /// Embedded training coordinates.
     pub fn embedded(&self) -> &Array2<f64> {
         &self.embedded
+    }
+
+    /// Fitted mean-shift class centers in embedded space.
+    pub fn centers(&self) -> &Array2<f64> {
+        &self.centers
     }
 
     /// Mean-shift bandwidth used for this fit.
@@ -131,6 +164,37 @@ impl Decaf {
             .as_ref()
             .ok_or_else(|| LandfoldError::Msg("uniform DECAF fit has no MDS projector".into()))?
             .project_distances(distances)
+    }
+
+    /// Classify already projected points against the fitted mean-shift centers.
+    pub fn classify(&self, embedded: ArrayView2<f64>) -> Result<DecafPrediction> {
+        if embedded.ncols() != self.centers.ncols() {
+            return Err(LandfoldError::Shape(
+                "projected points must have the fitted DECAF dimension",
+            ));
+        }
+        if embedded.iter().any(|value| !value.is_finite()) {
+            return Err(LandfoldError::Msg(
+                "projected DECAF points must be finite".into(),
+            ));
+        }
+        Ok(DecafPrediction {
+            embedded: embedded.to_owned(),
+            labels: nearest_labels(embedded, self.centers.view()),
+            memberships: fuzzy_memberships(embedded, self.centers.view(), self.bandwidth),
+        })
+    }
+
+    /// Project and classify new descriptor vectors.
+    pub fn predict_descriptors(&self, points: ArrayView2<f64>) -> Result<DecafPrediction> {
+        let embedded = self.project_descriptors(points)?;
+        self.classify(embedded.view())
+    }
+
+    /// Project and classify new points from distances to all training points.
+    pub fn predict_distances(&self, distances: ArrayView2<f64>) -> Result<DecafPrediction> {
+        let embedded = self.project_distances(distances)?;
+        self.classify(embedded.view())
     }
 }
 
@@ -174,6 +238,7 @@ pub fn decaf_from_dissimilarity(
             "DECAF dissimilarity matrix must be non-empty and square",
         ));
     }
+    validate_dissimilarity(distances)?;
     let n = distances.nrows();
     let max_distance = distances.iter().copied().fold(0.0_f64, f64::max);
     if max_distance == 0.0 {
@@ -221,6 +286,35 @@ pub fn decaf_from_dissimilarity(
         representatives,
         bandwidth,
     })
+}
+
+fn validate_dissimilarity(distances: ArrayView2<f64>) -> Result<()> {
+    if distances
+        .iter()
+        .any(|value| !value.is_finite() || *value < 0.0)
+    {
+        return Err(LandfoldError::Msg(
+            "DECAF dissimilarities must be finite and nonnegative".into(),
+        ));
+    }
+    for i in 0..distances.nrows() {
+        if distances[(i, i)] != 0.0 {
+            return Err(LandfoldError::Msg(
+                "DECAF dissimilarity diagonal must be zero".into(),
+            ));
+        }
+        for j in 0..i {
+            let left = distances[(i, j)];
+            let right = distances[(j, i)];
+            let scale = left.abs().max(right.abs()).max(1.0);
+            if (left - right).abs() > 64.0 * f64::EPSILON * scale {
+                return Err(LandfoldError::Msg(
+                    "DECAF dissimilarities must be symmetric".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_options(options: &DecafOptions) -> Result<()> {
@@ -282,7 +376,8 @@ fn pair_distances(points: ArrayView2<f64>) -> Vec<f64> {
 }
 
 fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
-    let distances = pair_distances(points);
+    let mut distances = pair_distances(points);
+    distances.sort_by(f64::total_cmp);
     let max_distance = distances.iter().copied().fold(0.0_f64, f64::max);
     if max_distance == 0.0 {
         return Ok(sigma);
@@ -297,17 +392,23 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
         .expect("the small-bin case returned above");
     let step = (bin_width * bins as f64) / intervals as f64;
     let mut density = vec![0.0; bins];
+    // Six standard deviations retain each Gaussian down to exp(-18) while
+    // avoiding evaluations whose contribution cannot affect the first
+    // histogram minimum at the fixture precision.
+    let kernel_cutoff = 6.0 * sigma;
     for (index, value) in density.iter_mut().enumerate() {
         let x = index as f64 * step;
-        *value = distances
+        let lower = x - kernel_cutoff;
+        let upper = x + kernel_cutoff;
+        let start = distances.partition_point(|distance| *distance < lower);
+        let end = distances.partition_point(|distance| *distance <= upper);
+        *value = distances[start..end]
             .iter()
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
     }
     for (offset, window) in density.windows(3).enumerate() {
-        if window[1].total_cmp(&window[0]).is_lt()
-            && window[1].total_cmp(&window[2]).is_le()
-        {
+        if window[1].total_cmp(&window[0]).is_lt() && window[1].total_cmp(&window[2]).is_le() {
             let index = offset
                 .checked_add(1)
                 .expect("a density-window offset always has a successor");
@@ -549,11 +650,10 @@ mod tests {
 
     #[test]
     fn published_pd211_embedding_matches_reference_bandwidth_and_partition() {
-        let coordinates: Vec<f64> =
-            include_str!("../tests/goldens/decaf_pd211_embedded.txt")
-                .split_whitespace()
-                .map(|value| value.parse().unwrap())
-                .collect();
+        let coordinates: Vec<f64> = include_str!("../tests/goldens/decaf_pd211_embedded.txt")
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
         let points = Array2::from_shape_vec((coordinates.len(), 1), coordinates).unwrap();
         let reference: Vec<usize> = include_str!("../tests/goldens/decaf_pd211_labels.txt")
             .split_whitespace()

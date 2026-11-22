@@ -55,7 +55,7 @@ pub use axis::{AxisModel, axis_embed, axis_fit, axis_project, double_well};
 pub use bands::{BandOpts, BandReport, bands_embed};
 pub use chi_obj::{ChiObjective, UNBOUNDED as CHI_UNBOUNDED};
 pub use decaf::{
-    BandwidthChoice, Decaf, DecafOptions, DimensionChoice, decaf_from_descriptors,
+    BandwidthChoice, Decaf, DecafOptions, DecafPrediction, DimensionChoice, decaf_from_descriptors,
     decaf_from_dissimilarity,
 };
 pub use error::{LandfoldError, Result};
