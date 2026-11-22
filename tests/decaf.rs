@@ -1,8 +1,21 @@
 use landfold::{
-    BandwidthChoice, DecafOptions, DimensionChoice, broken_stick_dimension,
-    decaf_from_descriptors,
+    BandwidthChoice, DecafOptions, DimensionChoice, broken_stick_dimension, decaf_from_descriptors,
 };
 use ndarray::{Array2, array};
+
+fn parse_matrix(text: &str) -> Array2<f64> {
+    let rows: Vec<Vec<f64>> = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split_whitespace()
+                .map(|value| value.parse().unwrap())
+                .collect()
+        })
+        .collect();
+    let width = rows[0].len();
+    Array2::from_shape_vec((rows.len(), width), rows.into_iter().flatten().collect()).unwrap()
+}
 
 fn same_partition(labels: &[usize]) -> Vec<Vec<bool>> {
     labels
@@ -107,8 +120,30 @@ fn mds_model_projects_new_descriptors_with_the_training_projector() {
         },
     )
     .unwrap();
-    let projected = fitted.project_descriptors(array![[0.5, 0.5]].view()).unwrap();
+    let projected = fitted
+        .project_descriptors(array![[0.5, 0.5]].view())
+        .unwrap();
     assert_eq!(projected.nrows(), 1);
     assert_eq!(projected.ncols(), 2);
     assert!(projected.iter().all(|value| value.abs() < 1.0e-12));
+}
+
+#[test]
+fn published_pah_example_matches_reference_partition() {
+    let distances = parse_matrix(include_str!("goldens/decaf_pah_distances.txt"));
+    let reference: Vec<usize> = include_str!("goldens/decaf_pah_labels.txt")
+        .split_whitespace()
+        .map(|value| value.parse().unwrap())
+        .collect();
+    let fitted = landfold::decaf_from_dissimilarity(
+        distances.view(),
+        &DecafOptions {
+            dimensions: DimensionChoice::Fixed(2),
+            bandwidth: BandwidthChoice::Fixed(0.0241),
+            ..DecafOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(fitted.n_classes(), 11);
+    assert_eq!(same_partition(fitted.labels()), same_partition(&reference));
 }
