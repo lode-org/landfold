@@ -491,23 +491,32 @@ mod tests {
         let sigma = 0.0092;
         let uniform = Array2::zeros((3, 2));
         assert_eq!(paper_bandwidth(uniform.view(), sigma).unwrap(), sigma);
+
+        let separated = array![[0.0], [0.1], [2.0], [2.1]];
+        let valley = paper_bandwidth(separated.view(), 0.05).unwrap();
+        assert!(valley > 0.9 && valley < 1.1, "valley={valley}");
     }
 
     #[test]
     fn flat_kernel_mean_shift_converges_to_local_arithmetic_means() {
-        let points = array![[0.0], [0.2], [2.0], [2.2]];
-        let centers = mean_shift(points.view(), 0.5, 20, 1.0e-12).unwrap();
+        let points = array![[0.0], [0.2], [0.8], [1.0]];
+        let centers = mean_shift(points.view(), 0.3, 20, 1.0e-12).unwrap();
         assert_eq!(centers.nrows(), 2);
         assert!((centers[(0, 0)] - 0.1).abs() < 1.0e-12);
-        assert!((centers[(1, 0)] - 2.1).abs() < 1.0e-12);
+        assert!((centers[(1, 0)] - 0.9).abs() < 1.0e-12);
+
+        let chained = array![[0.0], [0.2], [0.35]];
+        let converged = mean_shift(chained.view(), 0.25, 20, 1.0e-12).unwrap();
+        assert_eq!(converged.nrows(), 1);
+        assert!((converged[(0, 0)] - 0.183_333_333_333_333_35).abs() < 1.0e-12);
     }
 
     #[test]
     fn fuzzy_weights_and_underflow_fallback_are_exact() {
         let points = array![[0.0]];
         let centers = array![[0.0], [1.0]];
-        let memberships = fuzzy_memberships(points.view(), centers.view(), 1.0);
-        let distant_weight = (-0.5_f64).exp();
+        let memberships = fuzzy_memberships(points.view(), centers.view(), 2.0);
+        let distant_weight = (-0.125_f64).exp();
         assert!((memberships[(0, 0)] - 1.0 / (1.0 + distant_weight)).abs() < 1.0e-15);
         assert!((memberships[(0, 1)] - distant_weight / (1.0 + distant_weight)).abs() < 1.0e-15);
 
