@@ -228,12 +228,7 @@ pub fn decaf_from_dissimilarity(
     options: &DecafOptions,
 ) -> Result<Decaf> {
     validate_options(options)?;
-    if distances.nrows() == 0 {
-        return Err(LandfoldError::Shape(
-            "DECAF dissimilarity matrix must be non-empty and square",
-        ));
-    }
-    if distances.ncols() != distances.nrows() {
+    if distances.nrows() == 0 || distances.ncols() != distances.nrows() {
         return Err(LandfoldError::Shape(
             "DECAF dissimilarity matrix must be non-empty and square",
         ));
@@ -375,6 +370,29 @@ fn pair_distances(points: ArrayView2<f64>) -> Vec<f64> {
     values
 }
 
+/// The reference Gaussian rule needs at least 21 bins to resolve a gap.
+fn bandwidth_grid_is_too_coarse(bins: usize) -> bool {
+    bins < 21
+}
+
+fn first_density_minimum(density: &[f64]) -> Option<(usize, usize)> {
+    let mut index = 1;
+    while index + 1 < density.len() {
+        if density[index] < density[index - 1] {
+            let mut plateau_end = index;
+            while plateau_end + 1 < density.len() && density[plateau_end + 1] == density[index] {
+                plateau_end += 1;
+            }
+            if plateau_end + 1 < density.len() && density[plateau_end] < density[plateau_end + 1] {
+                return Some((index, plateau_end));
+            }
+            index = plateau_end;
+        }
+        index += 1;
+    }
+    None
+}
+
 fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
     let mut distances = pair_distances(points);
     distances.sort_by(f64::total_cmp);
@@ -384,13 +402,10 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
     }
     let bin_width = sigma / 21.0;
     let bins = (max_distance / bin_width).ceil() as usize;
-    if let 0..=2 = bins {
+    if bandwidth_grid_is_too_coarse(bins) {
         return Ok(max_distance);
     }
-    let intervals = bins
-        .checked_sub(1)
-        .expect("the small-bin case returned above");
-    let step = (bin_width * bins as f64) / intervals as f64;
+    let step = (bin_width * bins as f64) / (bins - 1) as f64;
     let mut density = vec![0.0; bins];
     // Six standard deviations retain each Gaussian down to exp(-18) while
     // avoiding evaluations whose contribution cannot affect the first
@@ -407,28 +422,19 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
     }
-    let mut index = 1;
-    while index + 1 < density.len() {
-        if density[index].total_cmp(&density[index - 1]).is_lt() {
-            let mut plateau_end = index;
-            while plateau_end + 1 < density.len()
-                && density[plateau_end + 1].total_cmp(&density[index]).is_eq()
-            {
-                plateau_end += 1;
-            }
-            if plateau_end + 1 < density.len()
-                && density[plateau_end]
-                    .total_cmp(&density[plateau_end + 1])
-                    .is_lt()
-            {
-                let minimum = (index + plateau_end) as f64 * 0.5;
-                return Ok(minimum * step + 0.5 * bin_width);
-            }
-            index = plateau_end;
-        }
-        index += 1;
+    if let Some((start, end)) = first_density_minimum(&density) {
+        let minimum = (start + end) as f64 * 0.5;
+        return Ok(minimum * step + 0.5 * bin_width);
     }
     Ok(max_distance)
+}
+
+fn convergence_threshold_sq(tolerance: f64, bandwidth: f64) -> f64 {
+    (tolerance * bandwidth).powi(2)
+}
+
+fn has_converged(shift: f64, convergence_sq: f64) -> bool {
+    shift <= convergence_sq
 }
 
 fn mean_shift(
@@ -438,7 +444,7 @@ fn mean_shift(
     tolerance: f64,
 ) -> Result<Array2<f64>> {
     let radius_sq = bandwidth.powi(2);
-    let convergence_sq = tolerance.mul_add(bandwidth, 0.0).powi(2);
+    let convergence_sq = convergence_threshold_sq(tolerance, bandwidth);
     let mut candidates: Vec<(usize, Vec<f64>)> = Vec::with_capacity(points.nrows());
     for seed in points.rows() {
         let mut centre = seed.to_vec();
@@ -471,7 +477,7 @@ fn mean_shift(
                 ndarray::ArrayView1::from(centre.as_slice()),
             );
             centre = next;
-            if shift.total_cmp(&convergence_sq).is_le() {
+            if has_converged(shift, convergence_sq) {
                 break;
             }
         }
@@ -495,7 +501,7 @@ fn mean_shift(
                 ndarray::ArrayView1::from(centre.as_slice()),
                 ndarray::ArrayView1::from(candidate.as_slice()),
             );
-            distance.total_cmp(&radius_sq).is_gt()
+            distance > radius_sq
         }) {
             accepted.push(candidate);
         }
