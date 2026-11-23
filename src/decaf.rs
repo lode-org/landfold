@@ -696,6 +696,78 @@ mod tests {
         }
     }
 
+    fn fixed_bandwidth_options(value: f64) -> DecafOptions {
+        DecafOptions {
+            dimensions: DimensionChoice::Fixed(1),
+            bandwidth: BandwidthChoice::Fixed(value),
+            ..DecafOptions::default()
+        }
+    }
+
+    fn assert_ok_fit_has_no_nan(result: &Result<Decaf>) {
+        if let Ok(fitted) = result {
+            assert!(!fitted.bandwidth().is_nan());
+            assert!(fitted.embedded().iter().all(|value| !value.is_nan()));
+            assert!(fitted.centers().iter().all(|value| !value.is_nan()));
+            assert!(fitted.memberships().iter().all(|value| !value.is_nan()));
+        }
+    }
+
+    #[test]
+    fn fixed_bandwidth_rejects_an_underflowing_square() {
+        let distances = array![[0.0, 1.0], [1.0, 0.0]];
+        let error = decaf_from_dissimilarity(
+            distances.view(),
+            &fixed_bandwidth_options(1.0e-170),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "DECAF fixed bandwidth square must be a normal positive finite value"
+        );
+    }
+
+    #[test]
+    fn tiny_valid_fixed_bandwidth_has_finite_normalized_memberships() {
+        let distances = array![[0.0, 1.0], [1.0, 0.0]];
+        let bandwidth = 2.0 * f64::MIN_POSITIVE.sqrt();
+        assert!(bandwidth.powi(2).is_normal());
+        let fitted =
+            decaf_from_dissimilarity(distances.view(), &fixed_bandwidth_options(bandwidth))
+                .unwrap();
+
+        for memberships in fitted.memberships().rows() {
+            assert!(memberships.iter().all(|value| value.is_finite()));
+            assert!((memberships.sum() - 1.0).abs() < 1.0e-15);
+        }
+    }
+
+    #[test]
+    fn a_successful_fit_never_contains_nan_values() {
+        let distances = array![[0.0, 1.0], [1.0, 0.0]];
+        for bandwidth in [1.0e-170, 2.0 * f64::MIN_POSITIVE.sqrt(), 0.5] {
+            let result = decaf_from_dissimilarity(
+                distances.view(),
+                &fixed_bandwidth_options(bandwidth),
+            );
+            assert_ok_fit_has_no_nan(&result);
+        }
+    }
+
+    #[test]
+    fn rejects_a_dissimilarity_scale_too_small_for_squared_mds() {
+        let distances = array![[0.0, 1.0e-162], [1.0e-162, 0.0]];
+        let error = decaf_from_dissimilarity(
+            distances.view(),
+            &fixed_bandwidth_options(0.5),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "DECAF dissimilarity scale is too small for squared-distance MDS"
+        );
+    }
+
     #[test]
     fn nonzero_dissimilarity_does_not_take_the_uniform_shortcut() {
         let distances = array![[0.0, 1.0], [1.0, 0.0]];
