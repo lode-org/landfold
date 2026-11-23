@@ -44,9 +44,19 @@ PY
 
 The PAH fixture combines the published benzene, naphthalene, anthracene,
 tetracene, phenanthrene, and graphene structures. The Pd fixture uses the
-published Pd(211) surface. The out-of-sample fixture uses normalized synthetic
-vectors and two non-centroid queries; it stores distances from the reference
-training embedding to the reference projections so eigensolver sign choices do
-not affect the comparison. The tolerance in the check allows for SOAP
+published `examples/Structures/Pd_211.con` structure from `fhi-decaf` 1.0.6.
+Its SOAP call uses nearest-neighbour distance `2.75`,
+`SOAP_L_nmax=4`, `SOAP_L_lmax=3`, `SOAP_S_nmax=8`,
+`SOAP_S_lmax=4`, `SOAP_S_cut=sqrt(1/2)+0.5`,
+`SOAP_S_sigma=SOAP_S_cut/8`, `SOAP_L_cut=sqrt(3)/2+1`,
+`SOAP_L_sigma=SOAP_L_cut/8`, and `periodic=True`. The workflow uses classical
+MDS, mean-shift clustering, the Gaussian bandwidth estimator with
+`sigma=0.0092`, automatic dimension selection (`dim=0`), and
+`reorder_mode_x=True`.
+
+The out-of-sample fixture uses normalized synthetic vectors and two
+non-centroid queries; it stores distances from the reference training
+embedding to the reference projections so eigensolver sign choices do not
+affect the comparison. The tolerance in the check allows for SOAP
 floating-point noise between BLAS implementations; the observed maximum PAH
 distance difference in the recorded regeneration was below `4e-15`.

@@ -13,6 +13,19 @@ from ase import io as aseio
 
 REFERENCE_COMMIT = "dd8b2c5bdf224cc583855133d4c63a985763294f"
 REFERENCE_VERSION = "1.0.6"
+PD_STRUCTURE = "Pd_211.con"
+PD_NEAREST_NEIGHBOUR = 2.75
+PD_SOAP = {
+    "SOAP_L_nmax": 4,
+    "SOAP_L_lmax": 3,
+    "SOAP_S_nmax": 8,
+    "SOAP_S_lmax": 4,
+    "SOAP_S_cut": np.sqrt(1 / 2) + 0.5,
+    "SOAP_L_cut": np.sqrt(3) / 2 + 1,
+    "periodic": True,
+}
+PD_SOAP["SOAP_S_sigma"] = PD_SOAP["SOAP_S_cut"] / 8
+PD_SOAP["SOAP_L_sigma"] = PD_SOAP["SOAP_L_cut"] / 8
 
 
 def labels_from_model(model, n_atoms):
@@ -70,22 +83,13 @@ def generate_pah(root, output):
 
 
 def generate_pd211(root, output):
-    structure = aseio.read(root / "examples" / "Structures" / "Pd_211.con")
+    """Regenerate the fhi-decaf 1.0.6 Pd(211) fixture with its published SOAP."""
+    structure = aseio.read(root / "examples" / "Structures" / PD_STRUCTURE)
     structure.pbc = [True, True, False]
-    short_cutoff = np.sqrt(1 / 2) + 0.5
-    long_cutoff = np.sqrt(3) / 2 + 1
     descriptors = decaf.get_SOAP(
         structure,
-        2.75,
-        SOAP_L_nmax=4,
-        SOAP_L_lmax=3,
-        SOAP_S_nmax=8,
-        SOAP_S_lmax=4,
-        SOAP_S_cut=short_cutoff,
-        SOAP_S_sigma=short_cutoff / 8,
-        SOAP_L_cut=long_cutoff,
-        SOAP_L_sigma=long_cutoff / 8,
-        periodic=True,
+        PD_NEAREST_NEIGHBOUR,
+        **PD_SOAP,
     )
     model = decaf.embed_cluster(
         descriptors,
