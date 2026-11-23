@@ -183,7 +183,7 @@ impl Decaf {
         Ok(DecafPrediction {
             embedded: embedded.to_owned(),
             labels: nearest_labels(embedded, self.centers.view()),
-            memberships: fuzzy_memberships(embedded, self.centers.view(), self.bandwidth),
+            memberships: fuzzy_memberships(embedded, self.centers.view(), self.bandwidth)?,
         })
     }
 
@@ -253,6 +253,12 @@ pub fn decaf_from_dissimilarity(
             },
         });
     }
+    let squared_scale = max_distance * max_distance;
+    if squared_scale == 0.0 || squared_scale.is_subnormal() {
+        return Err(LandfoldError::Msg(
+            "DECAF dissimilarity scale is too small for squared-distance MDS".into(),
+        ));
+    }
 
     let dimensions = match options.dimensions {
         DimensionChoice::BrokenStick => MdsDimension::BrokenStick,
@@ -264,6 +270,7 @@ pub fn decaf_from_dissimilarity(
         BandwidthChoice::Fixed(value) => value,
         BandwidthChoice::Paper { sigma } => paper_bandwidth(embedded.view(), sigma)?,
     };
+    validate_effective_bandwidth(bandwidth)?;
     let centers = mean_shift(
         embedded.view(),
         bandwidth,
@@ -271,7 +278,7 @@ pub fn decaf_from_dissimilarity(
         options.tolerance,
     )?;
     let labels = nearest_labels(embedded.view(), centers.view());
-    let memberships = fuzzy_memberships(embedded.view(), centers.view(), bandwidth);
+    let memberships = fuzzy_memberships(embedded.view(), centers.view(), bandwidth)?;
     let representatives = medoid_representatives(embedded.view(), &labels, centers.nrows())?;
     Ok(Decaf {
         descriptors: None,
@@ -327,9 +334,25 @@ fn validate_options(options: &DecafOptions) -> Result<()> {
             "DECAF bandwidth or smearing width must be finite and positive".into(),
         ));
     }
+    if matches!(options.bandwidth, BandwidthChoice::Fixed(_))
+        && !(bandwidth_value * bandwidth_value).is_normal()
+    {
+        return Err(LandfoldError::Msg(
+            "DECAF fixed bandwidth square must be a normal positive finite value".into(),
+        ));
+    }
     if options.max_iterations == 0 || !options.tolerance.is_finite() || options.tolerance <= 0.0 {
         return Err(LandfoldError::Msg(
             "DECAF mean-shift controls must be positive".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_effective_bandwidth(bandwidth: f64) -> Result<()> {
+    if !bandwidth.is_finite() || bandwidth <= 0.0 || !(bandwidth * bandwidth).is_normal() {
+        return Err(LandfoldError::Msg(
+            "DECAF mean-shift bandwidth square must be a normal positive finite value".into(),
         ));
     }
     Ok(())
@@ -569,14 +592,19 @@ fn fuzzy_memberships(
     points: ArrayView2<f64>,
     centers: ArrayView2<f64>,
     bandwidth: f64,
-) -> Array2<f64> {
+) -> Result<Array2<f64>> {
     let mut memberships = Array2::zeros((points.nrows(), centers.nrows()));
     for i in 0..points.nrows() {
         let mut total = 0.0;
         for class in 0..centers.nrows() {
-            let weight = (-0.5 * squared_distance(points.row(i), centers.row(class))
-                / bandwidth.powi(2))
-            .exp();
+            let scaled_distance = points
+                .row(i)
+                .iter()
+                .zip(centers.row(class))
+                .fold(0.0_f64, |norm, (point, center)| {
+                    norm.hypot((point - center) / bandwidth)
+                });
+            let weight = (-0.5 * scaled_distance.powi(2)).exp();
             memberships[(i, class)] = weight;
             total += weight;
         }
@@ -591,7 +619,12 @@ fn fuzzy_memberships(
             }
         }
     }
-    memberships
+    if memberships.iter().any(|value| !value.is_finite()) {
+        return Err(LandfoldError::Msg(
+            "DECAF fuzzy memberships must be finite".into(),
+        ));
+    }
+    Ok(memberships)
 }
 
 fn medoid_representatives(
@@ -716,11 +749,8 @@ mod tests {
     #[test]
     fn fixed_bandwidth_rejects_an_underflowing_square() {
         let distances = array![[0.0, 1.0], [1.0, 0.0]];
-        let error = decaf_from_dissimilarity(
-            distances.view(),
-            &fixed_bandwidth_options(1.0e-170),
-        )
-        .unwrap_err();
+        let error = decaf_from_dissimilarity(distances.view(), &fixed_bandwidth_options(1.0e-170))
+            .unwrap_err();
         assert_eq!(
             error.to_string(),
             "DECAF fixed bandwidth square must be a normal positive finite value"
@@ -746,10 +776,8 @@ mod tests {
     fn a_successful_fit_never_contains_nan_values() {
         let distances = array![[0.0, 1.0], [1.0, 0.0]];
         for bandwidth in [1.0e-170, 2.0 * f64::MIN_POSITIVE.sqrt(), 0.5] {
-            let result = decaf_from_dissimilarity(
-                distances.view(),
-                &fixed_bandwidth_options(bandwidth),
-            );
+            let result =
+                decaf_from_dissimilarity(distances.view(), &fixed_bandwidth_options(bandwidth));
             assert_ok_fit_has_no_nan(&result);
         }
     }
@@ -757,11 +785,8 @@ mod tests {
     #[test]
     fn rejects_a_dissimilarity_scale_too_small_for_squared_mds() {
         let distances = array![[0.0, 1.0e-162], [1.0e-162, 0.0]];
-        let error = decaf_from_dissimilarity(
-            distances.view(),
-            &fixed_bandwidth_options(0.5),
-        )
-        .unwrap_err();
+        let error =
+            decaf_from_dissimilarity(distances.view(), &fixed_bandwidth_options(0.5)).unwrap_err();
         assert_eq!(
             error.to_string(),
             "DECAF dissimilarity scale is too small for squared-distance MDS"
@@ -974,13 +999,13 @@ mod tests {
     fn fuzzy_weights_and_underflow_fallback_are_exact() {
         let points = array![[0.0]];
         let centers = array![[0.0], [1.0]];
-        let memberships = fuzzy_memberships(points.view(), centers.view(), 2.0);
+        let memberships = fuzzy_memberships(points.view(), centers.view(), 2.0).unwrap();
         let distant_weight = (-0.125_f64).exp();
         assert!((memberships[(0, 0)] - 1.0 / (1.0 + distant_weight)).abs() < 1.0e-15);
         assert!((memberships[(0, 1)] - distant_weight / (1.0 + distant_weight)).abs() < 1.0e-15);
 
         let far_centers = array![[1.0e200], [2.0e200]];
-        let fallback = fuzzy_memberships(points.view(), far_centers.view(), 1.0);
+        let fallback = fuzzy_memberships(points.view(), far_centers.view(), 1.0).unwrap();
         assert_eq!(fallback, array![[1.0, 0.0]]);
     }
 
