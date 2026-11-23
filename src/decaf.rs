@@ -653,6 +653,12 @@ mod tests {
     }
 
     #[test]
+    fn bandwidth_grid_is_coarse_below_twenty_one_bins() {
+        assert!(bandwidth_grid_is_too_coarse(20));
+        assert!(!bandwidth_grid_is_too_coarse(21));
+    }
+
+    #[test]
     fn density_minimum_requires_a_strict_left_drop_and_accepts_a_right_tie() {
         assert_eq!(first_density_minimum(&[2.0, 1.0, 1.0, 2.0]), Some((1, 2)));
         assert_eq!(first_density_minimum(&[1.0, 1.0, 2.0]), None);
