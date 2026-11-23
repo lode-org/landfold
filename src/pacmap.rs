@@ -61,7 +61,9 @@ pub fn pacmap_embed(
 ) -> Result<Array2<f64>> {
     let n = points.nrows();
     if n < 4 {
-        return Err(LandfoldError::Msg("PaCMAP needs at least four points".into()));
+        return Err(LandfoldError::Msg(
+            "PaCMAP needs at least four points".into(),
+        ));
     }
     if opts.lowdim == 0 || opts.lowdim > n {
         return Err(LandfoldError::LowDim {
@@ -226,12 +228,7 @@ fn schedule(step: usize, total: usize) -> (f64, f64, f64) {
     }
 }
 
-fn build_pairs(
-    dist: ArrayView2<f64>,
-    k: usize,
-    n_mid: usize,
-    n_far: usize,
-) -> Result<Vec<Pair>> {
+fn build_pairs(dist: ArrayView2<f64>, k: usize, n_mid: usize, n_far: usize) -> Result<Vec<Pair>> {
     let n = dist.nrows();
     let mut pairs = Vec::new();
     let mut seen = vec![false; n * n];
@@ -255,7 +252,9 @@ fn build_pairs(
         order.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         for &(d, j) in order.iter().take(k) {
             if !d.is_finite() {
-                return Err(LandfoldError::Msg("PaCMAP neighbor distance is not finite".into()));
+                return Err(LandfoldError::Msg(
+                    "PaCMAP neighbor distance is not finite".into(),
+                ));
             }
             push(i, j, PairKind::Near, &mut seen);
         }

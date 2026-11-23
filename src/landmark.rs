@@ -271,9 +271,7 @@ fn landmarks_resample(
             let w = weights.map(|ww| ww[j]).unwrap_or(1.0);
             let term = w * acc.powf(-gamma);
             if !term.is_finite() {
-                return Err(LandfoldError::Msg(
-                    "resample weight overflowed".into(),
-                ));
+                return Err(LandfoldError::Msg("resample weight overflowed".into()));
             }
             tot += term;
         }
@@ -352,7 +350,9 @@ fn landmarks_staged(
         }
     }
     if !(tot > 0.0) {
-        return Err(LandfoldError::Msg("staged has no positive Voronoi mass".into()));
+        return Err(LandfoldError::Msg(
+            "staged has no positive Voronoi mass".into(),
+        ));
     }
     let mut chosen = Vec::with_capacity(k);
     let mut seen = HashSet::new();
@@ -437,10 +437,7 @@ impl Lcg {
     }
 
     fn next(&mut self) -> u64 {
-        self.state = self
-            .state
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1);
+        self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1);
         self.state
     }
 

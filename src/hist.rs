@@ -91,9 +91,9 @@ impl Histogram1d {
                 "histogram endpoint span overflowed".into(),
             ));
         }
-        let edge_len = n
-            .checked_add(1)
-            .ok_or(LandfoldError::Msg("histogram edge dimension overflowed".into()))?;
+        let edge_len = n.checked_add(1).ok_or(LandfoldError::Msg(
+            "histogram edge dimension overflowed".into(),
+        ))?;
         let mut edges = Array1::zeros(edge_len);
         for i in 0..=n {
             edges[i] = lo + span * (i as f64) / n as f64;
@@ -210,14 +210,15 @@ impl Histogram2d {
         {
             return Err(LandfoldError::Shape("2d histogram bounds"));
         }
-        let x_edge_len = nx
-            .checked_add(1)
-            .ok_or(LandfoldError::Msg("histogram x-edge dimension overflowed".into()))?;
-        let y_edge_len = ny
-            .checked_add(1)
-            .ok_or(LandfoldError::Msg("histogram y-edge dimension overflowed".into()))?;
-        nx.checked_mul(ny)
-            .ok_or(LandfoldError::Msg("histogram cell dimension overflowed".into()))?;
+        let x_edge_len = nx.checked_add(1).ok_or(LandfoldError::Msg(
+            "histogram x-edge dimension overflowed".into(),
+        ))?;
+        let y_edge_len = ny.checked_add(1).ok_or(LandfoldError::Msg(
+            "histogram y-edge dimension overflowed".into(),
+        ))?;
+        nx.checked_mul(ny).ok_or(LandfoldError::Msg(
+            "histogram cell dimension overflowed".into(),
+        ))?;
         let x_span = xhi - xlo;
         let y_span = yhi - ylo;
         if !x_span.is_finite() || !y_span.is_finite() {
@@ -333,9 +334,9 @@ impl Histogram2d {
         }
         let total = self.counts.iter().copied().try_fold(0.0, |total, value| {
             let next = total + value;
-            next.is_finite().then_some(next).ok_or_else(|| {
-                LandfoldError::Msg("2d histogram sample total overflowed".into())
-            })
+            next.is_finite()
+                .then_some(next)
+                .ok_or_else(|| LandfoldError::Msg("2d histogram sample total overflowed".into()))
         })?;
         if !totals_match(self.samples, total) {
             return Err(LandfoldError::Msg(
@@ -357,11 +358,7 @@ impl Histogram2d {
     }
 
     /// C++ `dimdist -gnuplot`: `D d n` rows, blank line after each D bin.
-    pub fn write_joint(
-        &self,
-        w: &mut impl std::io::Write,
-        gnuplot: bool,
-    ) -> std::io::Result<()> {
+    pub fn write_joint(&self, w: &mut impl std::io::Write, gnuplot: bool) -> std::io::Result<()> {
         self.validate_state().map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -513,10 +510,7 @@ impl FreeEnergy {
 
     fn validate_state_for_io(&self) -> std::io::Result<()> {
         self.validate_state().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "invalid free-energy state",
-            )
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid free-energy state")
         })
     }
 
@@ -572,7 +566,10 @@ impl FreeEnergy {
             }
             rho.mapv_inplace(|c| c / normalization);
         }
-        if rho.iter().any(|&density| !density.is_finite() || density < 0.0) {
+        if rho
+            .iter()
+            .any(|&density| !density.is_finite() || density < 0.0)
+        {
             return Err(LandfoldError::Msg(
                 "FES densities must be finite and nonnegative".into(),
             ));
@@ -813,9 +810,7 @@ pub fn fes_from_points(
     let xspan = xmax - xmin;
     let yspan = ymax - ymin;
     if !xspan.is_finite() || !yspan.is_finite() {
-        return Err(LandfoldError::Msg(
-            "fes coordinate span overflowed".into(),
-        ));
+        return Err(LandfoldError::Msg("fes coordinate span overflowed".into()));
     }
     let (xlo, xhi) = if xspan == 0.0 {
         degenerate_axis_bounds(xmin, pad, nx)?
@@ -857,7 +852,9 @@ fn validate_fes_kt(kt: f64) -> Result<()> {
 }
 
 fn uniform_edges(edges: &Array1<f64>) -> bool {
-    let Some((&first, rest)) = edges.as_slice_memory_order().and_then(|edges| edges.split_first())
+    let Some((&first, rest)) = edges
+        .as_slice_memory_order()
+        .and_then(|edges| edges.split_first())
     else {
         return false;
     };
@@ -1166,9 +1163,9 @@ pub fn coordination_histogram(
     max_cn: usize,
 ) -> Result<Histogram1d> {
     let cn = coordination_numbers(pos, cutoff)?;
-    let bins = max_cn
-        .checked_add(1)
-        .ok_or(LandfoldError::Msg("coordination histogram dimension overflowed".into()))?;
+    let bins = max_cn.checked_add(1).ok_or(LandfoldError::Msg(
+        "coordination histogram dimension overflowed".into(),
+    ))?;
     let mut h = Histogram1d::new(-0.5, max_cn as f64 + 0.5, bins)?;
     h.add_many(cn.view(), None)?;
     Ok(h)
@@ -1357,12 +1354,14 @@ mod tests {
         assert_eq!(h.counts, before.counts);
 
         let mut batch = Histogram2d::new(0.0, 1.0, 2, 0.0, 1.0, 2).unwrap();
-        assert!(batch
-            .add_points(
-                array![[0.5, 0.5], [0.5, 0.5]].view(),
-                Some(array![f64::MAX, f64::MAX].view())
-            )
-            .is_err());
+        assert!(
+            batch
+                .add_points(
+                    array![[0.5, 0.5], [0.5, 0.5]].view(),
+                    Some(array![f64::MAX, f64::MAX].view())
+                )
+                .is_err()
+        );
         assert_eq!(batch.samples, 0.0);
         assert_eq!(batch.counts.sum(), 0.0);
     }
@@ -1424,8 +1423,8 @@ mod tests {
     fn joint_hist_bins_identity_pairs_on_the_diagonal() {
         let pts = array![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let d = crate::pairwise_euclid(pts.view()).unwrap();
-        let (h, frac) = joint_pairwise_hist(d.view(), d.view(), 4, 4, Some(2.0), Some(2.0), None)
-            .unwrap();
+        let (h, frac) =
+            joint_pairwise_hist(d.view(), d.view(), 4, 4, Some(2.0), Some(2.0), None).unwrap();
         assert!(frac < 1e-12);
         assert!(h.samples > 0.0);
         let mut off = 0.0;
@@ -1521,8 +1520,6 @@ mod tests {
         assert!(nonfinite.write_svg_scaled(&mut svg, 100, 100, 2.0).is_err());
 
         let valid = FreeEnergy::from_histogram(&h, 1.0).unwrap();
-        assert!(valid
-            .write_svg_scaled(&mut svg, 100, 100, 0.0)
-            .is_err());
+        assert!(valid.write_svg_scaled(&mut svg, 100, 100, 0.0).is_err());
     }
 }

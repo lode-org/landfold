@@ -1,7 +1,7 @@
 //! Algorithm contracts: closed-form transfer, χ descent, two-well separation.
 
 use approx::assert_relative_eq;
-use landfold::{classical_mds, embed, pairwise_euclid, Euclid, IterOpts, Transfer};
+use landfold::{Euclid, IterOpts, Transfer, classical_mds, embed, pairwise_euclid};
 use ndarray::Array2;
 
 fn xsigmoid_closed(x: f64, sigma: f64, a: f64, b: f64) -> f64 {

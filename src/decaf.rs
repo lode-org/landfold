@@ -397,11 +397,7 @@ fn gaussian_kernel_cutoff(sigma: f64) -> f64 {
     6.0 * sigma
 }
 
-fn kernel_window(
-    distances: &[f64],
-    lower: f64,
-    upper: f64,
-) -> std::ops::Range<usize> {
+fn kernel_window(distances: &[f64], lower: f64, upper: f64) -> std::ops::Range<usize> {
     let start = distances.partition_point(|distance| *distance < lower);
     let end = distances.partition_point(|distance| *distance <= upper);
     start..end
@@ -710,10 +706,7 @@ mod tests {
     fn density_minimum_requires_a_strict_left_drop_and_accepts_a_right_tie() {
         assert_eq!(first_density_minimum(&[2.0, 1.0, 1.0, 2.0]), Some((1, 2)));
         assert_eq!(first_density_minimum(&[1.0, 1.0, 2.0]), None);
-        assert_eq!(
-            first_density_minimum(&[3.0, 2.0, 1.0, 2.0]),
-            Some((2, 2))
-        );
+        assert_eq!(first_density_minimum(&[3.0, 2.0, 1.0, 2.0]), Some((2, 2)));
         assert_eq!(first_density_minimum(&[3.0, 2.0, 2.0]), None);
         assert_eq!(first_density_minimum(&[3.0, 2.0, 1.0]), None);
     }

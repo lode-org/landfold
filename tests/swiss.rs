@@ -1,7 +1,7 @@
 //! End-to-end: three well-separated blobs stay separated after embedding.
 
 use approx::assert_relative_eq;
-use landfold::{embed_points, Euclid, IterOpts, Transfer};
+use landfold::{Euclid, IterOpts, Transfer, embed_points};
 use ndarray::Array2;
 
 #[test]

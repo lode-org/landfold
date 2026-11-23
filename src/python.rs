@@ -9,11 +9,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use crate::provenance::{Provenance, PROVENANCE_SCHEMA};
+use crate::provenance::{PROVENANCE_SCHEMA, Provenance};
 use crate::{
-    embed_points, farthest_point, fes_from_points, joint_pairwise_hist, mds_from_points,
-    pairwise_euclid, project_one, select_landmarks, suggest_scale, Euclid, IterOpts, LandmarkMode,
-    MdsMode, ProjOpts, Transfer,
+    Euclid, IterOpts, LandmarkMode, MdsMode, ProjOpts, Transfer, embed_points, farthest_point,
+    fes_from_points, joint_pairwise_hist, mds_from_points, pairwise_euclid, project_one,
+    select_landmarks, suggest_scale,
 };
 use ndarray::Array2;
 

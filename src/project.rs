@@ -391,7 +391,9 @@ fn path_average(
         }
     }
     if !(tw > 0.0 && tw.is_finite()) {
-        return Err(LandfoldError::Msg("path-average has no positive mass".into()));
+        return Err(LandfoldError::Msg(
+            "path-average has no positive mass".into(),
+        ));
     }
     for h in 0..d {
         acc[h] /= tw;

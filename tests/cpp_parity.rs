@@ -12,10 +12,10 @@ use approx::assert_relative_eq;
 use landfold::pairwise::apply_transfer;
 use landfold::stress::Stress;
 use landfold::{
-    classical_mds, farthest_point, pairwise, pairwise_euclid, query_chi, Dot, Euclid, IterOpts,
-    Metric, Periodic, Solver, Transfer,
+    Dot, Euclid, IterOpts, Metric, Periodic, Solver, Transfer, classical_mds, farthest_point,
+    pairwise, pairwise_euclid, query_chi,
 };
-use ndarray::{array, ArrayView2};
+use ndarray::{ArrayView2, array};
 
 const XFER_ABS: f64 = 1e-14;
 const XFER_REL: f64 = 1e-13;

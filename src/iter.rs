@@ -8,7 +8,7 @@ use crate::error::Result;
 use crate::mds::classical_mds;
 use crate::metric::Metric;
 use crate::pairwise::{apply_transfer, pairwise, pairwise_euclid};
-use crate::project::{scan_grid_1d, scan_grid_2d, ProjOpts};
+use crate::project::{ProjOpts, scan_grid_1d, scan_grid_2d};
 use crate::replica::{ReplicaOpts, minimize_replica};
 use crate::search::{StochOpts, minimize_stochastic};
 use crate::stress::{Stress, validate_distance_matrix, validate_imix, validate_weights};
@@ -319,9 +319,7 @@ pub fn embed_sigma_schedule(
         ));
     }
     let (sigma0, a, b) = opts.tfun_hd.xsigmoid_params().ok_or_else(|| {
-        crate::error::LandfoldError::Msg(
-            "sigma schedule needs a Ceriotti xsigmoid --fun-hd".into(),
-        )
+        crate::error::LandfoldError::Msg("sigma schedule needs a Ceriotti xsigmoid --fun-hd".into())
     })?;
     let _ = sigma0;
     let ld_ab = opts.tfun_ld.xsigmoid_params();
@@ -642,16 +640,9 @@ mod tests {
         opts.cg.maxiter = 8;
         let (emb, _) = embed(points.view(), &Euclid, &opts, None, None, None).unwrap();
         assert!(emb.stress.is_finite());
-        let (emb2, _) = embed_sigma_schedule(
-            points.view(),
-            &Euclid,
-            &opts,
-            &[6.0, 3.0],
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let (emb2, _) =
+            embed_sigma_schedule(points.view(), &Euclid, &opts, &[6.0, 3.0], None, None, None)
+                .unwrap();
         assert!(emb2.stress.is_finite());
         assert_eq!(emb2.low.nrows(), 6);
     }

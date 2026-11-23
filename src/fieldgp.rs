@@ -100,12 +100,17 @@ fn kernel_matrix(x: ArrayView2<f64>, sigma_f2: f64, ell: f64, noise: f64) -> Res
     Ok(k)
 }
 
-fn nll_of(x: ArrayView2<f64>, y: ArrayView1<f64>, sigma_f2: f64, ell: f64, noise: f64) -> Result<f64> {
+fn nll_of(
+    x: ArrayView2<f64>,
+    y: ArrayView1<f64>,
+    sigma_f2: f64,
+    ell: f64,
+    noise: f64,
+) -> Result<f64> {
     let n = x.nrows();
     let k = kernel_matrix(x, sigma_f2, ell, noise)?;
-    let chol = Cholesky::new(k).ok_or_else(|| {
-        LandfoldError::Msg("IMQ covariance is not positive definite".into())
-    })?;
+    let chol = Cholesky::new(k)
+        .ok_or_else(|| LandfoldError::Msg("IMQ covariance is not positive definite".into()))?;
     let yv = DVector::from_iterator(n, y.iter().copied());
     let alpha = chol.solve(&yv);
     let quad = yv.dot(&alpha);
@@ -113,7 +118,9 @@ fn nll_of(x: ArrayView2<f64>, y: ArrayView1<f64>, sigma_f2: f64, ell: f64, noise
     for i in 0..n {
         let lii = chol.l()[(i, i)];
         if !(lii > 0.0) {
-            return Err(LandfoldError::Msg("IMQ Cholesky diagonal is not positive".into()));
+            return Err(LandfoldError::Msg(
+                "IMQ Cholesky diagonal is not positive".into(),
+            ));
         }
         logdet += lii.ln();
     }
@@ -197,9 +204,8 @@ pub fn predict_imq(
     let n = x_train.nrows();
     let m = x_star.nrows();
     let k = kernel_matrix(x_train, model.sigma_f2, model.ell, model.noise)?;
-    let chol = Cholesky::new(k).ok_or_else(|| {
-        LandfoldError::Msg("IMQ covariance is not positive definite".into())
-    })?;
+    let chol = Cholesky::new(k)
+        .ok_or_else(|| LandfoldError::Msg("IMQ covariance is not positive definite".into()))?;
     let yv = DVector::from_iterator(n, y.iter().copied());
     let alpha = chol.solve(&yv);
     let ell2 = model.ell * model.ell;
@@ -233,8 +239,12 @@ mod tests {
     #[test]
     fn basin_ends() {
         let desc = array![[0.0, 0.0], [1.0, 0.0], [0.5, 0.0]];
-        let xi = basin_coordinate(desc.view(), array![0.0, 0.0].view(), array![1.0, 0.0].view())
-            .unwrap();
+        let xi = basin_coordinate(
+            desc.view(),
+            array![0.0, 0.0].view(),
+            array![1.0, 0.0].view(),
+        )
+        .unwrap();
         assert!((xi[0] - 0.0).abs() < 1e-12);
         assert!((xi[1] - 1.0).abs() < 1e-12);
         assert!((xi[2] - 0.5).abs() < 1e-12);

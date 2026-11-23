@@ -193,7 +193,12 @@ pub struct Fisher {
 }
 
 impl Fisher {
-    pub fn from_refs(points: &[Vec<f64>], ref_a: &[f64], ref_b: &[f64], ridge: f64) -> Result<Self> {
+    pub fn from_refs(
+        points: &[Vec<f64>],
+        ref_a: &[f64],
+        ref_b: &[f64],
+        ridge: f64,
+    ) -> Result<Self> {
         let d = ref_a.len();
         if d == 0 || ref_b.len() != d {
             return Err(LandfoldError::MetricSize {
@@ -262,13 +267,11 @@ impl Fisher {
         for i in 0..d {
             sw[(i, i)] += ridge;
         }
-        let prec = sw.try_inverse().ok_or_else(|| {
-            LandfoldError::Msg("fisher pooled covariance is singular".into())
-        })?;
+        let prec = sw
+            .try_inverse()
+            .ok_or_else(|| LandfoldError::Msg("fisher pooled covariance is singular".into()))?;
         if prec.iter().any(|v| !v.is_finite()) {
-            return Err(LandfoldError::Msg(
-                "fisher precision is non-finite".into(),
-            ));
+            return Err(LandfoldError::Msg("fisher precision is non-finite".into()));
         }
         let mut packed = vec![0.0; d * d];
         for i in 0..d {

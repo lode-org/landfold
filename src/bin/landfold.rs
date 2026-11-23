@@ -11,16 +11,15 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use landfold::{
+    AnnealOpts, BandOpts, Dot, Embedding, Euclid, FUN_SPEC_HELP, Fisher, FreeEnergy, Histogram2d,
+    IterOpts, L1, LandmarkMode, LandscapeOpts, MdsMode, Metric, NearFarOpts, PacmapOpts, Periodic,
+    PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere, StochOpts, Stretch, Transfer, Wasserstein1,
     axis_embed, axis_fit, axis_project, bands_embed, basin_coordinate, coordination_histogram,
     embed, embed_sigma_schedule, fit_imq_map, gap_split_embed, joint_pairwise_hist, knn_project,
     landscape_attractors as attractors_embed, landscape_embed, landscape_qe, mds_from_points,
-    nearfar_embed, pacmap_embed, pairwise,
-    pairwise_euclid,
-    phate_embed, phate_project, predict_imq, project_many_report, read_points, select_landmarks,
-    suggest_alpha, suggest_scale, write_plumed, write_points, AnnealOpts, BandOpts, Dot, Embedding,
-    Euclid, Fisher, FreeEnergy, Histogram2d, IterOpts, LandmarkMode, LandscapeOpts, MdsMode,
-    Metric, NearFarOpts, PacmapOpts, Periodic, PhateOpts, ProjOpts, ReplicaOpts, Solver, Sphere,
-    StochOpts, Stretch, Transfer, Wasserstein1, FUN_SPEC_HELP, L1,
+    nearfar_embed, pacmap_embed, pairwise, pairwise_euclid, phate_embed, phate_project,
+    predict_imq, project_many_report, read_points, select_landmarks, suggest_alpha, suggest_scale,
+    write_plumed, write_points,
 };
 
 #[derive(Parser, Debug)]
@@ -739,7 +738,8 @@ fn main() -> landfold::Result<()> {
                         q.mean().unwrap_or(0.0),
                         {
                             let m = q.mean().unwrap_or(0.0);
-                            (q.iter().map(|v| (v - m) * (v - m)).sum::<f64>() / q.len().max(1) as f64)
+                            (q.iter().map(|v| (v - m) * (v - m)).sum::<f64>()
+                                / q.len().max(1) as f64)
                                 .sqrt()
                         }
                     )?;

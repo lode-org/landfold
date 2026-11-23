@@ -54,7 +54,9 @@ pub fn nearfar_embed(
 ) -> Result<(Array2<f64>, f64, f64)> {
     let n = points.nrows();
     if n < 3 {
-        return Err(LandfoldError::Msg("near-far embed needs at least three points".into()));
+        return Err(LandfoldError::Msg(
+            "near-far embed needs at least three points".into(),
+        ));
     }
     if opts.lowdim == 0 || opts.lowdim > n {
         return Err(LandfoldError::LowDim {
