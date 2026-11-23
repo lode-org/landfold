@@ -592,6 +592,9 @@ mod tests {
 
     #[test]
     fn rejects_each_invalid_shape_and_option() {
+        let empty = Array2::zeros((0, 0));
+        assert!(decaf_from_dissimilarity(empty.view(), &DecafOptions::default()).is_err());
+
         let nonsquare = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.0]];
         assert!(decaf_from_dissimilarity(nonsquare.view(), &DecafOptions::default()).is_err());
 
@@ -638,6 +641,45 @@ mod tests {
 
         let one_pair = array![[0.0], [1.0]];
         assert_eq!(paper_bandwidth(one_pair.view(), 0.05).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn bandwidth_without_a_minimum_falls_back_after_a_full_coarse_grid() {
+        let sigma = 0.05_f64;
+        let points = array![[0.0], [1.0]];
+        let bins = (1.0 / (sigma / 21.0)).ceil() as usize;
+        assert!(bins >= 21);
+        assert_eq!(paper_bandwidth(points.view(), sigma).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn density_minimum_requires_a_strict_left_drop_and_accepts_a_right_tie() {
+        assert_eq!(first_density_minimum(&[2.0, 1.0, 1.0, 2.0]), Some((1, 2)));
+        assert_eq!(first_density_minimum(&[1.0, 1.0, 2.0]), None);
+    }
+
+    #[test]
+    fn convergence_threshold_is_inclusive_and_uses_tolerance_times_bandwidth() {
+        let threshold = convergence_threshold_sq(0.25, 0.4);
+        assert!((threshold - 0.01).abs() < 1.0e-15);
+        assert!(has_converged(threshold, threshold));
+        assert!(!has_converged(
+            f64::from_bits(threshold.to_bits() + 1),
+            threshold
+        ));
+    }
+
+    #[test]
+    fn mean_shift_stops_as_soon_as_the_tolerance_is_met() {
+        let points = array![[0.0], [0.1], [0.2], [0.4]];
+        let stopped = mean_shift(points.view(), 0.2, 20, 1.0).unwrap();
+        let one_iteration = mean_shift(points.view(), 0.2, 1, 1.0e-12).unwrap();
+        let fully_converged = mean_shift(points.view(), 0.2, 20, 1.0e-12).unwrap();
+
+        assert_eq!(stopped, one_iteration);
+        assert_ne!(stopped, fully_converged);
+        assert!((stopped[(0, 0)] - 0.175).abs() < 1.0e-15);
+        assert!((fully_converged[(0, 0)] - 0.1).abs() < 1.0e-15);
     }
 
     #[test]
