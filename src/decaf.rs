@@ -674,6 +674,48 @@ mod tests {
     }
 
     #[test]
+    fn oversized_bandwidth_grids_return_errors_instead_of_panicking() {
+        let huge = array![[0.0, 1.0e20], [1.0e20, 0.0]];
+        let huge_error = decaf_from_dissimilarity(
+            huge.view(),
+            &DecafOptions {
+                dimensions: DimensionChoice::Fixed(1),
+                bandwidth: BandwidthChoice::Paper { sigma: 0.0092 },
+                ..DecafOptions::default()
+            },
+        )
+        .unwrap_err();
+        assert!(huge_error.to_string().contains("bandwidth grid"));
+
+        let ordinary = array![[0.0, 1.0], [1.0, 0.0]];
+        let tiny_sigma_error = decaf_from_dissimilarity(
+            ordinary.view(),
+            &DecafOptions {
+                dimensions: DimensionChoice::Fixed(1),
+                bandwidth: BandwidthChoice::Paper {
+                    sigma: f64::MIN_POSITIVE,
+                },
+                ..DecafOptions::default()
+            },
+        )
+        .unwrap_err();
+        assert!(tiny_sigma_error.to_string().contains("bandwidth grid"));
+    }
+
+    #[test]
+    fn descriptor_distances_use_a_scaled_norm_and_report_true_overflow() {
+        let large = array![[1.0e200, 1.0e200]];
+        let origin = array![[0.0, 0.0]];
+        let distances = cross_distances(large.view(), origin.view()).unwrap();
+        assert!(distances[(0, 0)].is_finite());
+        assert!((distances[(0, 0)] / 1.0e200 - 2.0_f64.sqrt()).abs() < 1.0e-15);
+
+        let positive = array![[f64::MAX]];
+        let negative = array![[-f64::MAX]];
+        assert!(cross_distances(positive.view(), negative.view()).is_err());
+    }
+
+    #[test]
     fn bandwidth_of_a_zero_distance_set_is_the_smearing_width() {
         let sigma = 0.0092;
         let uniform = Array2::zeros((3, 2));
@@ -813,8 +855,18 @@ mod tests {
     fn representatives_are_within_class_medoids() {
         let points = array![[0.0], [0.2], [2.0], [5.0]];
         assert_eq!(
-            medoid_representatives(points.view(), &[0, 0, 0, 1]),
+            medoid_representatives(points.view(), &[0, 0, 0, 1], 2).unwrap(),
             vec![1, 3]
         );
+    }
+
+    #[test]
+    fn representatives_reject_empty_and_out_of_range_classes() {
+        let points = array![[0.0], [2.0]];
+        let empty = medoid_representatives(points.view(), &[0, 2], 3).unwrap_err();
+        assert!(empty.to_string().contains("class 1 has no observations"));
+
+        let out_of_range = medoid_representatives(points.view(), &[0, 2], 2).unwrap_err();
+        assert!(out_of_range.to_string().contains("outside 2 centers"));
     }
 }
