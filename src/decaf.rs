@@ -393,6 +393,20 @@ fn first_density_minimum(density: &[f64]) -> Option<(usize, usize)> {
     None
 }
 
+fn gaussian_kernel_cutoff(sigma: f64) -> f64 {
+    6.0 * sigma
+}
+
+fn kernel_window(
+    distances: &[f64],
+    lower: f64,
+    upper: f64,
+) -> std::ops::Range<usize> {
+    let start = distances.partition_point(|distance| *distance < lower);
+    let end = distances.partition_point(|distance| *distance <= upper);
+    start..end
+}
+
 fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
     let mut distances = pair_distances(points);
     distances.sort_by(f64::total_cmp);
@@ -410,14 +424,12 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
     // Six standard deviations retain each Gaussian down to exp(-18) while
     // avoiding evaluations whose contribution cannot affect the first
     // histogram minimum at the fixture precision.
-    let kernel_cutoff = 6.0 * sigma;
+    let kernel_cutoff = gaussian_kernel_cutoff(sigma);
     for (index, value) in density.iter_mut().enumerate() {
         let x = index as f64 * step;
         let lower = x - kernel_cutoff;
         let upper = x + kernel_cutoff;
-        let start = distances.partition_point(|distance| *distance < lower);
-        let end = distances.partition_point(|distance| *distance <= upper);
-        *value = distances[start..end]
+        *value = distances[kernel_window(&distances, lower, upper)]
             .iter()
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
@@ -435,6 +447,10 @@ fn convergence_threshold_sq(tolerance: f64, bandwidth: f64) -> f64 {
 
 fn has_converged(shift: f64, convergence_sq: f64) -> bool {
     shift <= convergence_sq
+}
+
+fn centers_are_distinct(distance: f64, radius_sq: f64) -> bool {
+    distance > radius_sq
 }
 
 fn mean_shift(
@@ -501,7 +517,7 @@ fn mean_shift(
                 ndarray::ArrayView1::from(centre.as_slice()),
                 ndarray::ArrayView1::from(candidate.as_slice()),
             );
-            distance > radius_sq
+            centers_are_distinct(distance, radius_sq)
         }) {
             accepted.push(candidate);
         }
@@ -657,7 +673,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(fitted.embedding().ncols(), 1);
+        assert_eq!(fitted.embedded().ncols(), 1);
         assert!(fitted.mds().is_some());
     }
 
