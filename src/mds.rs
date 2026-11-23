@@ -42,6 +42,10 @@ pub enum MdsDimension {
 
 /// Fitted classical MDS eigensystem with the eigenvalue-weighted projector
 /// required for out-of-sample embedding.
+///
+/// This follows Eq. 3-4 of Lai et al., *J. Chem. Phys.* **159**, 024129
+/// (2023), <https://doi.org/10.1063/5.0160369>. Their out-of-sample convention
+/// applies the projector directly to uncentered squared query dissimilarities.
 #[derive(Clone, Debug)]
 pub struct ClassicalMdsModel {
     eigenvalues: Array1<f64>,
@@ -128,8 +132,13 @@ impl ClassicalMdsModel {
         &self.embedding
     }
 
-    /// Embed new points from their distances to every training point at the
-    /// paper/reference package's two-times conventional MDS scale.
+    /// Embed new points from their distances to every training point.
+    ///
+    /// `distances` has one training point per row and one query point per
+    /// column. Following Eq. 4 of Lai et al., *J. Chem. Phys.* **159**, 024129
+    /// (2023), <https://doi.org/10.1063/5.0160369>, each column is squared and
+    /// projected without subtracting training or query means. The result uses
+    /// the reference package's two-times conventional MDS scale.
     pub fn project_distances(&self, distances: ArrayView2<f64>) -> Result<Array2<f64>> {
         project_with_projector(self.projector.view(), distances)
     }

@@ -10,6 +10,8 @@ use ndarray::{Array2, ArrayView2};
 use crate::error::{LandfoldError, Result};
 use crate::mds::{ClassicalMdsModel, MdsDimension};
 
+const MAX_BANDWIDTH_BINS: usize = 1_000_000;
+
 /// MDS dimension selection for DECAF.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DimensionChoice {
@@ -270,7 +272,7 @@ pub fn decaf_from_dissimilarity(
     )?;
     let labels = nearest_labels(embedded.view(), centers.view());
     let memberships = fuzzy_memberships(embedded.view(), centers.view(), bandwidth);
-    let representatives = medoid_representatives(embedded.view(), &labels);
+    let representatives = medoid_representatives(embedded.view(), &labels, centers.nrows())?;
     Ok(Decaf {
         descriptors: None,
         mds: Some(mds),
@@ -342,12 +344,22 @@ fn cross_distances(left: ArrayView2<f64>, right: ArrayView2<f64>) -> Result<Arra
     let mut distances = Array2::zeros((left.nrows(), right.nrows()));
     for i in 0..left.nrows() {
         for j in 0..right.nrows() {
-            let mut squared = 0.0;
+            let mut distance = 0.0_f64;
             for feature in 0..left.ncols() {
                 let delta = left[(i, feature)] - right[(j, feature)];
-                squared += delta * delta;
+                if !delta.is_finite() {
+                    return Err(LandfoldError::Msg(
+                        "DECAF descriptor difference overflowed".into(),
+                    ));
+                }
+                distance = distance.hypot(delta);
             }
-            distances[(i, j)] = squared.sqrt();
+            if !distance.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "DECAF descriptor distance overflowed".into(),
+                ));
+            }
+            distances[(i, j)] = distance;
         }
     }
     Ok(distances)
@@ -411,7 +423,18 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
         return Ok(sigma);
     }
     let bin_width = sigma / 21.0;
-    let bins = (max_distance / bin_width).ceil() as usize;
+    if !bin_width.is_finite() || bin_width <= 0.0 {
+        return Err(LandfoldError::Msg(
+            "DECAF bandwidth grid spacing is not representable".into(),
+        ));
+    }
+    let requested_bins = (max_distance / bin_width).ceil();
+    if !requested_bins.is_finite() || requested_bins > MAX_BANDWIDTH_BINS as f64 {
+        return Err(LandfoldError::Msg(format!(
+            "DECAF bandwidth grid requires more than {MAX_BANDWIDTH_BINS} bins"
+        )));
+    }
+    let bins = requested_bins as usize;
     if bandwidth_grid_is_too_coarse(bins) {
         return Ok(max_distance);
     }
@@ -571,8 +594,21 @@ fn fuzzy_memberships(
     memberships
 }
 
-fn medoid_representatives(points: ArrayView2<f64>, labels: &[usize]) -> Vec<usize> {
-    let class_count = labels.iter().copied().max().map_or(0, |label| label + 1);
+fn medoid_representatives(
+    points: ArrayView2<f64>,
+    labels: &[usize],
+    class_count: usize,
+) -> Result<Vec<usize>> {
+    if labels.len() != points.nrows() {
+        return Err(LandfoldError::Shape(
+            "DECAF labels must have one entry per embedded point",
+        ));
+    }
+    if let Some(label) = labels.iter().copied().find(|label| *label >= class_count) {
+        return Err(LandfoldError::Msg(format!(
+            "DECAF class label {label} is outside {class_count} centers"
+        )));
+    }
     (0..class_count)
         .map(|class| {
             labels
@@ -598,7 +634,10 @@ fn medoid_representatives(points: ArrayView2<f64>, labels: &[usize]) -> Vec<usiz
                         .sum::<f64>();
                     left_sum.total_cmp(&right_sum).then_with(|| left.cmp(right))
                 })
-                .map_or(0, |(index, _)| index)
+                .map(|(index, _)| index)
+                .ok_or_else(|| {
+                    LandfoldError::Msg(format!("DECAF class {class} has no observations"))
+                })
         })
         .collect()
 }
