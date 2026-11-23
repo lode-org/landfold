@@ -230,12 +230,7 @@ fn diffuse(
                 "PHATE diffusion eigenvalues must be finite".into(),
             ));
         }
-        if *e < 0.0 {
-            *e = 0.0;
-        }
-        if *e > 1.0 {
-            *e = 1.0;
-        }
+        *e = (*e).clamp(0.0, 1.0);
     }
     let t = match t_fixed {
         Some(t) if t >= 1 => t,
@@ -269,8 +264,7 @@ pub fn slow_mode(
     }
     if knn == 0 || knn >= n {
         return Err(LandfoldError::Msg(format!(
-            "slow-mode knn must be in 1..n-1 (got knn={}, n={})",
-            knn, n
+            "slow-mode knn must be in 1..n-1 (got knn={knn}, n={n})"
         )));
     }
     let dist = pairwise(points, metric)?;
@@ -634,6 +628,6 @@ mod tests {
     fn knee_on_exponential_is_interior() {
         let y: Vec<f64> = (0..20).map(|i| (-(i as f64) / 10.0).exp()).collect();
         let k = find_knee(&y);
-        assert!(k >= 2 && k <= 18, "knee {k} should sit inside the decay");
+        assert!((2..=18).contains(&k), "knee {k} should sit inside the decay");
     }
 }

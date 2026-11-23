@@ -319,13 +319,8 @@ mod tests {
 
     #[test]
     fn knee_sits_between_a_tight_cluster_and_a_far_tail() {
-        let mut d = Vec::new();
-        for _ in 0..80 {
-            d.push(1.0);
-        }
-        for _ in 0..20 {
-            d.push(10.0);
-        }
+        let mut d = vec![1.0; 80];
+        d.extend(std::iter::repeat_n(10.0, 20));
         let s = suggest_scale(&d).unwrap();
         assert!(s.knee >= 1.0 && s.knee <= 10.0);
         assert_relative_eq!(s.q50, 1.0, epsilon = 1e-12);

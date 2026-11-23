@@ -1,3 +1,12 @@
+// Dense numerical kernels use shared integer indices across several arrays.
+#![allow(clippy::needless_range_loop)]
+// Negated floating-point comparisons deliberately reject unordered NaN values.
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+// Validation clauses retain the same grouping as their documented constraints.
+#![allow(clippy::nonminimal_bool)]
+// Mathematical entry points keep their parameters explicit and named.
+#![allow(clippy::too_many_arguments)]
+
 //! landfold: Landscape And Nonlinear Distance Folding Onto Low Dimensions.
 //!
 //! Implements the transfer-function MDS of Ceriotti, Tribello and Parrinello

@@ -36,6 +36,7 @@ struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Cmd {
     /// Fit a low-D embedding (standard CG, or --stoch for pair search)
     Embed {
@@ -590,10 +591,7 @@ fn main() -> landfold::Result<()> {
                 write_points(&mut io::stdout().lock(), &coords, None)?;
                 writeln!(
                     io::stderr(),
-                    "# near-far sigma {} tau {} riesz {}",
-                    sigma,
-                    tau,
-                    riesz
+                    "# near-far sigma {sigma} tau {tau} riesz {riesz}"
                 )?;
                 return Ok(());
             }

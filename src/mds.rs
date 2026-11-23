@@ -75,7 +75,7 @@ impl ClassicalMdsModel {
         let eigenvalues = Array1::from_iter(
             pairs
                 .iter()
-                .map(|&(value, _)| (value > rank_tolerance).then_some(value).unwrap_or(0.0)),
+                .map(|&(value, _)| if value > rank_tolerance { value } else { 0.0 }),
         );
         let numerical_rank = eigenvalues.iter().take_while(|&&value| value > 0.0).count();
         let dimension = match dimensions {

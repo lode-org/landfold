@@ -306,7 +306,7 @@ pub fn project_report(
             ls_tol: 1e-9,
             ..CgOpts::default()
         };
-        let report = try_minimize_oracle(|x| eval(x), best.view(), &cgopts)?;
+        let report = try_minimize_oracle(eval, best.view(), &cgopts)?;
         best = report.coords;
     }
 
