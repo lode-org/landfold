@@ -739,6 +739,28 @@ mod tests {
         )
         .unwrap_err();
         assert!(tiny_sigma_error.to_string().contains("bandwidth grid"));
+
+        let subnormal_sigma_error = decaf_from_dissimilarity(
+            ordinary.view(),
+            &DecafOptions {
+                dimensions: DimensionChoice::Fixed(1),
+                bandwidth: BandwidthChoice::Paper {
+                    sigma: f64::from_bits(1),
+                },
+                ..DecafOptions::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            subnormal_sigma_error.to_string(),
+            "DECAF bandwidth grid spacing is not representable"
+        );
+    }
+
+    #[test]
+    fn maximum_bandwidth_grid_size_is_inclusive() {
+        let points = array![[0.0], [MAX_BANDWIDTH_BINS as f64]];
+        assert!(paper_bandwidth(points.view(), 21.0).is_ok());
     }
 
     #[test]
