@@ -599,10 +599,20 @@ mod tests {
     #[test]
     fn rejects_each_invalid_shape_and_option() {
         let empty = Array2::zeros((0, 0));
-        assert!(decaf_from_dissimilarity(empty.view(), &DecafOptions::default()).is_err());
+        let empty_error =
+            decaf_from_dissimilarity(empty.view(), &DecafOptions::default()).unwrap_err();
+        assert!(matches!(
+            empty_error,
+            LandfoldError::Shape("DECAF dissimilarity matrix must be non-empty and square")
+        ));
 
         let nonsquare = array![[0.0, 1.0, 2.0], [1.0, 0.0, 1.0]];
-        assert!(decaf_from_dissimilarity(nonsquare.view(), &DecafOptions::default()).is_err());
+        let shape_error =
+            decaf_from_dissimilarity(nonsquare.view(), &DecafOptions::default()).unwrap_err();
+        assert!(matches!(
+            shape_error,
+            LandfoldError::Shape("DECAF dissimilarity matrix must be non-empty and square")
+        ));
 
         let distances = array![[0.0, 1.0], [1.0, 0.0]];
         for options in [
@@ -633,6 +643,22 @@ mod tests {
         ] {
             assert!(decaf_from_dissimilarity(distances.view(), &options).is_err());
         }
+    }
+
+    #[test]
+    fn nonzero_dissimilarity_does_not_take_the_uniform_shortcut() {
+        let distances = array![[0.0, 1.0], [1.0, 0.0]];
+        let fitted = decaf_from_dissimilarity(
+            distances.view(),
+            &DecafOptions {
+                dimensions: DimensionChoice::Fixed(1),
+                bandwidth: BandwidthChoice::Fixed(0.5),
+                ..DecafOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(fitted.embedding().ncols(), 1);
+        assert!(fitted.mds().is_some());
     }
 
     #[test]
@@ -668,6 +694,28 @@ mod tests {
     fn density_minimum_requires_a_strict_left_drop_and_accepts_a_right_tie() {
         assert_eq!(first_density_minimum(&[2.0, 1.0, 1.0, 2.0]), Some((1, 2)));
         assert_eq!(first_density_minimum(&[1.0, 1.0, 2.0]), None);
+        assert_eq!(
+            first_density_minimum(&[3.0, 2.0, 1.0, 2.0]),
+            Some((2, 2))
+        );
+        assert_eq!(first_density_minimum(&[3.0, 2.0, 2.0]), None);
+        assert_eq!(first_density_minimum(&[3.0, 2.0, 1.0]), None);
+    }
+
+    #[test]
+    fn truncated_kernel_window_includes_both_cutoff_boundaries() {
+        let distances = [0.0, 1.0, 2.0, 3.0];
+        assert_eq!(gaussian_kernel_cutoff(0.5), 3.0);
+        assert_eq!(kernel_window(&distances, 1.0, 2.0), 1..3);
+    }
+
+    #[test]
+    fn centers_at_exactly_one_bandwidth_are_not_distinct() {
+        assert!(!centers_are_distinct(0.04, 0.04));
+        assert!(centers_are_distinct(
+            f64::from_bits(0.04_f64.to_bits() + 1),
+            0.04
+        ));
     }
 
     #[test]
