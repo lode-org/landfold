@@ -126,7 +126,11 @@ fn suggest_alpha_sigma(
             "stretch suggestion needs a finite sigma > 0".into(),
         ));
     }
-    if points.iter().chain(ref_a.iter()).chain(ref_b.iter()).any(|v| !v.is_finite())
+    if points
+        .iter()
+        .chain(ref_a.iter())
+        .chain(ref_b.iter())
+        .any(|v| !v.is_finite())
     {
         return Err(LandfoldError::Msg(
             "stretch suggestion needs finite coordinates".into(),
@@ -135,9 +139,7 @@ fn suggest_alpha_sigma(
     let mut axis: Vec<f64> = (0..d).map(|k| ref_a[k] - ref_b[k]).collect();
     let n2: f64 = axis.iter().map(|v| v * v).sum();
     if !(n2 > 0.0 && n2.is_finite()) {
-        return Err(LandfoldError::Msg(
-            "stretch references must differ".into(),
-        ));
+        return Err(LandfoldError::Msg("stretch references must differ".into()));
     }
     let inv = 1.0 / n2.sqrt();
     for v in &mut axis {
@@ -266,9 +268,7 @@ fn map_alpha(
         }
     }
     if !best_v.is_finite() {
-        return Err(LandfoldError::Msg(
-            "stretch posterior is non-finite".into(),
-        ));
+        return Err(LandfoldError::Msg("stretch posterior is non-finite".into()));
     }
     let mut post = vec![0.0; NGRID];
     let mut z = 0.0;
@@ -319,13 +319,8 @@ mod tests {
 
     #[test]
     fn knee_sits_between_a_tight_cluster_and_a_far_tail() {
-        let mut d = Vec::new();
-        for _ in 0..80 {
-            d.push(1.0);
-        }
-        for _ in 0..20 {
-            d.push(10.0);
-        }
+        let mut d = vec![1.0; 80];
+        d.extend(std::iter::repeat_n(10.0, 20));
         let s = suggest_scale(&d).unwrap();
         assert!(s.knee >= 1.0 && s.knee <= 10.0);
         assert_relative_eq!(s.q50, 1.0, epsilon = 1e-12);
@@ -344,8 +339,13 @@ mod tests {
         use ndarray::array;
         let pts = array![[0.0, 0.0], [0.1, 0.0], [3.0, 0.0], [3.1, 0.0]];
         let tf = Transfer::xsigmoid(5.0, 8.0, 1.0).unwrap();
-        let s = suggest_alpha(pts.view(), array![0.0, 0.0].view(), array![3.0, 0.0].view(), &tf)
-            .unwrap();
+        let s = suggest_alpha(
+            pts.view(),
+            array![0.0, 0.0].view(),
+            array![3.0, 0.0].view(),
+            &tf,
+        )
+        .unwrap();
         assert!(s.alpha >= 0.0);
         assert!(s.alpha_lo <= s.alpha_hi);
         assert!(s.n_between >= 1);

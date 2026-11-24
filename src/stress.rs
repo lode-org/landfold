@@ -201,14 +201,7 @@ impl Stress {
                 "stress pair weight shape",
             ));
         }
-        let stress = Self::from_parts(
-            hd,
-            fhd,
-            tfun_ld,
-            imix,
-            weights,
-            pair_weights,
-        );
+        let stress = Self::from_parts(hd, fhd, tfun_ld, imix, weights, pair_weights);
         if stress.weights.as_ref().is_some_and(|weights| {
             weights
                 .iter()
@@ -857,62 +850,61 @@ mod tests {
     #[test]
     fn rejects_invalid_assembled_pair_weights() {
         let hd = Array2::zeros((2, 2));
-        assert!(Stress::new(
-            hd.clone(),
-            hd.clone(),
-            Transfer::identity(),
-            0.0,
-            Some(array![f64::MAX, f64::MAX]),
-            None,
-        )
-        .is_err());
-        assert!(Stress::new(
-            hd.clone(),
-            hd,
-            Transfer::identity(),
-            0.0,
-            None,
-            Some(Array2::from_elem((2, 2), f64::NAN)),
-        )
-        .is_err());
+        assert!(
+            Stress::new(
+                hd.clone(),
+                hd.clone(),
+                Transfer::identity(),
+                0.0,
+                Some(array![f64::MAX, f64::MAX]),
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            Stress::new(
+                hd.clone(),
+                hd,
+                Transfer::identity(),
+                0.0,
+                None,
+                Some(Array2::from_elem((2, 2), f64::NAN)),
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn rejects_overflowing_pair_weight_mass() {
         let hd = Array2::zeros((3, 3));
         let pair_weights = Array2::from_elem((3, 3), f64::MAX);
-        assert!(Stress::new(
-            hd.clone(),
-            hd,
-            Transfer::identity(),
-            0.0,
-            None,
-            Some(pair_weights),
-        )
-        .is_err());
+        assert!(
+            Stress::new(
+                hd.clone(),
+                hd,
+                Transfer::identity(),
+                0.0,
+                None,
+                Some(pair_weights),
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn eval_penalizes_non_contiguous_public_distance_state() {
         use ndarray::ShapeBuilder;
 
-        let hd = Array2::from_shape_vec((2, 2).strides((1, 2)), vec![0.0, 2.0, 2.0, 0.0])
-            .unwrap();
-        let stress = Stress::new(
-            hd.clone(),
-            hd,
-            Transfer::identity(),
-            0.0,
-            None,
-            None,
-        )
-        .unwrap();
+        let hd = Array2::from_shape_vec((2, 2).strides((1, 2)), vec![0.0, 2.0, 2.0, 0.0]).unwrap();
+        let stress = Stress::new(hd.clone(), hd, Transfer::identity(), 0.0, None, None).unwrap();
         let evaluation = stress.eval(array![0.0, 0.0, 1.0, 0.0].view(), 2);
         assert_eq!(evaluation.value, OPTIMIZER_PENALTY);
         assert_eq!(evaluation.grad.len(), 4);
-        assert!(stress
-            .try_eval(array![0.0, 0.0, 1.0, 0.0].view(), 2)
-            .is_err());
+        assert!(
+            stress
+                .try_eval(array![0.0, 0.0, 1.0, 0.0].view(), 2)
+                .is_err()
+        );
     }
 
     #[test]
@@ -966,25 +958,29 @@ mod tests {
     #[test]
     fn rejects_nonsymmetric_or_nonzero_diagonal_distances() {
         let asymmetric = array![[0.0, 1.0], [2.0, 0.0]];
-        assert!(Stress::new(
-            asymmetric.clone(),
-            asymmetric,
-            Transfer::identity(),
-            0.0,
-            None,
-            None,
-        )
-        .is_err());
+        assert!(
+            Stress::new(
+                asymmetric.clone(),
+                asymmetric,
+                Transfer::identity(),
+                0.0,
+                None,
+                None,
+            )
+            .is_err()
+        );
         let diagonal = array![[1.0, 0.0], [0.0, 0.0]];
-        assert!(Stress::new(
-            diagonal.clone(),
-            diagonal,
-            Transfer::identity(),
-            0.0,
-            None,
-            None,
-        )
-        .is_err());
+        assert!(
+            Stress::new(
+                diagonal.clone(),
+                diagonal,
+                Transfer::identity(),
+                0.0,
+                None,
+                None,
+            )
+            .is_err()
+        );
     }
 
     #[test]

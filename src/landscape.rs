@@ -272,7 +272,9 @@ pub fn landscape_attractors(
         ));
     }
     if src >= n {
-        return Err(LandfoldError::Msg("landscape attractor src out of range".into()));
+        return Err(LandfoldError::Msg(
+            "landscape attractor src out of range".into(),
+        ));
     }
     if opts.knn == 0 || opts.knn >= n {
         return Err(LandfoldError::Msg(format!(
@@ -406,7 +408,11 @@ pub fn landscape_attractors(
         xy_a[(k, 0)] -= ox;
         xy_a[(k, 1)] -= oy;
     }
-    let sink = if src == 0 && n > 1 { 1 } else { src.saturating_sub(1) };
+    let sink = if src == 0 && n > 1 {
+        1
+    } else {
+        src.saturating_sub(1)
+    };
     let ico_k = amap[attract[sink]];
     if ico_k < n {
         let vx = xy_a[(ico_k, 0)];

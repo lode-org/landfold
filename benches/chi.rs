@@ -1,8 +1,8 @@
 //! Criterion on χ+∇ for the teaching x-sigmoid, n=400.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use landfold::stress::Stress;
-use landfold::{apply_transfer, pairwise_euclid, Transfer};
+use landfold::{Transfer, apply_transfer, pairwise_euclid};
 
 fn lcg(state: &mut u64) -> f64 {
     *state = state.wrapping_mul(6364136223846793005).wrapping_add(1);

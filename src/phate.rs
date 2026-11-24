@@ -230,12 +230,7 @@ fn diffuse(
                 "PHATE diffusion eigenvalues must be finite".into(),
             ));
         }
-        if *e < 0.0 {
-            *e = 0.0;
-        }
-        if *e > 1.0 {
-            *e = 1.0;
-        }
+        *e = (*e).clamp(0.0, 1.0);
     }
     let t = match t_fixed {
         Some(t) if t >= 1 => t,
@@ -269,8 +264,7 @@ pub fn slow_mode(
     }
     if knn == 0 || knn >= n {
         return Err(LandfoldError::Msg(format!(
-            "slow-mode knn must be in 1..n-1 (got knn={}, n={})",
-            knn, n
+            "slow-mode knn must be in 1..n-1 (got knn={knn}, n={n})"
         )));
     }
     let dist = pairwise(points, metric)?;
@@ -295,9 +289,7 @@ pub fn slow_mode(
     }
     let dm = DMatrix::<f64>::from_row_slice(n, n, &m);
     let eigen = SymmetricEigen::new(dm);
-    let mut order: Vec<(f64, usize)> = (0..n)
-        .map(|k| (eigen.eigenvalues[k], k))
-        .collect();
+    let mut order: Vec<(f64, usize)> = (0..n).map(|k| (eigen.eigenvalues[k], k)).collect();
     order.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let src = order[1].1;
     let mut psi = Array1::<f64>::zeros(n);
@@ -312,12 +304,7 @@ pub fn slow_mode(
     Ok(psi)
 }
 
-fn assemble_p(
-    evecs: &DMatrix<f64>,
-    evals: &[f64],
-    deg: &[f64],
-    t: usize,
-) -> Result<Array2<f64>> {
+fn assemble_p(evecs: &DMatrix<f64>, evals: &[f64], deg: &[f64], t: usize) -> Result<Array2<f64>> {
     let n = evals.len();
     let mut out = Array2::<f64>::zeros((n, n));
     let tf = t as i32;
@@ -332,9 +319,7 @@ fn assemble_p(
             }
             let val = acc * (sj / si);
             if !val.is_finite() {
-                return Err(LandfoldError::Msg(
-                    "PHATE P^t entry is not finite".into(),
-                ));
+                return Err(LandfoldError::Msg("PHATE P^t entry is not finite".into()));
             }
             out[(i, j)] = val.max(0.0);
         }
@@ -618,12 +603,26 @@ mod tests {
         let d0b = (proj[(0, 0)] - cb[0]).hypot(proj[(0, 1)] - cb[1]);
         let d1a = (proj[(1, 0)] - ca[0]).hypot(proj[(1, 1)] - ca[1]);
         let d1b = (proj[(1, 0)] - cb[0]).hypot(proj[(1, 1)] - cb[1]);
-        assert!(d0a < d0b, "query in blob A must land nearer A ({d0a} vs {d0b})");
-        assert!(d1b < d1a, "query in blob B must land nearer B ({d1b} vs {d1a})");
+        assert!(
+            d0a < d0b,
+            "query in blob A must land nearer A ({d0a} vs {d0b})"
+        );
+        assert!(
+            d1b < d1a,
+            "query in blob B must land nearer B ({d1b} vs {d1a})"
+        );
         let xmin = y.column(0).iter().copied().fold(f64::INFINITY, f64::min);
-        let xmax = y.column(0).iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let xmax = y
+            .column(0)
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let ymin = y.column(1).iter().copied().fold(f64::INFINITY, f64::min);
-        let ymax = y.column(1).iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let ymax = y
+            .column(1)
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         for i in 0..2 {
             assert!(proj[(i, 0)] >= xmin - 1e-6 && proj[(i, 0)] <= xmax + 1e-6);
             assert!(proj[(i, 1)] >= ymin - 1e-6 && proj[(i, 1)] <= ymax + 1e-6);
@@ -634,6 +633,9 @@ mod tests {
     fn knee_on_exponential_is_interior() {
         let y: Vec<f64> = (0..20).map(|i| (-(i as f64) / 10.0).exp()).collect();
         let k = find_knee(&y);
-        assert!(k >= 2 && k <= 18, "knee {k} should sit inside the decay");
+        assert!(
+            (2..=18).contains(&k),
+            "knee {k} should sit inside the decay"
+        );
     }
 }

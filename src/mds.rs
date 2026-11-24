@@ -26,6 +26,179 @@ pub struct MdsReport {
     pub ld_error: f64,
 }
 
+/// Rule used to choose the dimension of a classical MDS model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MdsDimension {
+    /// Retain exactly this many dimensions, returning
+    /// [`LandfoldError::LowDim`] when the request exceeds numerical rank.
+    Fixed(usize),
+    /// Retain as many dimensions as there are numerically ranked components
+    /// whose normalized eigenvalues pass their broken-stick expectations.
+    ///
+    /// This counts every passing component; it does not stop at the first
+    /// component that fails.
+    BrokenStick,
+}
+
+/// Fitted classical MDS eigensystem with the eigenvalue-weighted projector
+/// required for out-of-sample embedding.
+///
+/// This follows Eq. 3-4 of Lai et al., *J. Chem. Phys.* **159**, 024129
+/// (2023), <https://doi.org/10.1063/5.0160369>. Their out-of-sample convention
+/// applies the projector directly to uncentered squared query dissimilarities.
+#[derive(Clone, Debug)]
+pub struct ClassicalMdsModel {
+    eigenvalues: Array1<f64>,
+    projector: Array2<f64>,
+    embedding: Array2<f64>,
+}
+
+impl ClassicalMdsModel {
+    /// Fit classical MDS from a symmetric dissimilarity matrix.
+    ///
+    /// Numerical rank follows the usual matrix-rank tolerance
+    /// `lambda_max * n * f64::EPSILON`, where `n` is the matrix order. The Lai
+    /// reference implementation does not specify a tolerance. This
+    /// scale-relative convention rejects round-off axes before Eq. 3 divides
+    /// by the square root of their eigenvalues.
+    pub fn fit(dist: ArrayView2<f64>, dimensions: MdsDimension) -> Result<Self> {
+        let (n, b) = torgerson_b(dist)?;
+        let dm = DMatrix::<f64>::from_row_slice(n, n, &b);
+        let eigen = SymmetricEigen::new(dm);
+        let mut pairs: Vec<(f64, usize)> = (0..n).map(|k| (eigen.eigenvalues[k], k)).collect();
+        pairs.sort_by(|a, b| b.0.total_cmp(&a.0));
+        if pairs.iter().any(|(value, _)| !value.is_finite()) {
+            return Err(LandfoldError::Msg("MDS eigenvalues must be finite".into()));
+        }
+        let largest = pairs.first().map_or(0.0, |(value, _)| value.max(0.0));
+        // NumPy's matrix-rank convention: eigenvalues at or below
+        // lambda_max * max(shape) * epsilon are numerical zero. The Lai
+        // reference does not define a rank tolerance; this scale-aware choice
+        // prevents Eq. 3 from dividing by round-off eigenvalues.
+        let rank_tolerance = largest * n.max(1) as f64 * f64::EPSILON;
+        let eigenvalues = Array1::from_iter(
+            pairs
+                .iter()
+                .map(|&(value, _)| if value > rank_tolerance { value } else { 0.0 }),
+        );
+        let numerical_rank = eigenvalues.iter().take_while(|&&value| value > 0.0).count();
+        let dimension = match dimensions {
+            MdsDimension::Fixed(value) => value,
+            MdsDimension::BrokenStick => {
+                broken_stick_dimension(eigenvalues.as_slice().expect("owned eigenvalue array"))
+            }
+        };
+        if dimension == 0 || dimension > numerical_rank {
+            return Err(LandfoldError::LowDim {
+                low: dimension,
+                high: numerical_rank,
+            });
+        }
+
+        let mut projector = Array2::zeros((dimension, n));
+        for axis in 0..dimension {
+            let (lambda, source) = pairs[axis];
+            let scale = lambda.sqrt();
+            for sample in 0..n {
+                projector[(axis, sample)] = eigen.eigenvectors[(sample, source)] / scale;
+            }
+        }
+        let embedding = project_with_projector(projector.view(), dist)?;
+        Ok(Self {
+            eigenvalues,
+            projector,
+            embedding,
+        })
+    }
+
+    /// Ordered non-negative eigenvalues of the centered Gram matrix.
+    pub fn eigenvalues(&self) -> &Array1<f64> {
+        &self.eigenvalues
+    }
+
+    /// Eigenvalue-weighted Eq. 3 projector, one retained component per row.
+    pub fn projector(&self) -> &Array2<f64> {
+        &self.projector
+    }
+
+    /// Training points embedded by the same Eq. 3-4 projector used for new
+    /// points.
+    ///
+    /// The paper and reference package apply `P` directly to squared
+    /// dissimilarities. These coordinates have twice the scale of the
+    /// conventional centered `sqrt(lambda) * v` classical-MDS embedding
+    /// (up to eigensystem orientation).
+    pub fn embedding(&self) -> &Array2<f64> {
+        &self.embedding
+    }
+
+    /// Embed new points from their distances to every training point.
+    ///
+    /// `distances` has one training point per row and one query point per
+    /// column. Following Eq. 4 of Lai et al., *J. Chem. Phys.* **159**, 024129
+    /// (2023), <https://doi.org/10.1063/5.0160369>, each column is squared and
+    /// projected without subtracting training or query means. The result uses
+    /// the reference package's two-times conventional MDS scale.
+    pub fn project_distances(&self, distances: ArrayView2<f64>) -> Result<Array2<f64>> {
+        project_with_projector(self.projector.view(), distances)
+    }
+}
+
+/// Broken-stick dimension from descending eigenvalues (Jolliffe, 2002).
+pub fn broken_stick_dimension(eigenvalues: &[f64]) -> usize {
+    let n = eigenvalues.len();
+    if n == 0 {
+        return 0;
+    }
+    let total: f64 = eigenvalues.iter().map(|value| value.max(0.0)).sum();
+    if total <= 0.0 || !total.is_finite() {
+        return 0;
+    }
+    let mut retained = 0;
+    for (axis, &eigenvalue) in eigenvalues.iter().enumerate() {
+        let expected = ((axis + 1)..=n).map(|k| 1.0 / k as f64).sum::<f64>() / n as f64;
+        if eigenvalue.max(0.0) / total >= expected {
+            retained += 1;
+        }
+    }
+    retained.max(1)
+}
+
+fn project_with_projector(
+    projector: ArrayView2<f64>,
+    distances: ArrayView2<f64>,
+) -> Result<Array2<f64>> {
+    if distances.nrows() != projector.ncols() {
+        return Err(LandfoldError::Shape(
+            "MDS projection distances must have one row per training point",
+        ));
+    }
+    if distances
+        .iter()
+        .any(|value| !value.is_finite() || *value < 0.0)
+    {
+        return Err(LandfoldError::Msg(
+            "MDS projection distances must be finite and nonnegative".into(),
+        ));
+    }
+    let mut embedded = Array2::zeros((distances.ncols(), projector.nrows()));
+    for point in 0..distances.ncols() {
+        for axis in 0..projector.nrows() {
+            let mut value = 0.0;
+            for training in 0..projector.ncols() {
+                value += projector[(axis, training)] * distances[(training, point)].powi(2);
+            }
+            if !value.is_finite() {
+                return Err(LandfoldError::Msg(
+                    "MDS out-of-sample projection overflowed".into(),
+                ));
+            }
+            embedded[(point, axis)] = value;
+        }
+    }
+    Ok(embedded)
+}
+
 /// Double-centred Gram `B = -1/2 H D^{circ 2} H` (Torgerson 1952).
 fn checked_add(left: f64, right: f64, what: &'static str) -> Result<f64> {
     let value = left + right;

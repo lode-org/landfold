@@ -140,7 +140,10 @@ pub fn write_plumed<W: Write>(
     if high.nrows() == 0 {
         return Err(LandfoldError::Empty);
     }
-    writeln!(w, "DESCRIPTION: results from sketch-map analysis in PLUMED compatible format")?;
+    writeln!(
+        w,
+        "DESCRIPTION: results from sketch-map analysis in PLUMED compatible format"
+    )?;
     for i in 0..high.nrows() {
         let wt = weights.map(|ww| ww[i]).unwrap_or(1.0);
         write!(w, "REMARK WEIGHT={wt}")?;
@@ -188,7 +191,6 @@ mod tests {
         assert!(write_points(&mut output, &points, Some(&Array1::from(vec![-1.0]))).is_err());
     }
 
-    #[test]
     #[test]
     fn plumed_dump_has_ceriotti_blocks() {
         let high = array![[1.0, 2.0], [3.0, 4.0]];

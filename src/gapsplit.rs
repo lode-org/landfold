@@ -12,7 +12,7 @@
 use ndarray::{Array2, ArrayView1, ArrayView2};
 
 use crate::error::{LandfoldError, Result};
-use crate::iter::{embed, IterOpts};
+use crate::iter::{IterOpts, embed};
 use crate::metric::Metric;
 use crate::phate::slow_mode;
 
@@ -26,7 +26,9 @@ pub struct GapReport {
 /// Hard cut: `w_ij = 1` iff `|ψ_i - ψ_j| ≤ τ`.
 pub fn gap_pair_weights(psi: ArrayView1<f64>, tau: f64) -> Result<Array2<f64>> {
     if !(tau >= 0.0) || !tau.is_finite() {
-        return Err(LandfoldError::Msg("gap tau must be finite and nonnegative".into()));
+        return Err(LandfoldError::Msg(
+            "gap tau must be finite and nonnegative".into(),
+        ));
     }
     let n = psi.len();
     if n == 0 {
@@ -122,6 +124,7 @@ mod tests {
     use super::*;
     use crate::metric::Euclid;
     use crate::transfer::Transfer;
+    use ndarray::Array1;
 
     #[test]
     fn cut_kills_cross_pairs() {

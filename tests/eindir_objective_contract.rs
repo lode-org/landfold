@@ -1,6 +1,6 @@
 use eindir_core::Objective;
-use landfold::{ChiObjective, Stress, Transfer, pairwise_euclid};
 use landfold::provenance::Provenance;
+use landfold::{ChiObjective, Stress, Transfer, pairwise_euclid};
 use ndarray::array;
 
 #[test]

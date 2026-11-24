@@ -306,7 +306,7 @@ pub fn project_report(
             ls_tol: 1e-9,
             ..CgOpts::default()
         };
-        let report = try_minimize_oracle(|x| eval(x), best.view(), &cgopts)?;
+        let report = try_minimize_oracle(eval, best.view(), &cgopts)?;
         best = report.coords;
     }
 
@@ -391,7 +391,9 @@ fn path_average(
         }
     }
     if !(tw > 0.0 && tw.is_finite()) {
-        return Err(LandfoldError::Msg("path-average has no positive mass".into()));
+        return Err(LandfoldError::Msg(
+            "path-average has no positive mass".into(),
+        ));
     }
     for h in 0..d {
         acc[h] /= tw;
