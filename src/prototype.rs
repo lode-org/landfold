@@ -8,7 +8,7 @@ use ndarray::{Array2, ArrayView1, ArrayView2};
 
 use crate::error::{LandfoldError, Result};
 
-/// Distances within this absolute tolerance are the same medoid distance.
+/// Distances within this absolute tolerance of the minimum are tied.
 pub const SUBSET_MEDOID_TIE_TOL: f64 = 1.0e-12;
 
 const MEAN_SHIFT_ITERS: usize = 120;
@@ -113,10 +113,10 @@ pub fn gaussian_prototype_partition(
 /// Medoid of a caller-supplied subset.
 ///
 /// The medoid is the subset row closest to the subset centroid. Distances
-/// within [`SUBSET_MEDOID_TIE_TOL`] are tied. The higher score wins a tie,
-/// and a remaining tie keeps the smaller row index. With no scores, the
-/// smaller index wins every tie. A zero-width matrix uses scores only.
-/// `scores`, when supplied, has one value per row of `points`.
+/// within [`SUBSET_MEDOID_TIE_TOL`] of that minimum are tied. The higher
+/// score wins a tie, and a remaining tie keeps the smaller row index. With
+/// no scores, the smaller index wins every tie. A zero-width matrix uses
+/// scores only. `scores`, when supplied, has one value per row of `points`.
 pub fn subset_medoid(
     points: ArrayView2<f64>,
     indices: &[usize],
@@ -173,14 +173,23 @@ pub fn subset_medoid(
             centroid[axis] += points[(member, axis)] * inv_count;
         }
     }
-    let mut best_distance = euclidean(points.row(best), &centroid);
-    for &member in &ordered[1..] {
+    let mut distances = Vec::with_capacity(ordered.len());
+    let mut min_distance = f64::INFINITY;
+    for &member in &ordered {
         let distance = euclidean(points.row(member), &centroid);
-        let closer = distance < best_distance - SUBSET_MEDOID_TIE_TOL;
-        let tied = (distance - best_distance).abs() <= SUBSET_MEDOID_TIE_TOL;
-        if closer || (tied && score_is_higher(scores, member, best)) {
-            best_distance = distance;
+        if distance < min_distance {
+            min_distance = distance;
+        }
+        distances.push(distance);
+    }
+    let mut selected = false;
+    for (offset, &member) in ordered.iter().enumerate() {
+        if distances[offset] - min_distance > SUBSET_MEDOID_TIE_TOL {
+            continue;
+        }
+        if !selected || score_is_higher(scores, member, best) {
             best = member;
+            selected = true;
         }
     }
     Ok(best)
@@ -201,7 +210,7 @@ fn squared(left: ArrayView1<f64>, right: &[f64]) -> f64 {
 }
 
 fn euclidean(point: ArrayView1<f64>, centroid: &[f64]) -> f64 {
-    squared(point, centroid).sqrt()
+    crate::metric::stable_euclid(point.iter(), centroid.iter())
 }
 
 fn row_lexicographic(points: &Array2<f64>, left: usize, right: usize) -> std::cmp::Ordering {
@@ -354,7 +363,6 @@ mod tests {
         grouped.into_values().collect()
     }
 
-
     #[test]
     fn duplicates_share_a_label_and_a_distant_row_does_not() {
         let points = array![[0.0, 0.0], [0.0, 0.0], [4.0, 0.0]];
@@ -445,6 +453,7 @@ mod tests {
         assert!(subset_medoid(points.view(), &[2], None).is_err());
         assert!(subset_medoid(points.view(), &[0], Some(&[1.0])).is_err());
     }
+
     #[test]
     fn permuted_rows_with_a_shared_first_coordinate_keep_one_partition() {
         let rows = [[0.0, 1.5], [0.0, 0.0], [0.0, 0.6]];
@@ -463,4 +472,32 @@ mod tests {
         }
     }
 
+    #[test]
+    fn subset_medoid_tie_uses_the_minimum_distance_not_a_chain() {
+        let near = 0.9e-12;
+        let far = 1.8e-12;
+        assert!(near <= SUBSET_MEDOID_TIE_TOL);
+        assert!(far > SUBSET_MEDOID_TIE_TOL);
+        assert!(far - near <= SUBSET_MEDOID_TIE_TOL);
+        let points = array![[0.0, 0.0], [near, 0.0], [far, 0.0], [-(near + far), 0.0],];
+        let chosen =
+            subset_medoid(points.view(), &[0, 1, 2, 3], Some(&[0.0, 1.0, 3.0, 2.0])).unwrap();
+        assert_eq!(chosen, 1);
+    }
+
+    #[test]
+    fn centroid_distance_uses_a_scaled_norm_at_extreme_magnitudes() {
+        let huge = 1.0e200;
+        let large_distance = euclidean(array![huge, 0.0].view(), &[0.0, 0.0]);
+        assert!(large_distance.is_finite());
+        assert!((large_distance / huge - 1.0).abs() < 1.0e-12);
+
+        let tiny = 1.0e-200;
+        let small_distance = euclidean(array![tiny, tiny].view(), &[0.0, 0.0]);
+        assert!(small_distance.is_finite() && small_distance > 0.0);
+        assert!((small_distance / tiny - 2.0_f64.sqrt()).abs() < 1.0e-12);
+
+        let points = array![[huge, huge], [0.0, huge], [0.0, huge]];
+        assert_eq!(subset_medoid(points.view(), &[0, 1, 2], None).unwrap(), 1);
+    }
 }
