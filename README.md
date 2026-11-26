@@ -156,8 +156,10 @@ et al., *J. Chem. Phys.* **159**, 024129 (2023),
 rows and uses Euclidean dissimilarity; `decaf_from_dissimilarity` accepts a
 precomputed matrix. The default uses Eq. 5 broken-stick dimensionality and
 the paper's Gaussian-smoothed first-minimum bandwidth with
-`sigma_smear = 0.0092`. Explicit dimensions and bandwidths are available
-through `DecafOptions`.
+`sigma_smear = 0.0092`. A dip counts only when it is a gap between modes. A
+gapless cloud is partitioned at its median nearest-neighbor distance instead
+of its diameter, so a disordered embedding is not one class. Explicit
+dimensions and bandwidths are available through `DecafOptions`.
 
 The fitted `Decaf` value retains the Eq. 3 eigenvalue-weighted projector for
 out-of-sample embedding, hard mean-shift labels, normalized fuzzy

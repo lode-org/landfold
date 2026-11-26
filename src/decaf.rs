@@ -11,6 +11,13 @@ use crate::error::{LandfoldError, Result};
 use crate::mds::{ClassicalMdsModel, MdsDimension};
 
 const MAX_BANDWIDTH_BINS: usize = 1_000_000;
+/// A gap has to fall to at most half the mode on its left. A shallower dip is
+/// a shoulder ripple of that same mode.
+const VALLEY_MAX_DEPTH: f64 = 0.5;
+/// Density after a gap has to recover to at least this fraction of the left mode.
+const VALLEY_MIN_RECOVERY: f64 = 0.2;
+/// At least this share of pairwise distances has to lie strictly beyond a gap.
+const VALLEY_MIN_FAR_FRACTION: f64 = 0.05;
 
 /// MDS dimension selection for DECAF.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -27,8 +34,12 @@ pub enum DimensionChoice {
 /// Mean-shift bandwidth selection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BandwidthChoice {
-    /// First minimum of the Gaussian-smeared pair-distance distribution from
-    /// the paper, using the supplied smearing width.
+    /// First gap of the Gaussian-smeared pair-distance distribution from the
+    /// paper, using the supplied smearing width. A dip counts only when it
+    /// falls to half the mode on its left, a later mode recovers, and at
+    /// least five percent of pairs lie beyond it. A gapless cloud uses the
+    /// median nearest-neighbor distance, unless the distances are a single
+    /// shell at the diameter.
     Paper { sigma: f64 },
     /// Explicit mean-shift radius.
     Fixed(f64),
@@ -476,11 +487,74 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
     }
-    if let Some((start, end)) = first_density_minimum(&density) {
-        let minimum = (start + end) as f64 * 0.5;
-        return Ok(minimum * step + 0.5 * bin_width);
+    if let Some(bandwidth) = separating_valley(&density, &distances, step, bin_width) {
+        return Ok(bandwidth);
     }
-    Ok(max_distance)
+    // A single shell, including one pair, has its mode at the diameter. The
+    // kernel cutoff is the same width the density sum already uses.
+    let peak = density.iter().copied().fold(0.0_f64, f64::max);
+    let mode_index = density.iter().position(|value| *value == peak).unwrap_or(0);
+    let mode = mode_index as f64 * step;
+    if max_distance - mode <= gaussian_kernel_cutoff(sigma) {
+        return Ok(max_distance);
+    }
+    Ok(median_positive_nearest_neighbor(points, max_distance))
+}
+
+/// First density minimum that separates two modes with mass on both sides.
+fn separating_valley(density: &[f64], distances: &[f64], step: f64, bin_width: f64) -> Option<f64> {
+    let mut remaining = density.to_vec();
+    while let Some((index, plateau_end)) = first_density_minimum(&remaining) {
+        let left_peak = density[..=index].iter().copied().fold(0.0, f64::max);
+        let right_peak = density[plateau_end + 1..]
+            .iter()
+            .copied()
+            .fold(0.0, f64::max);
+        let minimum = (index + plateau_end) as f64 * 0.5;
+        let bandwidth = minimum * step + 0.5 * bin_width;
+        let beyond = distances
+            .iter()
+            .filter(|distance| **distance > bandwidth)
+            .count();
+        let far_fraction = beyond as f64 / distances.len() as f64;
+        if left_peak > 0.0
+            && density[index] <= VALLEY_MAX_DEPTH * left_peak
+            && right_peak >= VALLEY_MIN_RECOVERY * left_peak
+            && far_fraction >= VALLEY_MIN_FAR_FRACTION
+        {
+            return Some(bandwidth);
+        }
+        let shoulder = remaining[index - 1];
+        for value in &mut remaining[index..=plateau_end] {
+            *value = shoulder;
+        }
+    }
+    None
+}
+
+fn median_positive_nearest_neighbor(points: ArrayView2<f64>, max_distance: f64) -> f64 {
+    let n = points.nrows();
+    let mut nearest = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut best = f64::INFINITY;
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let distance = squared_distance(points.row(i), points.row(j)).sqrt();
+            if distance > 0.0 && distance < best {
+                best = distance;
+            }
+        }
+        if best.is_finite() {
+            nearest.push(best);
+        }
+    }
+    if nearest.is_empty() {
+        return max_distance;
+    }
+    nearest.sort_by(f64::total_cmp);
+    nearest[(nearest.len() - 1) / 2]
 }
 
 fn convergence_threshold_sq(tolerance: f64, bandwidth: f64) -> f64 {
@@ -894,6 +968,27 @@ mod tests {
         let bins = (1.0 / (sigma / 21.0)).ceil() as usize;
         assert!(bins >= 21);
         assert_eq!(paper_bandwidth(points.view(), sigma).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn equally_spaced_line_keeps_the_first_shell_gap() {
+        let points = Array2::from_shape_fn((40, 1), |(index, _)| index as f64);
+        let bandwidth = paper_bandwidth(points.view(), 0.0092).unwrap();
+        assert!((1.0..2.0).contains(&bandwidth), "bandwidth={bandwidth}");
+    }
+
+    #[test]
+    fn irregular_line_uses_nearest_neighbor_scale_not_the_diameter() {
+        let points = Array2::from_shape_fn((40, 1), |(index, _)| {
+            let step = index as f64;
+            step + 0.37 * (step * 1.6180339887).sin()
+        });
+        let bandwidth = paper_bandwidth(points.view(), 0.0092).unwrap();
+        let diameter = (points[(39, 0)] - points[(0, 0)]).abs();
+        assert!(
+            bandwidth < 0.25 * diameter,
+            "bandwidth={bandwidth} diameter={diameter}"
+        );
     }
 
     #[test]

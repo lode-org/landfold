@@ -5,6 +5,9 @@
 - Add descriptor-agnostic DECAF with projectable classical MDS,
   broken-stick dimension selection, the paper bandwidth heuristic,
   mean-shift classes, fuzzy memberships, and medoid representatives.
+- Keep a far-tail wiggle or a shoulder ripple from becoming the DECAF paper
+  bandwidth. A gapless cloud uses its median nearest-neighbor distance, so
+  a disordered embedding is not reported as one class.
 
 ## 0.1.0
 

@@ -182,3 +182,88 @@ fn published_pd211_example_matches_reference_pipeline() {
     assert_eq!(same_partition(fitted.labels()), same_partition(&reference));
     assert!((fitted.bandwidth() - 0.029_146_398_984_356_506).abs() < 1.0e-15);
 }
+
+/// Periodic FCC copper cell with a seeded displacement on every coordinate.
+///
+/// Three conventional cells on a side and four sites per cell, at the copper
+/// lattice spacing. Each coordinate is shifted by a uniform draw from the
+/// seed and wrapped into the cube. A row is that atom's twelve sorted
+/// minimum-image neighbor distances. Reading a shoulder ripple of this
+/// gapless cloud as a gap put every atom in one class. The largest class
+/// must not be a majority.
+fn perturbed_fcc_copper_shells() -> Array2<f64> {
+    const CELLS: usize = 3;
+    const LATTICE: f64 = 3.615;
+    const AMPLITUDE: f64 = 0.12;
+    const SEED: u64 = 24_301;
+    let basis = [
+        [0.0, 0.0, 0.0],
+        [0.5, 0.5, 0.0],
+        [0.5, 0.0, 0.5],
+        [0.0, 0.5, 0.5],
+    ];
+    let mut rng = SEED;
+    let mut next_unit = || {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        (rng >> 11) as f64 / ((1u64 << 53) as f64)
+    };
+    let side = LATTICE * CELLS as f64;
+    let mut positions = Vec::with_capacity(CELLS * CELLS * CELLS * basis.len());
+    for x in 0..CELLS {
+        for y in 0..CELLS {
+            for z in 0..CELLS {
+                for site in basis {
+                    let base = [x as f64, y as f64, z as f64];
+                    let mut coords = [0.0; 3];
+                    for axis in 0..3 {
+                        let shift = (next_unit() * 2.0 - 1.0) * AMPLITUDE;
+                        let value = (base[axis] + site[axis]) * LATTICE + shift;
+                        coords[axis] = value.rem_euclid(side);
+                    }
+                    positions.push(coords);
+                }
+            }
+        }
+    }
+    let mut shells = Array2::zeros((positions.len(), 12));
+    for (atom, position) in positions.iter().enumerate() {
+        let mut neighbors = Vec::with_capacity(positions.len() - 1);
+        for (other, other_position) in positions.iter().enumerate() {
+            if other == atom {
+                continue;
+            }
+            let mut squared = 0.0;
+            for axis in 0..3 {
+                let delta = position[axis] - other_position[axis];
+                let image = delta - side * (delta / side).round();
+                squared += image * image;
+            }
+            neighbors.push(squared.sqrt());
+        }
+        neighbors.sort_by(f64::total_cmp);
+        for shell in 0..12 {
+            shells[(atom, shell)] = neighbors[shell];
+        }
+    }
+    shells
+}
+
+#[test]
+fn perturbed_fcc_copper_has_no_single_majority_class() {
+    let shells = perturbed_fcc_copper_shells();
+    let fitted = decaf_from_descriptors(shells.view(), &DecafOptions::default()).unwrap();
+    let mut counts = vec![0usize; fitted.n_classes()];
+    for &label in fitted.labels() {
+        counts[label] += 1;
+    }
+    let largest = counts.iter().copied().max().unwrap_or(0);
+    assert!(
+        fitted.n_classes() > 1 && largest * 2 <= shells.nrows(),
+        "classes={} largest={largest} of {} bandwidth={}",
+        fitted.n_classes(),
+        shells.nrows(),
+        fitted.bandwidth()
+    );
+}
