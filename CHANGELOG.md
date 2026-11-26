@@ -10,6 +10,8 @@
   a disordered embedding is not reported as one class.
 - Add `gaussian_prototype_partition` and `subset_medoid` for a weighted
   Gaussian partition of centered rows and a score-aware subset medoid.
+- `pairwise_euclid` accepts a single coordinate column. That Gram is
+  column-major, and both paths now read it in standard layout.
 
 ## 0.1.0
 
