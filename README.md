@@ -161,6 +161,13 @@ gapless cloud is partitioned at its median nearest-neighbor distance instead
 of its diameter, so a disordered embedding is not one class. Explicit
 dimensions and bandwidths are available through `DecafOptions`.
 
+`gaussian_prototype_partition` centers descriptor rows, collapses
+near-duplicate prototypes inside a caller-supplied fraction of the cloud
+radius, and runs a weighted Gaussian mean shift at a second fraction of
+that radius. `subset_medoid` is the row nearest the centroid of a
+caller-supplied index subset. Distances within `1e-12` are ties, broken
+by the higher optional score and then by the smaller index.
+
 The fitted `Decaf` value retains the Eq. 3 eigenvalue-weighted projector for
 out-of-sample embedding, hard mean-shift labels, normalized fuzzy
 memberships, and one observed medoid representative per class. It is generic

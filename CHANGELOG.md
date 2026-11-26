@@ -8,6 +8,8 @@
 - Keep a far-tail wiggle or a shoulder ripple from becoming the DECAF paper
   bandwidth. A gapless cloud uses its median nearest-neighbor distance, so
   a disordered embedding is not reported as one class.
+- Add `gaussian_prototype_partition` and `subset_medoid` for a weighted
+  Gaussian partition of centered rows and a score-aware subset medoid.
 
 ## 0.1.0
 

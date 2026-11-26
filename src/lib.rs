@@ -47,6 +47,7 @@ pub mod pacmap;
 pub mod pairwise;
 pub mod phate;
 pub mod project;
+pub mod prototype;
 pub mod provenance;
 #[cfg(feature = "readcon")]
 pub mod readcon;
@@ -101,6 +102,7 @@ pub use phate::{PhateModel, PhateOpts, phate_embed, phate_project, slow_mode};
 pub use project::{
     ProjOpts, ProjReport, project_many, project_many_report, project_one, project_report,
 };
+pub use prototype::{SUBSET_MEDOID_TIE_TOL, gaussian_prototype_partition, subset_medoid};
 pub use provenance::{
     EON_COMPATIBILITY_SCHEMA, EngineCompatibility, PROVENANCE_SCHEMA, Provenance,
 };
