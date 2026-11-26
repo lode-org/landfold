@@ -204,6 +204,16 @@ fn euclidean(point: ArrayView1<f64>, centroid: &[f64]) -> f64 {
     squared(point, centroid).sqrt()
 }
 
+fn row_lexicographic(points: &Array2<f64>, left: usize, right: usize) -> std::cmp::Ordering {
+    for axis in 0..points.ncols() {
+        let order = points[(left, axis)].total_cmp(&points[(right, axis)]);
+        if order != std::cmp::Ordering::Equal {
+            return order;
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
 fn collapse_prototypes(
     points: &Array2<f64>,
     weights: &[f64],
@@ -211,11 +221,7 @@ fn collapse_prototypes(
 ) -> (Vec<Vec<f64>>, Vec<f64>, Vec<usize>) {
     let n = points.nrows();
     let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&left, &right| {
-        points[(left, 0)]
-            .total_cmp(&points[(right, 0)])
-            .then(left.cmp(&right))
-    });
+    order.sort_by(|&left, &right| row_lexicographic(points, left, right));
     let tolerance_sq = tolerance * tolerance;
     let mut prototypes: Vec<Vec<f64>> = Vec::new();
     let mut prototype_weights = Vec::new();
@@ -335,6 +341,19 @@ fn weighted_gaussian_shift(
 mod tests {
     use super::*;
     use ndarray::array;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn partition_sets(points: &Array2<f64>, labels: &[usize]) -> BTreeSet<BTreeSet<Vec<u64>>> {
+        let mut grouped: BTreeMap<usize, BTreeSet<Vec<u64>>> = BTreeMap::new();
+        for (row, label) in labels.iter().copied().enumerate() {
+            let bits = (0..points.ncols())
+                .map(|axis| points[(row, axis)].to_bits())
+                .collect();
+            grouped.entry(label).or_default().insert(bits);
+        }
+        grouped.into_values().collect()
+    }
+
 
     #[test]
     fn duplicates_share_a_label_and_a_distant_row_does_not() {
@@ -426,4 +445,22 @@ mod tests {
         assert!(subset_medoid(points.view(), &[2], None).is_err());
         assert!(subset_medoid(points.view(), &[0], Some(&[1.0])).is_err());
     }
+    #[test]
+    fn permuted_rows_with_a_shared_first_coordinate_keep_one_partition() {
+        let rows = [[0.0, 1.5], [0.0, 0.0], [0.0, 0.6]];
+        let mut paired = BTreeSet::new();
+        paired.insert(vec![0.0_f64.to_bits(), 0.0_f64.to_bits()]);
+        paired.insert(vec![0.0_f64.to_bits(), 0.6_f64.to_bits()]);
+        let mut expected = BTreeSet::new();
+        expected.insert(paired);
+        expected.insert(BTreeSet::from([vec![0.0_f64.to_bits(), 1.5_f64.to_bits()]]));
+
+        let orders = [[0usize, 1, 2], [1, 2, 0], [2, 0, 1], [1, 0, 2]];
+        for order in orders {
+            let points = Array2::from_shape_fn((3, 2), |(row, axis)| rows[order[row]][axis]);
+            let labels = gaussian_prototype_partition(points.view(), None, 1.2, 0.0).unwrap();
+            assert_eq!(partition_sets(&points, &labels), expected);
+        }
+    }
+
 }
