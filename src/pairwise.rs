@@ -130,7 +130,11 @@ pub fn pairwise_euclid(points: ArrayView2<f64>) -> Result<Array2<f64>> {
         .into_iter()
         .map(|r| r.iter().map(|x| x * x).sum())
         .collect();
-    let gram = points.dot(&points.t());
+    // ndarray 0.17 returns a column-major Gram when both factors have a unit
+    // leading stride, which is true for one coordinate column. Standard
+    // layout makes the packed index `i * n + j` address the row-major entry.
+    let gram_owned = points.dot(&points.t());
+    let gram = gram_owned.as_standard_layout();
     let gemm_valid =
         norms.iter().all(|&value| value.is_finite()) && gram.iter().all(|&value| value.is_finite());
     let mut out = Array2::<f64>::zeros((n, n));
@@ -289,6 +293,17 @@ mod tests {
         let points = array![[1.0e200, 0.0], [0.0, 0.0]];
         let distances = pairwise_euclid(points.view()).unwrap();
         assert_eq!(distances[(0, 1)], 1.0e200);
+    }
+
+    #[test]
+    fn accepts_a_single_coordinate_column() {
+        let points = array![[0.0], [3.0], [6.0]];
+        let distances = pairwise_euclid(points.view()).unwrap();
+        assert_relative_eq!(distances[(0, 1)], 3.0, epsilon = 1e-14);
+        assert_relative_eq!(distances[(1, 2)], 3.0, epsilon = 1e-14);
+        assert_relative_eq!(distances[(0, 2)], 6.0, epsilon = 1e-14);
+        assert_eq!(distances[(0, 0)], 0.0);
+        assert_eq!(distances[(2, 2)], 0.0);
     }
 
     #[test]

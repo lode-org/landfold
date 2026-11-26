@@ -11,6 +11,13 @@ use crate::error::{LandfoldError, Result};
 use crate::mds::{ClassicalMdsModel, MdsDimension};
 
 const MAX_BANDWIDTH_BINS: usize = 1_000_000;
+/// A gap has to fall to at most half the mode on its left. A shallower dip is
+/// a shoulder ripple of that same mode.
+const VALLEY_MAX_DEPTH: f64 = 0.5;
+/// Density after a gap has to recover to at least this fraction of the left mode.
+const VALLEY_MIN_RECOVERY: f64 = 0.2;
+/// At least this share of pairwise distances has to lie strictly beyond a gap.
+const VALLEY_MIN_FAR_FRACTION: f64 = 0.05;
 
 /// MDS dimension selection for DECAF.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -27,8 +34,12 @@ pub enum DimensionChoice {
 /// Mean-shift bandwidth selection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BandwidthChoice {
-    /// First minimum of the Gaussian-smeared pair-distance distribution from
-    /// the paper, using the supplied smearing width.
+    /// First gap of the Gaussian-smeared pair-distance distribution from the
+    /// paper, using the supplied smearing width. A dip counts only when it
+    /// falls to half the mode on its left, a later mode recovers, and at
+    /// least five percent of pairs lie beyond it. A gapless cloud uses the
+    /// median nearest-neighbor distance, unless the distances are a single
+    /// shell at the diameter.
     Paper { sigma: f64 },
     /// Explicit mean-shift radius.
     Fixed(f64),
@@ -410,6 +421,7 @@ fn bandwidth_grid_is_too_coarse(bins: usize) -> bool {
     bins < 21
 }
 
+#[cfg(test)]
 fn first_density_minimum(density: &[f64]) -> Option<(usize, usize)> {
     let mut index = 1;
     while index + 1 < density.len() {
@@ -476,11 +488,99 @@ fn paper_bandwidth(points: ArrayView2<f64>, sigma: f64) -> Result<f64> {
             .map(|distance| (-0.5 * ((x - distance) / sigma).powi(2)).exp())
             .sum();
     }
-    if let Some((start, end)) = first_density_minimum(&density) {
-        let minimum = (start + end) as f64 * 0.5;
-        return Ok(minimum * step + 0.5 * bin_width);
+    if let Some(bandwidth) = separating_valley(&density, &distances, step, bin_width) {
+        return Ok(bandwidth);
     }
-    Ok(max_distance)
+    // A single shell, including one pair, has its mode at the diameter. The
+    // kernel cutoff is the same width the density sum already uses.
+    let peak = density.iter().copied().fold(0.0_f64, f64::max);
+    let mode_index = density.iter().position(|value| *value == peak).unwrap_or(0);
+    let mode = mode_index as f64 * step;
+    if max_distance - mode <= gaussian_kernel_cutoff(sigma) {
+        return Ok(max_distance);
+    }
+    Ok(median_positive_nearest_neighbor(points, max_distance))
+}
+
+/// First density minimum that separates two modes with mass on both sides.
+fn separating_valley(density: &[f64], distances: &[f64], step: f64, bin_width: f64) -> Option<f64> {
+    let mut prefix = vec![0.0_f64; density.len()];
+    for (index, value) in density.iter().copied().enumerate() {
+        prefix[index] = if index == 0 {
+            0.0_f64.max(value)
+        } else {
+            prefix[index - 1].max(value)
+        };
+    }
+    let mut suffix = vec![0.0_f64; density.len() + 1];
+    for index in (0..density.len()).rev() {
+        suffix[index] = suffix[index + 1].max(density[index]);
+    }
+    let mut ordered = Vec::from(distances);
+    ordered.sort_by(f64::total_cmp);
+
+    let mut remaining = density.to_vec();
+    let mut index = 1usize;
+    while index + 1 < remaining.len() {
+        if remaining[index] < remaining[index - 1] {
+            let mut plateau_end = index;
+            while plateau_end + 1 < remaining.len()
+                && remaining[plateau_end + 1] == remaining[index]
+            {
+                plateau_end += 1;
+            }
+            let rises = plateau_end + 1 < remaining.len()
+                && remaining[plateau_end] < remaining[plateau_end + 1];
+            if rises {
+                let left_peak = prefix[index];
+                let right_peak = suffix[plateau_end + 1];
+                let minimum = (index + plateau_end) as f64 * 0.5;
+                let bandwidth = minimum * step + 0.5 * bin_width;
+                let beyond =
+                    ordered.len() - ordered.partition_point(|distance| *distance <= bandwidth);
+                let far_fraction = beyond as f64 / ordered.len() as f64;
+                if left_peak > 0.0
+                    && density[index] <= VALLEY_MAX_DEPTH * left_peak
+                    && right_peak >= VALLEY_MIN_RECOVERY * left_peak
+                    && far_fraction >= VALLEY_MIN_FAR_FRACTION
+                {
+                    return Some(bandwidth);
+                }
+                let shoulder = remaining[index - 1];
+                for value in &mut remaining[index..=plateau_end] {
+                    *value = shoulder;
+                }
+            }
+            index = plateau_end;
+        }
+        index += 1;
+    }
+    None
+}
+
+fn median_positive_nearest_neighbor(points: ArrayView2<f64>, max_distance: f64) -> f64 {
+    let n = points.nrows();
+    let mut nearest = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut best = f64::INFINITY;
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let distance = squared_distance(points.row(i), points.row(j)).sqrt();
+            if distance > 0.0 && distance < best {
+                best = distance;
+            }
+        }
+        if best.is_finite() {
+            nearest.push(best);
+        }
+    }
+    if nearest.is_empty() {
+        return max_distance;
+    }
+    nearest.sort_by(f64::total_cmp);
+    nearest[(nearest.len() - 1) / 2]
 }
 
 fn convergence_threshold_sq(tolerance: f64, bandwidth: f64) -> f64 {
@@ -897,6 +997,27 @@ mod tests {
     }
 
     #[test]
+    fn equally_spaced_line_keeps_the_first_shell_gap() {
+        let points = Array2::from_shape_fn((40, 1), |(index, _)| index as f64);
+        let bandwidth = paper_bandwidth(points.view(), 0.0092).unwrap();
+        assert!((1.0..2.0).contains(&bandwidth), "bandwidth={bandwidth}");
+    }
+
+    #[test]
+    fn irregular_line_uses_nearest_neighbor_scale_not_the_diameter() {
+        let points = Array2::from_shape_fn((40, 1), |(index, _)| {
+            let step = index as f64;
+            step + 0.37 * (step * 1.6180339887).sin()
+        });
+        let bandwidth = paper_bandwidth(points.view(), 0.0092).unwrap();
+        let diameter = (points[(39, 0)] - points[(0, 0)]).abs();
+        assert!(
+            bandwidth < 0.25 * diameter,
+            "bandwidth={bandwidth} diameter={diameter}"
+        );
+    }
+
+    #[test]
     fn bandwidth_grid_is_coarse_below_twenty_one_bins() {
         assert!(bandwidth_grid_is_too_coarse(20));
         assert!(!bandwidth_grid_is_too_coarse(21));
@@ -1026,5 +1147,110 @@ mod tests {
 
         let out_of_range = medoid_representatives(points.view(), &[0, 2], 2).unwrap_err();
         assert!(out_of_range.to_string().contains("outside 2 centers"));
+    }
+
+    fn rescanning_separating_valley(
+        density: &[f64],
+        distances: &[f64],
+        step: f64,
+        bin_width: f64,
+    ) -> Option<f64> {
+        let mut remaining = density.to_vec();
+        while let Some((index, plateau_end)) = first_density_minimum(&remaining) {
+            let left_peak = density[..=index].iter().copied().fold(0.0, f64::max);
+            let right_peak = density[plateau_end + 1..]
+                .iter()
+                .copied()
+                .fold(0.0, f64::max);
+            let minimum = (index + plateau_end) as f64 * 0.5;
+            let bandwidth = minimum * step + 0.5 * bin_width;
+            let beyond = distances
+                .iter()
+                .filter(|distance| **distance > bandwidth)
+                .count();
+            let far_fraction = beyond as f64 / distances.len() as f64;
+            if left_peak > 0.0
+                && density[index] <= VALLEY_MAX_DEPTH * left_peak
+                && right_peak >= VALLEY_MIN_RECOVERY * left_peak
+                && far_fraction >= VALLEY_MIN_FAR_FRACTION
+            {
+                return Some(bandwidth);
+            }
+            let shoulder = remaining[index - 1];
+            for value in &mut remaining[index..=plateau_end] {
+                *value = shoulder;
+            }
+        }
+        None
+    }
+
+    fn next_u64(state: &mut u64) -> u64 {
+        *state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
+        *state
+    }
+
+    #[test]
+    fn separating_valley_matches_a_full_rescan_on_random_inputs() {
+        let fixed = [
+            (
+                vec![0.0, 5.0, 1.0, 4.0],
+                vec![0.1, 3.6, 0.2, 3.0, 0.8, 1.0, 1.2, 1.4, 3.2, 3.4],
+                1.0,
+                1.0,
+            ),
+            (
+                vec![4.0, 3.0, 4.0, 0.1, 3.0],
+                vec![0.0, 0.2, 0.4, 1.5, 1.6, 2.2, 2.4, 2.8, 3.0, 3.1],
+                0.5,
+                0.25,
+            ),
+            (vec![5.0, 1.0, 1.0, 4.0], vec![0.5, 4.0, 4.5], 1.0, 0.5),
+        ];
+        for (density, distances, step, bin_width) in fixed {
+            assert_eq!(
+                separating_valley(&density, &distances, step, bin_width),
+                rescanning_separating_valley(&density, &distances, step, bin_width)
+            );
+        }
+
+        let mut state = 0x1234_5678_u64;
+        for _ in 0..40 {
+            let bins = 30 + (next_u64(&mut state) % 70) as usize;
+            let mut density = Vec::with_capacity(bins);
+            for _ in 0..bins {
+                density.push((next_u64(&mut state) % 1_000) as f64 / 10.0);
+            }
+            let count = 1 + (next_u64(&mut state) % 180) as usize;
+            let mut distances = Vec::with_capacity(count);
+            for _ in 0..count {
+                distances.push((next_u64(&mut state) % 10_000) as f64 / 100.0);
+            }
+            let step = 0.05 + (next_u64(&mut state) % 20) as f64 / 100.0;
+            let bin_width = 0.01 + (next_u64(&mut state) % 15) as f64 / 100.0;
+            assert_eq!(
+                separating_valley(&density, &distances, step, bin_width),
+                rescanning_separating_valley(&density, &distances, step, bin_width)
+            );
+        }
+    }
+
+    #[test]
+    fn rejected_valleys_on_a_large_grid_skip_the_quadratic_rescan() {
+        let bins = 100_000usize;
+        let mut density = vec![1.0; bins];
+        for index in (1..bins).step_by(2) {
+            density[index] = 0.9;
+        }
+        let distances = [0.0, 0.5, 1.0, 2.0, 4.0, 8.0];
+        let started = std::time::Instant::now();
+        let bandwidth = separating_valley(&density, &distances, 1.0, 1.0);
+        let elapsed = started.elapsed();
+        assert_eq!(bandwidth, None);
+        assert!(
+            elapsed.as_secs_f64() < 5.0,
+            "elapsed={elapsed:?} bins={bins}"
+        );
     }
 }
